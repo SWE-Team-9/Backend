@@ -14,6 +14,9 @@ To achieve the performance, scalability, and complex media handling required for
 * **Runtime & Framework:** Node.js + Express.js (chosen for asynchronous I/O and streaming capabilities).
 * **PostgreSQL (via Prisma ORM):** Handles entities requiring strict ACID compliance and relational integrity (Users, Subscriptions, Playlists, Social Graph/Follows).
 * **MongoDB (via Mongoose ODM):** Handles high-write-volume, schema-flexible data (Activity Feeds, Direct Messages, Timestamped Waveform Comments).
+* **dotenv:** Environment configuration management for secure handling of environment variables.
+* **cors:** Middleware for controlled cross-origin API communication between frontend and backend services.
+
 
 ### 2. Security & Authentication (Module 1 Focus)
 Security is prioritized at the middleware layer to protect user data and maintain platform integrity:
@@ -23,16 +26,25 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **`express-rate-limit`:** Implemented on global and authentication routes to prevent Denial of Service (DoS/DDoS) and automated credential-stuffing (brute-force) attacks.
 * **`zod`:** Enforces strict runtime schema validation on all incoming requests to prevent SQL/NoSQL injection and malformed payload crashes.
 * **`passport`:** Handles OAuth 2.0 flows for secure Social Identity integration.
+* **`passport-google-oauth20`:** Strategy used for Google social login integration.
+* **CAPTCHA Verification (hCaptcha / Google reCAPTCHA):** Used to protect registration and authentication workflows from automated bot abuse.
+* **`nodemailer`:** Handles automated email workflows including account verification, password reset, and recovery processes.
+
 
 ### 3. Media Processing & Streaming (Modules 2, 4, 5)
 * **`multer` & `cloudinary`:** For processing `multipart/form-data` and reliably hosting high-resolution visual assets in the cloud.
+* **`@aws-sdk/client-s3`:** Object storage integration for hosting original and transcoded audio files used in streaming.
 * **`fluent-ffmpeg` & `music-metadata`:** The core transcoding engine. Automatically extracts ID3 tags and processes raw audio (WAV/MP3) into streaming-optimized chunks, mimicking SoundCloud's native processing states.
+* **`audiowaveform`:** Used to generate waveform peak data for visual waveform rendering and timestamp-based commenting features.
 * **Native HTTP Streaming:** Utilizing Node's native `fs.createReadStream` to send `206 Partial Content` headers for high-fidelity audio seeking and playback.
+
 
 ### 4. Real-Time Interactions & Discovery (Modules 8, 9, 10)
 * **`socket.io`:** Powers bidirectional WebSocket connections for 1-to-1 Direct Messaging and instant UI state updates (Likes/Reposts).
 * **`firebase-admin`:** Bridges real-time backend alerts to Push Notifications for the cross-platform mobile app.
 * **`node-cron`:** Schedules background jobs to calculate engagement velocity for "Trending & Charts" discovery features.
+* **Redis + `bullmq`:** Background job processing system for asynchronous workflows including audio processing pipelines, notification fanout, and engagement analytics.
+
 
 ### 5. Monetization (Module 12)
 * **`stripe`:** Integrates mock payment processing lifecycles and enforces Premium/Go+ upload limits.
@@ -42,6 +54,10 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **Task Management:** ----------------[Insert Jira/Trello/GitHub Projects]-------------------------------
 * **Testing:** `jest` and `supertest` to guarantee >95% backend unit test coverage.
 * **API Documentation:** `swagger-ui-express` & `swagger-jsdoc` for auto-generated, interactive REST API docs.
+* **Code Quality:** `eslint` and `prettier` to enforce unified coding standards across backend contributors.
+* **Logging:** `pino` for structured application logging.
+
+
 
 ## DevOps / Infrastructure
 
