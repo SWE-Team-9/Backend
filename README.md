@@ -42,3 +42,21 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **Task Management:** ----------------[Insert Jira/Trello/GitHub Projects]-------------------------------
 * **Testing:** `jest` and `supertest` to guarantee >95% backend unit test coverage.
 * **API Documentation:** `swagger-ui-express` & `swagger-jsdoc` for auto-generated, interactive REST API docs.
+
+## DevOps / Infrastructure
+
+The project will use the following DevOps tools and processes:
+
+- **Containerization:** Docker + Docker Compose for backend, frontend, and PostgreSQL services
+- **Continuous Integration / Deployment:** GitHub Actions workflows for:
+  - Frontend: build, lint, test
+  - Backend: build, lint, test, database migrations
+- **Branch protection rules:**
+  - `main` branch protected in FE and BE repos
+  - Pull requests required before merging
+  - 1–2 approvals required per PR
+  - CI checks must pass before merging
+  - Direct pushes restricted to `devops-team` only (if necessary)
+- **Environment management:** `.env` files for local development, secrets managed in GitHub Actions
+- **Testing / QA team:** assigned to review PRs on FE and BE repos
+- **Deployment:** Production-ready containers will be deployed using Docker Compose or cloud services (e.g., AWS / Heroku)
