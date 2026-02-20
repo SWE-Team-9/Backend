@@ -21,6 +21,7 @@ To achieve the performance, scalability, and complex media handling required for
 ### 2. Security & Authentication (Module 1 Focus)
 Security is prioritized at the middleware layer to protect user data and maintain platform integrity:
 * **`argon2`:** Chosen as our password hashing algorithm as it won the Password Hashing Competition (PHC). It provides superior resistance to GPU/ASIC brute-force and dictionary attacks compared to standard bcrypt.
+* **`jsonwebtoken`:** Implements JWT-based authentication and refresh token strategies. It securely signs and verifies access tokens and refresh tokens to maintain persistent user sessions.
 * **`cookie-parser`:** Used to deliver JWTs via **`httpOnly` secure cookies**. This strictly prevents Cross-Site Scripting (XSS) attacks by hiding session tokens from malicious client-side JavaScript.
 * **`helmet`:** Secures Express apps by setting various HTTP headers. It mitigates Clickjacking, MIME-sniffing, and XSS attacks.
 * **`express-rate-limit`:** Implemented on global and authentication routes to prevent Denial of Service (DoS/DDoS) and automated credential-stuffing (brute-force) attacks.
@@ -29,6 +30,7 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **`passport-google-oauth20`:** Strategy used for Google social login integration.
 * **CAPTCHA Verification (hCaptcha / Google reCAPTCHA):** Used to protect registration and authentication workflows from automated bot abuse.
 * **`nodemailer`:** Handles automated email workflows including account verification, password reset, and recovery processes.
+* **Redis + `bullmq`:** Implements background job processing for automated verification/resend workflows, password reset token expiration handling, and asynchronous authentication-related processes to ensure reliability and scalability.
 
 
 ### 3. Media Processing & Streaming (Modules 2, 4, 5)
