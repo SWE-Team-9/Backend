@@ -93,7 +93,7 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **API Documentation:** `swagger-ui-express` & `swagger-jsdoc` for auto-generated, interactive REST API docs.
 * **Code Quality:** `eslint` and `prettier` to enforce unified coding standards across backend contributors.
 * **Logging:** `pino` for structured application logging.
-
+* **Postman**
 
 
 ## DevOps / Infrastructure
