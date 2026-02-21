@@ -33,7 +33,7 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **Redis + `bullmq`:** Implements background job processing for automated verification/resend workflows, password reset token expiration handling, and asynchronous authentication-related processes to ensure reliability and scalability.
 
 
-### Followers & Social Graph (Module 3)
+### 3. Followers & Social Graph (Module 3)
 * **PostgreSQL (via Prisma ORM):** Implements the Social Graph through relational tables for follow/unfollow relationships, follower/following lists, and indexed queries for “Suggested Users” discovery.
 * **`socket.io`:** Provides real-time follow/unfollow updates and triggers automatic feed refresh events for followed users.
 * **MongoDB (via Mongoose ODM):** Stores activity feed events triggered by social actions to enable fast chronological feed retrieval.
@@ -41,7 +41,7 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **Account Blocking Logic (PostgreSQL via Prisma):** Implements user blocking/unblocking rules and maintains a managed “Blocked Users” list through relational constraints and indexed lookups.
 
 
-### 3. Media Processing & Streaming (Modules 2, 4, 5)
+### 4. Media Processing & Streaming (Modules 2, 4, 5)
 * **`multer`:** For processing `multipart/form-data` and reliably hosting high-resolution visual assets in the cloud.
 * **`@aws-sdk/client-s3`:** Object storage integration for hosting original and transcoded audio files used in streaming.
 * **`@aws-sdk/s3-request-presigner`:** Generates secure presigned URLs for frontend streaming directly from AWS S3. This offloads the heavy bandwidth of `206 Partial Content` delivery from our Node.js servers onto AWS infrastructure, ensuring massive scalability.
@@ -50,7 +50,7 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **`nanoid`:** Generates unique unguessable tokens used for private “link-only” tracks, enabling secure Public vs Private visibility controls.
 
 
-### Engagement & Social Interactions (Module 6)
+### 5. Engagement & Social Interactions (Module 6)
 * **PostgreSQL (via Prisma ORM):** Stores Likes/Favorites, Reposts, and engagement lists using relational tables and constraints to ensure integrity and prevent duplicate actions (e.g., one Like per user per track).
 * **MongoDB (via Mongoose ODM):** Stores timestamped waveform comments with second-based offsets to support high-frequency commenting and flexible comment structures.
 * **Redis:** Maintains fast-access engagement counters (Favoriters count, repost count) to support high-performance UI rendering and trending calculations.
@@ -58,13 +58,13 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **Redis + `bullmq`:** Handles background aggregation and synchronization tasks for engagement analytics and feed/notification fanout.
 
 
-### Sets & Playlists (Module 7)
+### 6. Sets & Playlists (Module 7)
 * **PostgreSQL (via Prisma ORM):** Implements Playlist CRUD, track sequencing, and add/remove operations using relational tables and ordered join tables to support drag-and-drop reordering.
 * **`nanoid`:** Generates unique unguessable “Secret Tokens” for private playlists and shareable secret links.
 * **Embed Support:** Enables playlist embedding by generating shareable iframe-style embed URLs backed by playlist identifiers and secret tokens stored in PostgreSQL.
 
 
-### 4. Real-Time Interactions & Discovery (Modules 8, 9, 10)
+### 7. Real-Time Interactions & Discovery (Modules 8, 9, 10)
 * **`socket.io`:** Powers bidirectional WebSocket connections for 1-to-1 Direct Messaging and instant UI state updates (Likes/Reposts).
 * **`firebase-admin`:** Bridges real-time backend alerts to Push Notifications for the cross-platform mobile app.
 * **Redis + `bullmq`:** Background job processing system for asynchronous workflows including audio processing pipelines, notification fanout, and engagement analytics.
@@ -72,14 +72,14 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **PostgreSQL Indexed Permalinks (Slug Resolver):** Supports resource resolution by mapping human-readable URLs to internal resource IDs through indexed unique slugs.
 
 
-### Moderation & Admin Dashboard (Module 11)
+### 8. Moderation & Admin Dashboard (Module 11)
 * **PostgreSQL (via Prisma ORM):** Stores moderation reports, account status flags, and administrative actions, enabling content moderation workflows such as reporting, hiding/removing tracks, and suspending user accounts through relational data integrity.
 * **MongoDB (via Mongoose ODM):** Maintains moderation-related activity logs and administrative audit trails to support flexible schema storage and efficient tracking of moderation history.
 * **Role-Based Access Control (RBAC Middleware):** Enforces admin-only permissions and secure access to moderation endpoints, ensuring only authorized roles can perform sensitive actions.
 * **Redis + `bullmq`:** Processes background analytics aggregation tasks for platform health metrics including active users, engagement rates, and usage statistics.
 
 
-### 5. Monetization (Module 12)
+### 9. Monetization (Module 12)
 * **`stripe`:** Integrates mock payment processing lifecycles and enforces Premium/Go+ upload limits.
 * **PostgreSQL Subscription & Tier Management (Prisma):** Stores user subscription status, plan tiers, and usage limits, enabling backend enforcement of paywall logic such as upload restrictions and feature access control.
 * **Tier-Based Access Middleware:** Enforces Premium feature permissions including ad-free experience, enhanced playback privileges, and subscription-gated functionality.
