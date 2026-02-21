@@ -42,7 +42,7 @@ Security is prioritized at the middleware layer to protect user data and maintai
 
 
 ### 3. Media Processing & Streaming (Modules 2, 4, 5)
-* **`multer` & `cloudinary`:** For processing `multipart/form-data` and reliably hosting high-resolution visual assets in the cloud.
+* **`multer`:** For processing `multipart/form-data` and reliably hosting high-resolution visual assets in the cloud.
 * **`@aws-sdk/client-s3`:** Object storage integration for hosting original and transcoded audio files used in streaming.
 * **`@aws-sdk/s3-request-presigner`:** Generates secure presigned streaming URLs for audio assets stored in S3, enabling scalable playback and seeking without exposing storage buckets publicly.
 * **`fluent-ffmpeg` & `music-metadata`:** The core transcoding engine. Automatically extracts ID3 tags and processes raw audio (WAV/MP3) into streaming-optimized chunks, mimicking SoundCloud's native processing states.
@@ -68,7 +68,6 @@ Security is prioritized at the middleware layer to protect user data and maintai
 ### 4. Real-Time Interactions & Discovery (Modules 8, 9, 10)
 * **`socket.io`:** Powers bidirectional WebSocket connections for 1-to-1 Direct Messaging and instant UI state updates (Likes/Reposts).
 * **`firebase-admin`:** Bridges real-time backend alerts to Push Notifications for the cross-platform mobile app.
-* **`node-cron`:** Schedules background jobs to calculate engagement velocity for "Trending & Charts" discovery features.
 * **Redis + `bullmq`:** Background job processing system for asynchronous workflows including audio processing pipelines, notification fanout, and engagement analytics.
 * **PostgreSQL Full-Text Search:** Enables global keyword-based search across Tracks, Users, and Playlists without requiring external search engines.
 * **PostgreSQL Indexed Permalinks (Slug Resolver):** Supports resource resolution by mapping human-readable URLs to internal resource IDs through indexed unique slugs.
@@ -79,12 +78,11 @@ Security is prioritized at the middleware layer to protect user data and maintai
 * **MongoDB (via Mongoose ODM):** Maintains moderation-related activity logs and administrative audit trails to support flexible schema storage and efficient tracking of moderation history.
 * **Role-Based Access Control (RBAC Middleware):** Enforces admin-only permissions and secure access to moderation endpoints, ensuring only authorized roles can perform sensitive actions.
 * **Redis + `bullmq`:** Processes background analytics aggregation tasks for platform health metrics including active users, engagement rates, and usage statistics.
-* **`pino`:** Provides structured logging and monitoring capabilities for tracking system health, administrative actions, and debugging operational events.
 
 
 ### 5. Monetization (Module 12)
 * **`stripe`:** Integrates mock payment processing lifecycles and enforces Premium/Go+ upload limits.
-* * **PostgreSQL Subscription & Tier Management (Prisma):** Stores user subscription status, plan tiers, and usage limits, enabling backend enforcement of paywall logic such as upload restrictions and feature access control.
+* **PostgreSQL Subscription & Tier Management (Prisma):** Stores user subscription status, plan tiers, and usage limits, enabling backend enforcement of paywall logic such as upload restrictions and feature access control.
 * **Tier-Based Access Middleware:** Enforces Premium feature permissions including ad-free experience, enhanced playback privileges, and subscription-gated functionality.
 * **S3 Presigned Download URLs (`@aws-sdk/s3-request-presigner`):** Enables mock offline listening by generating secure temporary download links for premium users without exposing storage resources publicly.
   
