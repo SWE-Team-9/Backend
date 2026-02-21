@@ -44,11 +44,10 @@ Security is prioritized at the middleware layer to protect user data and maintai
 ### 3. Media Processing & Streaming (Modules 2, 4, 5)
 * **`multer`:** For processing `multipart/form-data` and reliably hosting high-resolution visual assets in the cloud.
 * **`@aws-sdk/client-s3`:** Object storage integration for hosting original and transcoded audio files used in streaming.
-* **`@aws-sdk/s3-request-presigner`:** Generates secure presigned streaming URLs for audio assets stored in S3, enabling scalable playback and seeking without exposing storage buckets publicly.
+* **`@aws-sdk/s3-request-presigner`:** Generates secure presigned URLs for frontend streaming directly from AWS S3. This offloads the heavy bandwidth of `206 Partial Content` delivery from our Node.js servers onto AWS infrastructure, ensuring massive scalability.
 * **`fluent-ffmpeg` & `music-metadata`:** The core transcoding engine. Automatically extracts ID3 tags and processes raw audio (WAV/MP3) into streaming-optimized chunks, mimicking SoundCloud's native processing states.
 * **`audiowaveform`:** Used to generate waveform peak data for visual waveform rendering and timestamp-based commenting features.
 * **`nanoid`:** Generates unique unguessable tokens used for private “link-only” tracks, enabling secure Public vs Private visibility controls.
-* **Native HTTP Streaming:** Utilizing Node's native `fs.createReadStream` to send `206 Partial Content` headers for high-fidelity audio seeking and playback.
 
 
 ### Engagement & Social Interactions (Module 6)
