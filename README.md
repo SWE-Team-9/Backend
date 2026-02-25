@@ -1,96 +1,156 @@
-# Backend
+# IQA3 — Backend
 
-# Phase 0: Proposal & Architecture 
+# Phase 0: Proposal & Architecture
 
-## 🏢 Company & Project Overview
-**Company Name:** IQA3
-**Project:** Social Streaming Platform (SoundCloud Clone)  
-
-## 🛠️ Backend Technology Stack & Architecture
-
-To achieve the performance, scalability, and complex media handling required for a modern audio streaming platform, our backend team has selected a robust Node.js stack.
-
-### 1. Core Framework & Hybrid Database
-* **Runtime & Framework:** Node.js + Express.js (chosen for asynchronous I/O and streaming capabilities).
-* **PostgreSQL (via Prisma ORM):** Handles entities requiring strict ACID compliance and relational integrity (Users, Subscriptions, Playlists, Social Graph/Follows).
-* **MongoDB (via Mongoose ODM):** Handles high-write-volume, schema-flexible data (Activity Feeds, Direct Messages, Timestamped Waveform Comments).
-* **dotenv:** Environment configuration management for secure handling of environment variables.
-* **cors:** Middleware for controlled cross-origin API communication between frontend and backend services.
+## Company & Project Overview
+**Company Name:** IQA3  
+**Project:** Social Streaming Platform (SoundCloud Clone)
 
 
-### 2. Security & Authentication (Module 1 Focus)
-Security is prioritized at the middleware layer to protect user data and maintain platform integrity:
-* **`argon2`:** Chosen as our password hashing algorithm as it won the Password Hashing Competition (PHC). It provides superior resistance to GPU/ASIC brute-force and dictionary attacks compared to standard bcrypt.
-* **`jsonwebtoken`:** Implements JWT-based authentication and refresh token strategies. It securely signs and verifies access tokens and refresh tokens to maintain persistent user sessions.
-* **`cookie-parser`:** Used to deliver JWTs via **`httpOnly` secure cookies**. This strictly prevents Cross-Site Scripting (XSS) attacks by hiding session tokens from malicious client-side JavaScript.
-* **`helmet`:** Secures Express apps by setting various HTTP headers. It mitigates Clickjacking, MIME-sniffing, and XSS attacks.
-* **`express-rate-limit`:** Implemented on global and authentication routes to prevent Denial of Service (DoS/DDoS) and automated credential-stuffing (brute-force) attacks.
-* **`zod`:** Enforces strict runtime schema validation on all incoming requests to prevent SQL/NoSQL injection and malformed payload crashes.
-* **`passport`:** Handles OAuth 2.0 flows for secure Social Identity integration.
-* **`passport-google-oauth20`:** Strategy used for Google social login integration.
-* **CAPTCHA Verification (hCaptcha / Google reCAPTCHA):** Used to protect registration and authentication workflows from automated bot abuse.
-* **`nodemailer`:** Handles automated email workflows including account verification, password reset, and recovery processes.
-* **Redis + `bullmq`:** Implements background job processing for automated verification/resend workflows, password reset token expiration handling, and asynchronous authentication-related processes to ensure reliability and scalability.
+## Architecture & Design Patterns
 
+The backend follows the **MVC (Model-View-Controller)** architectural pattern, which NestJS implements natively through its module system. This is the industry-standard pattern for REST API backends and is explicitly recommended for projects of this scale.
+
+### Design Patterns Used
+
+1. **MVC (Model-View-Controller)**  
+   Controllers handle incoming HTTP requests and delegate to Services. Services contain all business logic and interact with Models (Prisma) for data access. This separation keeps each layer testable and independent.
+
+2. **Dependency Injection (IoC Container)**  
+   NestJS provides a built-in IoC container. All services, repositories, and providers are injected through constructors rather than instantiated directly. This makes unit testing straightforward (swap real services for mocks) and keeps modules loosely coupled.
+
+3. **DTO (Data Transfer Object) Pattern**  
+   Every incoming request is validated against a DTO class using `class-validator` decorators before it reaches the controller logic. This prevents malformed data, injection attacks, and type mismatches at the boundary layer.
+
+4. **Guard Pattern (Strategy variant)**  
+   Authentication, role-based access control, and rate limiting are enforced through NestJS Guards — reusable classes that run before route handlers. Guards like `JwtAuthGuard`, `RolesGuard`, and `ThrottlerGuard` encapsulate access-control strategies and can be applied per-route or globally.
+
+5. **Repository Pattern (via Prisma)**  
+   Prisma ORM acts as the data access layer, abstracting raw SQL behind a type-safe query API. Services never write SQL directly — they call Prisma's generated client methods, which makes the data layer swappable and testable.
+
+6. **Observer Pattern (Event-Driven)**  
+   Real-time features (notifications, live comments, messaging) use Socket.io through NestJS WebSocket Gateways. The server emits events to subscribed clients, decoupling the event producer from consumers.
+
+7. **Singleton Pattern**  
+   NestJS services are singletons by default within their module scope. A single instance of each service is shared across the application, which avoids redundant database connections and ensures consistent state.
+
+### Request Lifecycle (Flow)
+
+```
+Client Request
+  → Middleware (helmet, cookie-parser, CORS)
+    → Guards (JWT auth, roles, throttle)
+      → Pipes (DTO validation via class-validator)
+        → Controller (route handler)
+          → Service (business logic)
+            → Prisma (database query)
+          ← Service returns result
+        ← Controller sends response
+      ← Interceptors (response transform, logging)
+    ← Exception Filters (error formatting)
+  → Client Response
+```
+
+
+## Backend Technology Stack
+
+Our backend is built on Node.js using the NestJS framework with PostgreSQL as the sole database. NestJS provides a modular, testable architecture out of the box, and its built-in support for TypeScript, dependency injection, guards, interceptors, and decorators maps cleanly to the security and scalability requirements of a streaming platform.
+
+### 1. Core Framework & Database
+* **Runtime:** Node.js (LTS).
+* **Framework:** NestJS — chosen for its opinionated module system, built-in validation pipes, and native TypeScript support.
+* **Database:** PostgreSQL — all application data lives in a single relational database, managed through **Prisma ORM** for type-safe queries, migrations, and seeding.
+* **`@nestjs/config`:** Centralized, schema-validated environment configuration.
+
+### 2. Security & Authentication (Module 1)
+* **`argon2`:** Password hashing algorithm (PHC winner). Superior resistance to GPU/ASIC brute-force compared to bcrypt.
+* **`@nestjs/jwt`:** JWT-based authentication with access/refresh token strategy delivered via `httpOnly` secure cookies to prevent XSS token theft.
+* **`@nestjs/passport` + `passport-google-oauth20`:** Google OAuth 2.0 social login integration.
+* **`@nestjs/throttler`:** Rate limiting on global and auth routes to prevent brute-force and credential-stuffing attacks.
+* **`helmet`:** Secure HTTP headers (Clickjacking, MIME-sniffing, XSS mitigation).
+* **`class-validator` + `class-transformer`:** DTO-based request validation via NestJS `ValidationPipe` to reject malformed payloads and prevent injection.
+* **Google reCAPTCHA:** Server-side CAPTCHA verification on registration to block automated abuse.
+* **`@nestjs-modules/mailer` + `nodemailer`:** Automated email workflows for account verification, password reset, and recovery.
 
 ### 3. Followers & Social Graph (Module 3)
-* **PostgreSQL (via Prisma ORM):** Implements the Social Graph through relational tables for follow/unfollow relationships, follower/following lists, and indexed queries for “Suggested Users” discovery.
-* **`socket.io`:** Provides real-time follow/unfollow updates and triggers automatic feed refresh events for followed users.
-* **MongoDB (via Mongoose ODM):** Stores activity feed events triggered by social actions to enable fast chronological feed retrieval.
-* **Redis + `bullmq`:** Processes asynchronous fanout jobs for feed updates and notification triggers to ensure scalability under high social activity.
-* **Account Blocking Logic (PostgreSQL via Prisma):** Implements user blocking/unblocking rules and maintains a managed “Blocked Users” list through relational constraints and indexed lookups.
-
+* **PostgreSQL (Prisma):** Relational follow/unfollow tables, follower/following lists, and indexed queries for "Suggested Users" discovery.
+* **`@nestjs/websockets` + `socket.io`:** Real-time follow/unfollow events and automatic feed refresh triggers.
+* **Blocking Logic (Prisma):** User blocking/unblocking with relational constraints and a managed "Blocked Users" list.
 
 ### 4. Media Processing & Streaming (Modules 2, 4, 5)
-* **`multer`:** For processing `multipart/form-data` and reliably hosting high-resolution visual assets in the cloud.
-* **`@aws-sdk/client-s3`:** Object storage integration for hosting original and transcoded audio files used in streaming.
-* **`@aws-sdk/s3-request-presigner`:** Generates secure presigned URLs for frontend streaming directly from AWS S3. This offloads the heavy bandwidth of `206 Partial Content` delivery from our Node.js servers onto AWS infrastructure, ensuring massive scalability.
-* **`fluent-ffmpeg` & `music-metadata`:** The core transcoding engine. Automatically extracts ID3 tags and processes raw audio (WAV/MP3) into streaming-optimized chunks, mimicking SoundCloud's native processing states.
-* **`audiowaveform`:** Used to generate waveform peak data for visual waveform rendering and timestamp-based commenting features.
-* **`nanoid`:** Generates unique unguessable tokens used for private “link-only” tracks, enabling secure Public vs Private visibility controls.
-
+* **`multer` (via `@nestjs/platform-express`):** Multipart file uploads for audio and images.
+* **`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`:** Object storage for audio files and presigned streaming URLs to offload bandwidth from the Node.js process.
+* **`fluent-ffmpeg` + `music-metadata`:** Audio transcoding and ID3 metadata extraction for processing-state management.
+* **`nanoid`:** Generates unguessable secret tokens for private "link-only" track access.
 
 ### 5. Engagement & Social Interactions (Module 6)
-* **PostgreSQL (via Prisma ORM):** Stores Likes/Favorites, Reposts, and engagement lists using relational tables and constraints to ensure integrity and prevent duplicate actions (e.g., one Like per user per track).
-* **MongoDB (via Mongoose ODM):** Stores timestamped waveform comments with second-based offsets to support high-frequency commenting and flexible comment structures.
-* **Redis:** Maintains fast-access engagement counters (Favoriters count, repost count) to support high-performance UI rendering and trending calculations.
-* **`socket.io`:** Broadcasts real-time engagement events (Likes, Reposts, Comments) to update user feeds and notification state instantly.
-* **Redis + `bullmq`:** Handles background aggregation and synchronization tasks for engagement analytics and feed/notification fanout.
-
+* **PostgreSQL (Prisma):** Likes, Reposts, and engagement lists with unique constraints to prevent duplicates.
+* **Timestamped Comments (Prisma):** Comments stored with second-offset data for waveform-synced display.
+* **`socket.io`:** Real-time broadcast of engagement events (likes, reposts, new comments).
 
 ### 6. Sets & Playlists (Module 7)
-* **PostgreSQL (via Prisma ORM):** Implements Playlist CRUD, track sequencing, and add/remove operations using relational tables and ordered join tables to support drag-and-drop reordering.
-* **`nanoid`:** Generates unique unguessable “Secret Tokens” for private playlists and shareable secret links.
-* **Embed Support:** Enables playlist embedding by generating shareable iframe-style embed URLs backed by playlist identifiers and secret tokens stored in PostgreSQL.
-
+* **PostgreSQL (Prisma):** Playlist CRUD with ordered join tables for drag-and-drop track reordering.
+* **`nanoid`:** Secret tokens for private/shareable playlist links.
+* **Embed Support:** Iframe embed URL generation backed by playlist identifiers and secret tokens.
 
 ### 7. Real-Time Interactions & Discovery (Modules 8, 9, 10)
-* **`socket.io`:** Powers bidirectional WebSocket connections for 1-to-1 Direct Messaging and instant UI state updates (Likes/Reposts).
-* **`firebase-admin`:** Bridges real-time backend alerts to Push Notifications for the cross-platform mobile app.
-* **Redis + `bullmq`:** Background job processing system for asynchronous workflows including audio processing pipelines, notification fanout, and engagement analytics.
-* **PostgreSQL Full-Text Search:** Enables global keyword-based search across Tracks, Users, and Playlists without requiring external search engines.
-* **PostgreSQL Indexed Permalinks (Slug Resolver):** Supports resource resolution by mapping human-readable URLs to internal resource IDs through indexed unique slugs.
-
+* **`@nestjs/websockets` + `socket.io`:** Bidirectional WebSocket gateway for 1-to-1 direct messaging and live UI updates.
+* **`firebase-admin`:** Push notifications bridged to the cross-platform mobile app.
+* **PostgreSQL Full-Text Search:** Keyword-based global search across Tracks, Users, and Playlists without external search infrastructure.
+* **Slug Resolver:** Indexed unique slugs to resolve human-readable permalinks into internal resource IDs.
 
 ### 8. Moderation & Admin Dashboard (Module 11)
-* **PostgreSQL (via Prisma ORM):** Stores moderation reports, account status flags, and administrative actions, enabling content moderation workflows such as reporting, hiding/removing tracks, and suspending user accounts through relational data integrity.
-* **MongoDB (via Mongoose ODM):** Maintains moderation-related activity logs and administrative audit trails to support flexible schema storage and efficient tracking of moderation history.
-* **Role-Based Access Control (RBAC Middleware):** Enforces admin-only permissions and secure access to moderation endpoints, ensuring only authorized roles can perform sensitive actions.
-* **Redis + `bullmq`:** Processes background analytics aggregation tasks for platform health metrics including active users, engagement rates, and usage statistics.
-
+* **PostgreSQL (Prisma):** Moderation reports, account status flags, admin action audit logs.
+* **Role-Based Access Control (NestJS Guards):** `@Roles()` decorator with a custom RBAC guard restricts admin-only endpoints.
 
 ### 9. Monetization (Module 12)
-* **`stripe`:** Integrates mock payment processing lifecycles and enforces Premium/Go+ upload limits.
-* **PostgreSQL Subscription & Tier Management (Prisma):** Stores user subscription status, plan tiers, and usage limits, enabling backend enforcement of paywall logic such as upload restrictions and feature access control.
-* **Tier-Based Access Middleware:** Enforces Premium feature permissions including ad-free experience, enhanced playback privileges, and subscription-gated functionality.
-* **S3 Presigned Download URLs (`@aws-sdk/s3-request-presigner`):** Enables mock offline listening by generating secure temporary download links for premium users without exposing storage resources publicly.
-  
+* **`stripe`:** Mock payment processing (Stripe Test Mode) for subscription lifecycles.
+* **PostgreSQL Subscription Management (Prisma):** User plan tiers, usage limits, and paywall enforcement.
+* **Tier-Based Access Guard:** Custom NestJS guard enforcing Premium feature permissions.
+* **S3 Presigned Download URLs:** Mock offline listening via temporary download links for premium users.
 
-## 📝 Software Process & Quality Assurance Tools
+
+## Software Process & Quality Assurance
 * **Version Control:** GitHub
-* **Task Management:** Clickup
-* **Testing:** `jest` and `supertest` to guarantee >95% backend unit test coverage.
-* **API Documentation:** `swagger-ui-express` & `swagger-jsdoc` for auto-generated, interactive REST API docs.
-* **Code Quality:** `eslint` and `prettier` to enforce unified coding standards across backend contributors.
-* **Logging:** `pino` for structured application logging.
-* **Postman**
+* **Task Management:** ClickUp
+* **Testing:** Jest (NestJS built-in) with >95% unit test coverage.
+* **API Documentation:** `@nestjs/swagger` for auto-generated OpenAPI / Swagger docs from decorators.
+* **Code Quality:** ESLint + Prettier (NestJS default config).
+* **Logging:** NestJS built-in `Logger` service.
+* **API Client:** Postman collection for all endpoints.
+
+
+## Project Structure (Backend)
+
+The project uses the **module-per-feature** layout, which is the standard NestJS convention and how production NestJS codebases are organized.
+
+```
+Backend/
+├── prisma/                     # Prisma schema, migrations, seed
+├── src/
+│   ├── config/                 # Environment & app configuration
+│   ├── prisma/                 # PrismaService (database connection provider)
+│   ├── common/                 # Shared decorators, guards, filters, pipes, utils
+│   ├── auth/                   # Module 1 — Registration, login, OAuth, JWT
+│   ├── users/                  # Modules 2 & 3 — Profile, followers, blocking
+│   ├── tracks/                 # Modules 4 & 5 — Audio upload, playback, likes, reposts
+│   ├── comments/               # Module 6 — Timestamped waveform comments
+│   ├── playlists/              # Module 7 — Sets, track ordering, secret tokens
+│   ├── feed/                   # Module 8 — Activity feed, trending
+│   ├── search/                 # Module 8 (partial) — Global search, permalink resolve
+│   ├── messages/               # Module 9 — 1-to-1 direct messaging
+│   ├── notifications/          # Module 10 — Real-time alerts, push notifications
+│   ├── admin/                  # Module 11 — Reports, moderation, platform stats
+│   └── subscriptions/          # Module 12 — Stripe, premium plans, paywall
+├── test/                       # E2E tests
+├── uploads/                    # Local file storage (dev only)
+├── .env.example
+├── .eslintrc.js
+├── .prettierrc
+├── nest-cli.json
+├── tsconfig.json
+├── tsconfig.build.json
+└── package.json
+```
+
+Each module will follow the NestJS MVC convention internally as development begins (controller, service, module, DTOs).
