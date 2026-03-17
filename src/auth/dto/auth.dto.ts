@@ -21,7 +21,6 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 export enum Gender {
   MALE = "MALE",
   FEMALE = "FEMALE",
-  NON_BINARY = "NON_BINARY",
   PREFER_NOT_TO_SAY = "PREFER_NOT_TO_SAY",
 }
 

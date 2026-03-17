@@ -1,20 +1,37 @@
 // =============================================================================
-// Spotly — Prisma Schema
-// Module 1 (Auth) + Module 2 (Profiles)
+// Spotly — Prisma Schema (Full)
+// Implements every ERD table except API_CLIENT / API_AUTH_CODE / API_ACCESS_TOKEN
 // =============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [citext, pgcrypto]
 }
 
 // =============================================================================
 // Enums
 // =============================================================================
+
+// ── User & Auth ───────────────────────────────────────────────────────────────
+
+enum SystemRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DELETED
+}
 
 enum Gender {
   MALE
@@ -23,210 +40,1133 @@ enum Gender {
   PREFER_NOT_TO_SAY
 }
 
-enum UserRole {
-  USER
-  MODERATOR
-  ADMIN
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  APPLE
+  SOUNDCLOUD
+  OTHER
 }
 
-enum AccountTier {
-  FREE
-  PRO
+enum DevicePlatform {
+  WEB
+  ANDROID
+  IOS
+  DESKTOP
+}
+
+enum AccountType {
+  LISTENER
   ARTIST
 }
 
-enum OAuthProvider {
-  GOOGLE
+enum ProfileVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum SocialPlatform {
+  INSTAGRAM
+  X
+  TIKTOK
+  YOUTUBE
+  WEBSITE
+  FACEBOOK
+  OTHER
+}
+
+// ── Track ─────────────────────────────────────────────────────────────────────
+
+enum TrackVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum TrackAccessLevel {
+  PLAYABLE
+  PREVIEW
+  BLOCKED
+}
+
+enum TrackStatus {
+  PROCESSING
+  FINISHED
+  FAILED
+  REMOVED
+}
+
+enum ModerationState {
+  VISIBLE
+  HIDDEN
+  REMOVED
+}
+
+enum TrackLicense {
+  ALL_RIGHTS_RESERVED
+  CC_BY
+  CC_BY_SA
+  CC_BY_NC
+  CC_BY_NC_SA
+  CC_BY_ND
+  CC_BY_NC_ND
+}
+
+enum FileRole {
+  ORIGINAL
+  STREAM
+  PREVIEW
+  WAVEFORM
+  ARTWORK
+}
+
+enum FileStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+// ── Play ──────────────────────────────────────────────────────────────────────
+
+enum PlaySource {
+  TRACK
+  PLAYLIST
+  SEARCH
+  FEED
+  MESSAGE
+  EMBED
+}
+
+enum PlayDeviceType {
+  WEB
+  ANDROID
+  IOS
+  DESKTOP
+}
+
+// ── Playlist ──────────────────────────────────────────────────────────────────
+
+enum PlaylistType {
+  PLAYLIST
+  ALBUM
+  EP
+  SET
+}
+
+enum PlaylistVisibility {
+  PUBLIC
+  SECRET
+}
+
+// ── Activity ──────────────────────────────────────────────────────────────────
+
+enum ActivityEventType {
+  TRACK_PUBLISHED
+  REPOST
+  FOLLOW
+  LIKE
+  PLAYLIST_CREATED
+}
+
+// ── Messaging ─────────────────────────────────────────────────────────────────
+
+enum ConversationKind {
+  DIRECT
+}
+
+enum MessageType {
+  TEXT
+  TRACK_SHARE
+  PLAYLIST_SHARE
+  SYSTEM
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+enum NotificationEntityType {
+  TRACK
+  COMMENT
+  USER
+  PLAYLIST
+  MESSAGE
+}
+
+enum NotificationEventType {
+  FOLLOW
+  LIKE
+  REPOST
+  COMMENT
+  MESSAGE
+  REPORT_RESOLVED
+  SUBSCRIPTION
+}
+
+enum DeliveryChannel {
+  PUSH
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ── Moderation ────────────────────────────────────────────────────────────────
+
+enum ReportCategory {
+  COPYRIGHT
+  INAPPROPRIATE
+  SPAM
+  HARASSMENT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum ModerationActionType {
+  WARN_USER
+  SUSPEND_USER
+  BAN_USER
+  HIDE_TRACK
+  REMOVE_TRACK
+  HIDE_PLAYLIST
+  REMOVE_PLAYLIST
+  HIDE_COMMENT
+  RESTORE_CONTENT
+}
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  GO_PLUS
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
 }
 
 // =============================================================================
-// User
+// Core User & Auth
 // =============================================================================
 
 model User {
-  id              String      @id @default(uuid())
-  email           String      @unique
-  /// Null for OAuth-only accounts that have no password set.
-  passwordHash    String?
+  id             String        @id @default(uuid()) @db.Uuid
+  email          String        @unique @db.Citext
+  passwordHash   String?       @map("password_hash")
+  systemRole     SystemRole    @default(USER) @map("system_role")
+  accountStatus  AccountStatus @default(ACTIVE) @map("account_status")
+  suspendedUntil DateTime?     @map("suspended_until") @db.Timestamptz
+  isVerified     Boolean       @default(false) @map("is_verified")
+  dateOfBirth    DateTime      @db.Date @map("date_of_birth")
+  gender         Gender
+  lastLoginAt    DateTime?     @map("last_login_at") @db.Timestamptz
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz
 
-  // ── Identity ──────────────────────────────────────────────────────────────
-  displayName     String      @db.VarChar(50)
-  /// URL-safe unique identifier shown in public profile URLs.
-  handle          String      @unique @db.VarChar(50)
-  dateOfBirth     DateTime    @db.Date
-  gender          Gender
-
-  // ── Account state ─────────────────────────────────────────────────────────
-  isEmailVerified Boolean     @default(false)
-  /// Soft-delete flag. Deactivated accounts cannot log in.
-  isActive        Boolean     @default(true)
-  role            UserRole    @default(USER)
-  accountTier     AccountTier @default(FREE)
-
-  // ── Profile ───────────────────────────────────────────────────────────────
-  bio             String?     @db.Text
-  avatarUrl       String?
-  coverUrl        String?
-  location        String?     @db.VarChar(100)
-  website         String?     @db.VarChar(255)
-  /// When true the profile body is hidden from non-followers.
-  isPrivate       Boolean     @default(false)
-  /// Array of genre slugs, e.g. ["hip-hop", "electronic"].
-  favoriteGenres  String[]
-
-  // ── Timestamps ────────────────────────────────────────────────────────────
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  // ── Relations ─────────────────────────────────────────────────────────────
-  sessions                  Session[]
-  emailVerificationTokens   EmailVerificationToken[]
-  passwordResetTokens       PasswordResetToken[]
-  emailChangeTokens         EmailChangeToken[]
-  oauthAccounts             OAuthAccount[]
-  externalLinks             ExternalLink[]
+  // Relations
+  profile                  UserProfile?
+  authIdentities           AuthIdentity[]
+  devices                  UserDevice[]
+  sessions                 UserSession[]
+  emailVerificationTokens  EmailVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
+  emailChangeRequests      EmailChangeRequest[]
+  favoriteGenres           UserFavoriteGenre[]
+  socialLinks              UserSocialLink[]
+  handleHistory            UserHandleHistory[]
+  following                UserFollow[]              @relation("Follower")
+  followers                UserFollow[]              @relation("Following")
+  blockedUsers             UserBlock[]               @relation("Blocker")
+  blockedBy                UserBlock[]               @relation("Blocked")
+  tracks                   Track[]
+  trackLikes               TrackLike[]
+  trackReposts             TrackRepost[]
+  trackComments            TrackComment[]
+  playEvents               PlayEvent[]
+  playlists                Playlist[]
+  playlistLikes            PlaylistLike[]
+  playlistReposts          PlaylistRepost[]
+  actorEvents              ActivityEvent[]           @relation("Actor")
+  targetEvents             ActivityEvent[]           @relation("TargetUser")
+  conversationParticipants ConversationParticipant[]
+  sentMessages             Message[]
+  receivedNotifications    Notification[]            @relation("NotificationRecipient")
+  triggeredNotifications   Notification[]            @relation("NotificationActor")
+  submittedReports         ModerationReport[]        @relation("Reporter")
+  reportedIn               ModerationReport[]        @relation("ReportedUser")
+  executedActions          ModerationAction[]        @relation("AdminAction")
+  receivedActions          ModerationAction[]        @relation("TargetUserAction")
+  subscriptions            UserSubscription[]
+  offlineDownloads         OfflineDownload[]
 
   @@index([email])
-  @@index([handle])
-  @@index([isActive])
+  @@index([accountStatus])
+  @@index([deletedAt])
   @@map("users")
 }
 
-// =============================================================================
-// Session  (Member 3 — OAuth + Sessions Engineer)
-// =============================================================================
+model UserProfile {
+  userId        String            @id @map("user_id") @db.Uuid
+  handle        String            @unique @db.Citext
+  displayName   String            @map("display_name")
+  bio           String?           @db.Text
+  location      String?
+  avatarUrl     String?           @map("avatar_url")
+  coverPhotoUrl String?           @map("cover_photo_url")
+  accountType   AccountType       @default(LISTENER) @map("account_type")
+  visibility    ProfileVisibility @default(PUBLIC)
+  likesVisible  Boolean           @default(true) @map("likes_visible")
+  websiteUrl    String?           @map("website_url")
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz
 
-model Session {
-  id          String   @id @default(uuid())
-  userId      String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /// SHA-256 hash of the opaque refresh token stored in the httpOnly cookie.
-  tokenHash   String   @unique
-
-  /// Raw User-Agent string captured at login for display in "active sessions" UI.
-  deviceInfo  String?  @db.VarChar(512)
-  /// IPv4 / IPv6 address captured at login.
-  ipAddress   String?  @db.VarChar(45)
-
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-  lastUsedAt  DateTime @default(now())
-
-  /// Revoked sessions are kept for audit purposes but cannot be used.
-  isRevoked   Boolean  @default(false)
-
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([tokenHash])
-  @@index([userId, isRevoked])
-  @@map("sessions")
+  @@index([handle])
+  @@map("user_profiles")
 }
 
-// =============================================================================
-// Email verification token  (Member 2 — Core Authentication Engineer)
-// =============================================================================
+model AuthIdentity {
+  id                    String       @id @default(uuid()) @db.Uuid
+  userId                String       @map("user_id") @db.Uuid
+  provider              AuthProvider
+  providerUserId        String?      @map("provider_user_id")
+  providerEmail         String?      @map("provider_email") @db.Citext
+  accessTokenEncrypted  String?      @map("access_token_encrypted")
+  refreshTokenEncrypted String?      @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime?    @map("token_expires_at") @db.Timestamptz
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+model UserDevice {
+  id               String         @id @default(uuid()) @db.Uuid
+  userId           String         @map("user_id") @db.Uuid
+  platform         DevicePlatform
+  deviceName       String?        @map("device_name")
+  deviceIdentifier String?        @map("device_identifier")
+  pushToken        String?        @map("push_token")
+  isActive         Boolean        @default(true) @map("is_active")
+  lastSeenAt       DateTime?      @map("last_seen_at") @db.Timestamptz
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions               UserSession[]
+  notificationDeliveries NotificationDelivery[]
+  offlineDownloads       OfflineDownload[]
+
+  @@index([userId])
+  @@index([userId, isActive])
+  @@map("user_devices")
+}
+
+model UserSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  deviceId         String    @map("device_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  ipAddress        String?   @map("ip_address") @db.Inet
+  userAgent        String?   @map("user_agent") @db.VarChar(512)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device     UserDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  playEvents PlayEvent[]
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@index([userId, revokedAt])
+  @@map("user_sessions")
+}
 
 model EmailVerificationToken {
-  id        String   @id @default(uuid())
-  userId    String
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-  /// SHA-256 hash of the opaque token sent to the user's inbox.
-  tokenHash String   @unique
-
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("email_verification_tokens")
 }
 
-// =============================================================================
-// Password reset token  (Member 2 — Core Authentication Engineer)
-// =============================================================================
-
 model PasswordResetToken {
-  id        String   @id @default(uuid())
-  userId    String
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-  /// SHA-256 hash of the opaque token sent to the user's inbox.
-  tokenHash String   @unique
-
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  /// Once consumed the token cannot be replayed.
-  isUsed    Boolean  @default(false)
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("password_reset_tokens")
 }
 
-// =============================================================================
-// Email change token  (Member 3 — OAuth + Sessions Engineer)
-// =============================================================================
+model EmailChangeRequest {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  newEmail   String    @map("new_email") @db.Citext
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-model EmailChangeToken {
-  id        String   @id @default(uuid())
-  userId    String
-
-  /// The new email address the user wants to switch to.
-  newEmail  String   @db.VarChar(255)
-  /// SHA-256 hash of the opaque token sent to the NEW address.
-  tokenHash String   @unique
-
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@map("email_change_tokens")
+  @@map("email_change_requests")
 }
 
 // =============================================================================
-// OAuth account  (Member 3 — OAuth + Sessions Engineer)
+// User Social & Identity
 // =============================================================================
 
-model OAuthAccount {
-  id                String        @id @default(uuid())
-  userId            String
+model Genre {
+  id   Int    @id @default(autoincrement()) @db.SmallInt
+  name String @unique @db.Citext
+  slug String @unique @db.Citext
 
-  provider          OAuthProvider
-  /// Stable ID issued by the OAuth provider (e.g. Google sub claim).
-  providerAccountId String
+  userFavorites UserFavoriteGenre[]
+  tracks        Track[]
 
-  createdAt         DateTime      @default(now())
+  @@map("genres")
+}
 
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+model UserFavoriteGenre {
+  userId    String   @map("user_id") @db.Uuid
+  genreId   Int      @map("genre_id") @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  @@unique([provider, providerAccountId])
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  genre Genre @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@id([userId, genreId])
+  @@map("user_favorite_genres")
+}
+
+model UserSocialLink {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  platform  SocialPlatform
+  url       String
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
-  @@map("oauth_accounts")
+  @@map("user_social_links")
+}
+
+model UserHandleHistory {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  handle    String    @db.Citext
+  fullPath  String    @unique @map("full_path")
+  isCurrent Boolean   @default(false) @map("is_current")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  retiredAt DateTime? @map("retired_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([handle])
+  @@map("user_handle_history")
+}
+
+model UserFollow {
+  followerId  String   @map("follower_id") @db.Uuid
+  followingId String   @map("following_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("user_follows")
+}
+
+model UserBlock {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockerId])
+  @@map("user_blocks")
 }
 
 // =============================================================================
-// External links  (Member 4 — Profile & Identity Engineer)
+// Tracks
 // =============================================================================
 
-model ExternalLink {
-  id        String   @id @default(uuid())
-  userId    String
+model Tag {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.Citext
+  slug String @unique @db.Citext
 
-  /// Human-readable platform slug, e.g. "twitter", "instagram", "website".
-  platform  String   @db.VarChar(50)
-  /// Full validated URL.
-  url       String   @db.VarChar(2048)
-  /// Lower number = higher position in the UI list.
-  sortOrder Int      @default(0)
+  trackTags TrackTag[]
 
-  createdAt DateTime @default(now())
+  @@map("tags")
+}
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Track {
+  id              String           @id @default(uuid()) @db.Uuid
+  uploaderId      String           @map("uploader_id") @db.Uuid
+  primaryGenreId  Int?             @map("primary_genre_id") @db.SmallInt
+  title           String
+  slug            String           @db.Citext
+  description     String?          @db.Text
+  releaseDate     DateTime?        @map("release_date") @db.Date
+  durationMs      Int?             @map("duration_ms")
+  waveformData    Float[]          @map("waveform_data")
+  visibility      TrackVisibility  @default(PUBLIC)
+  accessLevel     TrackAccessLevel @default(PLAYABLE) @map("access_level")
+  status          TrackStatus      @default(PROCESSING)
+  moderationState ModerationState  @default(VISIBLE) @map("moderation_state")
+  license         TrackLicense     @default(ALL_RIGHTS_RESERVED)
+  allowComments   Boolean          @default(true) @map("allow_comments")
+  downloadable    Boolean          @default(false)
+  coverArtUrl     String?          @map("cover_art_url")
+  secretToken     String?          @map("secret_token")
+  publishedAt     DateTime?        @map("published_at") @db.Timestamptz
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz
+
+  uploader          User                    @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  primaryGenre      Genre?                  @relation(fields: [primaryGenreId], references: [id], onDelete: SetNull)
+  files             TrackFile[]
+  tags              TrackTag[]
+  availabilityRules TrackAvailabilityRule[]
+  permalinkHistory  TrackPermalinkHistory[]
+  likes             TrackLike[]
+  reposts           TrackRepost[]
+  comments          TrackComment[]
+  playEvents        PlayEvent[]
+  playlistTracks    PlaylistTrack[]
+  activityEvents    ActivityEvent[]
+  messageShares     MessageShare[]
+  notifications     Notification[]
+  moderationReports ModerationReport[]
+  moderationActions ModerationAction[]
+  offlineDownloads  OfflineDownload[]
+  dailyStats        TrackDailyStat[]
+
+  @@index([uploaderId])
+  @@index([slug])
+  @@index([status])
+  @@index([visibility, moderationState])
+  @@index([deletedAt])
+  @@map("tracks")
+}
+
+model TrackFile {
+  id            String     @id @default(uuid()) @db.Uuid
+  trackId       String     @map("track_id") @db.Uuid
+  fileRole      FileRole   @map("file_role")
+  storageKey    String     @map("storage_key")
+  mimeType      String     @map("mime_type")
+  format        String?
+  bitrateKbps   Int?       @map("bitrate_kbps")
+  sampleRateHz  Int?       @map("sample_rate_hz")
+  channels      Int?
+  fileSizeBytes BigInt?    @map("file_size_bytes")
+  status        FileStatus @default(PENDING)
+  isCurrent     Boolean    @default(false) @map("is_current")
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+  @@index([trackId, fileRole, isCurrent])
+  @@map("track_files")
+}
+
+model TrackTag {
+  trackId   String   @map("track_id") @db.Uuid
+  tagId     Int      @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, tagId])
+  @@map("track_tags")
+}
+
+model TrackAvailabilityRule {
+  id             String           @id @default(uuid()) @db.Uuid
+  trackId        String           @map("track_id") @db.Uuid
+  requiredPlanId String?          @map("required_plan_id") @db.Uuid
+  countryCode    String?          @map("country_code") @db.Char(2)
+  accessLevel    TrackAccessLevel @map("access_level")
+  startsAt       DateTime?        @map("starts_at") @db.Timestamptz
+  endsAt         DateTime?        @map("ends_at") @db.Timestamptz
+
+  track        Track             @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  requiredPlan SubscriptionPlan? @relation(fields: [requiredPlanId], references: [id], onDelete: SetNull)
+
+  @@index([trackId])
+  @@map("track_availability_rules")
+}
+
+model TrackPermalinkHistory {
+  id        String    @id @default(uuid()) @db.Uuid
+  trackId   String    @map("track_id") @db.Uuid
+  slug      String    @db.Citext
+  fullPath  String    @unique @map("full_path")
+  isCurrent Boolean   @default(false) @map("is_current")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  retiredAt DateTime? @map("retired_at") @db.Timestamptz
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+  @@map("track_permalink_history")
+}
+
+model TrackLike {
+  userId    String   @map("user_id") @db.Uuid
+  trackId   String   @map("track_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, trackId])
+  @@index([trackId])
+  @@map("track_likes")
+}
+
+model TrackRepost {
+  userId    String   @map("user_id") @db.Uuid
+  trackId   String   @map("track_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, trackId])
+  @@index([trackId])
+  @@map("track_reposts")
+}
+
+model TrackComment {
+  id          String    @id @default(uuid()) @db.Uuid
+  trackId     String    @map("track_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  parentId    String?   @map("parent_id") @db.Uuid
+  body        String    @db.Text
+  timestampMs Int?      @map("timestamp_ms")
+  isHidden    Boolean   @default(false) @map("is_hidden")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
+
+  track             Track              @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent            TrackComment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies           TrackComment[]     @relation("CommentReplies")
+  notifications     Notification[]
+  moderationReports ModerationReport[]
+  moderationActions ModerationAction[]
+
+  @@index([trackId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("track_comments")
+}
+
+model PlayEvent {
+  id              BigInt         @id @default(autoincrement())
+  userId          String?        @map("user_id") @db.Uuid
+  trackId         String         @map("track_id") @db.Uuid
+  sessionId       String?        @map("session_id") @db.Uuid
+  playlistId      String?        @map("playlist_id") @db.Uuid
+  messageId       String?        @map("message_id") @db.Uuid
+  source          PlaySource
+  deviceType      PlayDeviceType @map("device_type")
+  countryCode     String?        @map("country_code") @db.Char(2)
+  listenedMs      Int?           @map("listened_ms")
+  completionRatio Decimal?       @map("completion_ratio") @db.Decimal(5, 4)
+  startedAt       DateTime       @default(now()) @map("started_at") @db.Timestamptz
+
+  user     User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  track    Track        @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  session  UserSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  playlist Playlist?    @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  message  Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([trackId])
+  @@index([userId])
+  @@index([startedAt])
+  @@map("play_events")
+}
+
+// =============================================================================
+// Playlists
+// =============================================================================
+
+model Playlist {
+  id              String             @id @default(uuid()) @db.Uuid
+  ownerId         String             @map("owner_id") @db.Uuid
+  title           String
+  slug            String             @db.Citext
+  description     String?            @db.Text
+  coverArtUrl     String?            @map("cover_art_url")
+  type            PlaylistType       @default(PLAYLIST)
+  visibility      PlaylistVisibility @default(PUBLIC)
+  moderationState ModerationState    @default(VISIBLE) @map("moderation_state")
+  secretToken     String?            @map("secret_token")
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz
+
+  owner             User                       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tracks            PlaylistTrack[]
+  permalinkHistory  PlaylistPermalinkHistory[]
+  likes             PlaylistLike[]
+  reposts           PlaylistRepost[]
+  playEvents        PlayEvent[]
+  activityEvents    ActivityEvent[]
+  messageShares     MessageShare[]
+  notifications     Notification[]
+  moderationReports ModerationReport[]
+  moderationActions ModerationAction[]
+
+  @@index([ownerId])
+  @@index([slug])
+  @@index([visibility, moderationState])
+  @@index([deletedAt])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  playlistId String   @map("playlist_id") @db.Uuid
+  trackId    String   @map("track_id") @db.Uuid
+  position   Int
+  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamptz
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, trackId])
+  @@index([playlistId, position])
+  @@map("playlist_tracks")
+}
+
+model PlaylistPermalinkHistory {
+  id         String    @id @default(uuid()) @db.Uuid
+  playlistId String    @map("playlist_id") @db.Uuid
+  slug       String    @db.Citext
+  fullPath   String    @unique @map("full_path")
+  isCurrent  Boolean   @default(false) @map("is_current")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  retiredAt  DateTime? @map("retired_at") @db.Timestamptz
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([playlistId])
+  @@map("playlist_permalink_history")
+}
+
+model PlaylistLike {
+  userId     String   @map("user_id") @db.Uuid
+  playlistId String   @map("playlist_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@id([userId, playlistId])
+  @@index([playlistId])
+  @@map("playlist_likes")
+}
+
+model PlaylistRepost {
+  userId     String   @map("user_id") @db.Uuid
+  playlistId String   @map("playlist_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@id([userId, playlistId])
+  @@index([playlistId])
+  @@map("playlist_reposts")
+}
+
+// =============================================================================
+// Activity Feed
+// =============================================================================
+
+model ActivityEvent {
+  id           String            @id @default(uuid()) @db.Uuid
+  actorId      String            @map("actor_id") @db.Uuid
+  targetUserId String?           @map("target_user_id") @db.Uuid
+  eventType    ActivityEventType @map("event_type")
+  trackId      String?           @map("track_id") @db.Uuid
+  playlistId   String?           @map("playlist_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  actor      User      @relation("Actor", fields: [actorId], references: [id], onDelete: Cascade)
+  targetUser User?     @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  track      Track?    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  playlist   Playlist? @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([actorId])
+  @@index([targetUserId])
+  @@index([createdAt])
+  @@map("activity_events")
+}
+
+// =============================================================================
+// Messaging
+// =============================================================================
+
+model Conversation {
+  id        String           @id @default(uuid()) @db.Uuid
+  kind      ConversationKind @default(DIRECT)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId      String    @map("conversation_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  lastReadMessageId   String?   @map("last_read_message_id") @db.Uuid
+  lastReadAt          DateTime? @map("last_read_at") @db.Timestamptz
+  isArchived          Boolean   @default(false) @map("is_archived")
+  joinedAt            DateTime  @default(now()) @map("joined_at") @db.Timestamptz
+
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadMessage  Message?     @relation("LastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  senderId       String      @map("sender_id") @db.Uuid
+  messageType    MessageType @default(TEXT) @map("message_type")
+  body           String?     @db.Text
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  editedAt       DateTime?   @map("edited_at") @db.Timestamptz
+  deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz
+
+  conversation             Conversation              @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender                   User                      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  share                    MessageShare?
+  playEvents               PlayEvent[]
+  notifications            Notification[]
+  lastReadByParticipants   ConversationParticipant[] @relation("LastReadMessage")
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model MessageShare {
+  messageId  String  @id @map("message_id") @db.Uuid
+  trackId    String? @map("track_id") @db.Uuid
+  playlistId String? @map("playlist_id") @db.Uuid
+
+  message  Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  track    Track?    @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  playlist Playlist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+
+  @@map("message_shares")
+}
+
+// =============================================================================
+// Notifications
+// =============================================================================
+
+model Notification {
+  id          String                  @id @default(uuid()) @db.Uuid
+  recipientId String                  @map("recipient_id") @db.Uuid
+  actorId     String?                 @map("actor_id") @db.Uuid
+  entityType  NotificationEntityType  @map("entity_type")
+  trackId     String?                 @map("track_id") @db.Uuid
+  playlistId  String?                 @map("playlist_id") @db.Uuid
+  commentId   String?                 @map("comment_id") @db.Uuid
+  messageId   String?                 @map("message_id") @db.Uuid
+  eventType   NotificationEventType   @map("event_type")
+  metadata    Json?                   @db.JsonB
+  readAt      DateTime?               @map("read_at") @db.Timestamptz
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz
+
+  recipient User          @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User?         @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  track     Track?        @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  playlist  Playlist?     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  comment   TrackComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  message   Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([recipientId])
+  @@index([recipientId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationDelivery {
+  id             String          @id @default(uuid()) @db.Uuid
+  notificationId String          @map("notification_id") @db.Uuid
+  deviceId       String          @map("device_id") @db.Uuid
+  channel        DeliveryChannel
+  status         DeliveryStatus  @default(PENDING)
+  failureReason  String?         @map("failure_reason")
+  sentAt         DateTime?       @map("sent_at") @db.Timestamptz
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  device       UserDevice   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([deviceId])
+  @@map("notification_deliveries")
+}
+
+// =============================================================================
+// Moderation
+// =============================================================================
+
+model ModerationReport {
+  id             String         @id @default(uuid()) @db.Uuid
+  reporterId     String         @map("reporter_id") @db.Uuid
+  reportedUserId String?        @map("reported_user_id") @db.Uuid
+  trackId        String?        @map("track_id") @db.Uuid
+  playlistId     String?        @map("playlist_id") @db.Uuid
+  commentId      String?        @map("comment_id") @db.Uuid
+  category       ReportCategory
+  description    String?        @db.Text
+  status         ReportStatus   @default(PENDING)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt     DateTime?      @map("resolved_at") @db.Timestamptz
+
+  reporter     User          @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser User?         @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  track        Track?        @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  playlist     Playlist?     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  comment      TrackComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  actions      ModerationAction[]
+
+  @@index([reporterId])
+  @@index([status])
+  @@map("moderation_reports")
+}
+
+model ModerationAction {
+  id           String               @id @default(uuid()) @db.Uuid
+  adminId      String               @map("admin_id") @db.Uuid
+  targetUserId String?              @map("target_user_id") @db.Uuid
+  trackId      String?              @map("track_id") @db.Uuid
+  playlistId   String?              @map("playlist_id") @db.Uuid
+  commentId    String?              @map("comment_id") @db.Uuid
+  reportId     String?              @map("report_id") @db.Uuid
+  actionType   ModerationActionType @map("action_type")
+  notes        String?              @db.Text
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  admin      User              @relation("AdminAction", fields: [adminId], references: [id], onDelete: Cascade)
+  targetUser User?             @relation("TargetUserAction", fields: [targetUserId], references: [id], onDelete: SetNull)
+  track      Track?            @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  playlist   Playlist?         @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  comment    TrackComment?     @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  report     ModerationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([adminId])
+  @@index([reportId])
+  @@map("moderation_actions")
+}
+
+// =============================================================================
+// Subscriptions & Billing
+// =============================================================================
+
+model SubscriptionPlan {
+  id              String            @id @default(uuid()) @db.Uuid
+  code            String            @unique
+  name            String
+  tier            SubscriptionTier
+  priceCents      Int               @map("price_cents")
+  billingInterval BillingInterval   @map("billing_interval")
+  uploadLimit     Int               @default(-1) @map("upload_limit")
+  features        Json              @default("{}") @db.JsonB
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  subscriptions     UserSubscription[]
+  availabilityRules TrackAvailabilityRule[]
+
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id                   String             @id @default(uuid()) @db.Uuid
+  userId               String             @map("user_id") @db.Uuid
+  planId               String             @map("plan_id") @db.Uuid
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  status               SubscriptionStatus @default(ACTIVE)
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  currentPeriodStart   DateTime           @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd     DateTime           @map("current_period_end") @db.Timestamptz
+  canceledAt           DateTime?          @map("canceled_at") @db.Timestamptz
+  endedAt              DateTime?          @map("ended_at") @db.Timestamptz
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices BillingInvoice[]
+  payments PaymentEvent[]
 
   @@index([userId])
-  @@map("external_links")
+  @@index([status])
+  @@map("user_subscriptions")
+}
+
+model BillingInvoice {
+  id                 String        @id @default(uuid()) @db.Uuid
+  subscriptionId     String        @map("subscription_id") @db.Uuid
+  stripeInvoiceId    String        @unique @map("stripe_invoice_id")
+  amountDueCents     Int           @map("amount_due_cents")
+  amountPaidCents    Int           @default(0) @map("amount_paid_cents")
+  currency           String        @db.Char(3)
+  status             InvoiceStatus @default(OPEN)
+  dueAt              DateTime?     @map("due_at") @db.Timestamptz
+  paidAt             DateTime?     @map("paid_at") @db.Timestamptz
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  subscription UserSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  payments     PaymentEvent[]
+
+  @@index([subscriptionId])
+  @@map("billing_invoices")
+}
+
+model PaymentEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  subscriptionId String   @map("subscription_id") @db.Uuid
+  invoiceId      String?  @map("invoice_id") @db.Uuid
+  stripeEventId  String   @unique @map("stripe_event_id")
+  eventType      String   @map("event_type")
+  payload        Json     @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  subscription UserSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoice      BillingInvoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId])
+  @@map("payment_events")
+}
+
+// =============================================================================
+// Offline Downloads
+// =============================================================================
+
+model OfflineDownload {
+  userId       String   @map("user_id") @db.Uuid
+  deviceId     String   @map("device_id") @db.Uuid
+  trackId      String   @map("track_id") @db.Uuid
+  downloadedAt DateTime @default(now()) @map("downloaded_at") @db.Timestamptz
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device UserDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  track  Track      @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, deviceId, trackId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("offline_downloads")
+}
+
+// =============================================================================
+// Analytics & Stats
+// =============================================================================
+
+model TrackDailyStat {
+  trackId             String   @map("track_id") @db.Uuid
+  statDate            DateTime @map("stat_date") @db.Date
+  playCount           Int      @default(0) @map("play_count")
+  uniqueListenerCount Int      @default(0) @map("unique_listener_count")
+  likeCount           Int      @default(0) @map("like_count")
+  repostCount         Int      @default(0) @map("repost_count")
+  commentCount        Int      @default(0) @map("comment_count")
+  downloadCount       Int      @default(0) @map("download_count")
+  completionRate      Decimal  @default(0) @map("completion_rate") @db.Decimal(5, 4)
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, statDate])
+  @@index([statDate])
+  @@map("track_daily_stats")
+}
+
+model DailyPlatformMetric {
+  metricDate        DateTime @id @db.Date @map("metric_date")
+  activeUsers       Int      @default(0) @map("active_users")
+  newUsers          Int      @default(0) @map("new_users")
+  tracksUploaded    Int      @default(0) @map("tracks_uploaded")
+  totalStorageBytes BigInt   @default(0) @map("total_storage_bytes")
+  playThroughRate   Decimal  @default(0) @map("play_through_rate") @db.Decimal(5, 4)
+  activeSubscribers Int      @default(0) @map("active_subscribers")
+
+  @@map("daily_platform_metrics")
 }
