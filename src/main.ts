@@ -1,5 +1,9 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+<<<<<<< HEAD
+=======
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+>>>>>>> 53a71a2 (add swagger, fix csp, fix prisma volume)
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
@@ -32,24 +36,19 @@ async function bootstrap() {
     helmet({
       // This is a JSON API — browsers should never render its responses as HTML.
       // CSP blocks iframing and restricts what a browser does with the response.
-      contentSecurityPolicy: {
+     contentSecurityPolicy: {
         useDefaults: false,
         directives: {
-          // API responses are not web pages; block everything by default.
           defaultSrc: ["'none'"],
-          // No scripts, styles, images, fonts, media, or objects.
-          scriptSrc: ["'none'"],
-          styleSrc: ["'none'"],
-          imgSrc: ["'none'"],
-          fontSrc: ["'none'"],
+          scriptSrc: isProduction ? ["'none'"] : ["'self'", "'unsafe-inline'"],
+          styleSrc: isProduction ? ["'none'"] : ["'self'", "'unsafe-inline'"],
+          imgSrc: isProduction ? ["'none'"] : ["'self'", "data:"],
+          fontSrc: isProduction ? ["'none'"] : ["'self'"],
           objectSrc: ["'none'"],
           mediaSrc: ["'none'"],
           frameSrc: ["'none'"],
-          // Block this API from being embedded in any frame.
           frameAncestors: ["'none'"],
-          // Disallow form submissions to this origin.
           formAction: ["'none'"],
-          // Upgrade insecure requests in production.
           ...(isProduction ? { upgradeInsecureRequests: [] } : {}),
         },
       },
@@ -176,6 +175,18 @@ async function bootstrap() {
 
   // ── Start ────────────────────────────────────────────────────────────────────
   const port = Number(process.env.PORT ?? 3000);
+
+  // ── Swagger ──────────────────────────────────────────────────────────────────
+  if (!isProduction) {
+    const config = new DocumentBuilder()
+      .setTitle('IQA3 API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
+
   await app.listen(port);
 
   if (!isProduction) {
