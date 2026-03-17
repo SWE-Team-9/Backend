@@ -1,0 +1,232 @@
+// =============================================================================
+// Spotly — Prisma Schema
+// Module 1 (Auth) + Module 2 (Profiles)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum AccountTier {
+  FREE
+  PRO
+  ARTIST
+}
+
+enum OAuthProvider {
+  GOOGLE
+}
+
+// =============================================================================
+// User
+// =============================================================================
+
+model User {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  /// Null for OAuth-only accounts that have no password set.
+  passwordHash    String?
+
+  // ── Identity ──────────────────────────────────────────────────────────────
+  displayName     String      @db.VarChar(50)
+  /// URL-safe unique identifier shown in public profile URLs.
+  handle          String      @unique @db.VarChar(50)
+  dateOfBirth     DateTime    @db.Date
+  gender          Gender
+
+  // ── Account state ─────────────────────────────────────────────────────────
+  isEmailVerified Boolean     @default(false)
+  /// Soft-delete flag. Deactivated accounts cannot log in.
+  isActive        Boolean     @default(true)
+  role            UserRole    @default(USER)
+  accountTier     AccountTier @default(FREE)
+
+  // ── Profile ───────────────────────────────────────────────────────────────
+  bio             String?     @db.Text
+  avatarUrl       String?
+  coverUrl        String?
+  location        String?     @db.VarChar(100)
+  website         String?     @db.VarChar(255)
+  /// When true the profile body is hidden from non-followers.
+  isPrivate       Boolean     @default(false)
+  /// Array of genre slugs, e.g. ["hip-hop", "electronic"].
+  favoriteGenres  String[]
+
+  // ── Timestamps ────────────────────────────────────────────────────────────
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // ── Relations ─────────────────────────────────────────────────────────────
+  sessions                  Session[]
+  emailVerificationTokens   EmailVerificationToken[]
+  passwordResetTokens       PasswordResetToken[]
+  emailChangeTokens         EmailChangeToken[]
+  oauthAccounts             OAuthAccount[]
+  externalLinks             ExternalLink[]
+
+  @@index([email])
+  @@index([handle])
+  @@index([isActive])
+  @@map("users")
+}
+
+// =============================================================================
+// Session  (Member 3 — OAuth + Sessions Engineer)
+// =============================================================================
+
+model Session {
+  id          String   @id @default(uuid())
+  userId      String
+
+  /// SHA-256 hash of the opaque refresh token stored in the httpOnly cookie.
+  tokenHash   String   @unique
+
+  /// Raw User-Agent string captured at login for display in "active sessions" UI.
+  deviceInfo  String?  @db.VarChar(512)
+  /// IPv4 / IPv6 address captured at login.
+  ipAddress   String?  @db.VarChar(45)
+
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+
+  /// Revoked sessions are kept for audit purposes but cannot be used.
+  isRevoked   Boolean  @default(false)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([userId, isRevoked])
+  @@map("sessions")
+}
+
+// =============================================================================
+// Email verification token  (Member 2 — Core Authentication Engineer)
+// =============================================================================
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+
+  /// SHA-256 hash of the opaque token sent to the user's inbox.
+  tokenHash String   @unique
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_tokens")
+}
+
+// =============================================================================
+// Password reset token  (Member 2 — Core Authentication Engineer)
+// =============================================================================
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+
+  /// SHA-256 hash of the opaque token sent to the user's inbox.
+  tokenHash String   @unique
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  /// Once consumed the token cannot be replayed.
+  isUsed    Boolean  @default(false)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// =============================================================================
+// Email change token  (Member 3 — OAuth + Sessions Engineer)
+// =============================================================================
+
+model EmailChangeToken {
+  id        String   @id @default(uuid())
+  userId    String
+
+  /// The new email address the user wants to switch to.
+  newEmail  String   @db.VarChar(255)
+  /// SHA-256 hash of the opaque token sent to the NEW address.
+  tokenHash String   @unique
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_change_tokens")
+}
+
+// =============================================================================
+// OAuth account  (Member 3 — OAuth + Sessions Engineer)
+// =============================================================================
+
+model OAuthAccount {
+  id                String        @id @default(uuid())
+  userId            String
+
+  provider          OAuthProvider
+  /// Stable ID issued by the OAuth provider (e.g. Google sub claim).
+  providerAccountId String
+
+  createdAt         DateTime      @default(now())
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+// =============================================================================
+// External links  (Member 4 — Profile & Identity Engineer)
+// =============================================================================
+
+model ExternalLink {
+  id        String   @id @default(uuid())
+  userId    String
+
+  /// Human-readable platform slug, e.g. "twitter", "instagram", "website".
+  platform  String   @db.VarChar(50)
+  /// Full validated URL.
+  url       String   @db.VarChar(2048)
+  /// Lower number = higher position in the UI list.
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("external_links")
+}
