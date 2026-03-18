@@ -22,7 +22,7 @@ import {
 } from "./dto/auth.dto";
 import { CookieService } from "./services/cookie.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionService } from "./services/session.service";
+import { SessionManagementService } from "./services/session-management.service";
 import { TokenService } from "./services/token.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
@@ -34,7 +34,7 @@ export class AuthService {
 		private readonly prisma: PrismaService,
 		private readonly tokenService: TokenService,
 		private readonly recaptchaService: RecaptchaService,
-		private readonly sessionService: SessionService,
+		private readonly sessionManagementService: SessionManagementService,
 		private readonly mailService: MailService,
 		private readonly cookieService: CookieService,
 	) {}
@@ -226,13 +226,12 @@ export class AuthService {
 		const rememberMe = dto.remember_me ?? false;
 		const refresh = this.tokenService.createRefreshToken(rememberMe);
 
-		await this.sessionService.createSession({
-			userId: user.id,
-			refreshTokenHash: refresh.tokenHash,
-			expiresAt: refresh.expiresAt,
-			ipAddress: context.ipAddress,
-			userAgent: context.userAgent,
-		});
+		await this.sessionManagementService.createSession(
+			user.id,
+			context.userAgent ?? "unknown",
+			context.ipAddress ?? "unknown",
+			refresh.tokenHash,
+		);
 
 		await this.db.user.update({
 			where: { id: user.id },
@@ -334,7 +333,7 @@ export class AuthService {
 			});
 		});
 
-		await this.sessionService.revokeAllUserSessions(resetToken.userId);
+		await this.sessionManagementService.deleteUserSessions(resetToken.userId);
 
 		return { message: "Password has been reset successfully." };
 	}

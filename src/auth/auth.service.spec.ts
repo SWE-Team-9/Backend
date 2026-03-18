@@ -6,7 +6,7 @@ import { Gender } from "./dto/auth.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { TokenService } from "./services/token.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionService } from "./services/session.service";
+import { SessionManagementService } from "./services/session-management.service";
 import { MailService } from "../mail/mail.service";
 import { CookieService } from "./services/cookie.service";
 
@@ -78,7 +78,7 @@ describe("AuthService", () => {
   let db: MockDb;
   let recaptchaService: jest.Mocked<RecaptchaService>;
   let tokenService: jest.Mocked<TokenService>;
-  let sessionService: jest.Mocked<SessionService>;
+  let sessionManagementService: jest.Mocked<SessionManagementService>;
   let mailService: jest.Mocked<MailService>;
 
   beforeEach(async () => {
@@ -110,10 +110,10 @@ describe("AuthService", () => {
           },
         },
         {
-          provide: SessionService,
+          provide: SessionManagementService,
           useValue: {
             createSession: jest.fn().mockResolvedValue({ sessionId: "session-1" }),
-            revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+            deleteUserSessions: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -135,7 +135,7 @@ describe("AuthService", () => {
     service = module.get(AuthService);
     recaptchaService = module.get(RecaptchaService);
     tokenService = module.get(TokenService);
-    sessionService = module.get(SessionService);
+    sessionManagementService = module.get(SessionManagementService);
     mailService = module.get(MailService);
 
     db.$transaction.mockImplementation(async (cb: (tx: MockDb) => Promise<unknown>) =>
@@ -303,7 +303,7 @@ describe("AuthService", () => {
         role: "USER",
       });
       expect(tokenService.createRefreshToken).toHaveBeenCalledWith(true);
-      expect(sessionService.createSession).toHaveBeenCalled();
+      expect(sessionManagementService.createSession).toHaveBeenCalled();
       expect(db.user.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: "user-1" } }),
       );
@@ -368,7 +368,7 @@ describe("AuthService", () => {
         expect.objectContaining({ where: { id: "user-1" } }),
       );
       expect(db.passwordResetToken.update).toHaveBeenCalled();
-      expect(sessionService.revokeAllUserSessions).toHaveBeenCalledWith("user-1");
+      expect(sessionManagementService.deleteUserSessions).toHaveBeenCalledWith("user-1");
       expect(result.message).toContain("Password has been reset");
     });
   });

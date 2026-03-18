@@ -10,7 +10,6 @@ import { AuthService } from "./auth.service";
 import { TokenService } from "./services/token.service";
 import { CookieService } from "./services/cookie.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionService } from "./services/session.service";
 import { SessionManagementService } from "./services/session-management.service";
 
 import { JwtCookieStrategy } from "./strategies/jwt-cookie.strategy";
@@ -51,7 +50,6 @@ import { MailModule } from "../mail/mail.module";
     AuthService,
 
     // ── Member 3 — OAuth + Sessions Engineer ─────────────────────────────
-    SessionService,
     SessionManagementService,
     GoogleStrategy,
   ],
@@ -59,7 +57,6 @@ import { MailModule } from "../mail/mail.module";
     TokenService,
     CookieService,
     RecaptchaService,
-    SessionService,
     SessionManagementService,
     PassportModule,
     JwtModule,
