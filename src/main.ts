@@ -177,7 +177,13 @@ async function bootstrap() {
   if (!isProduction) {
     const config = new DocumentBuilder()
       .setTitle('IQA3 API')
+      .setDescription('Social Streaming Platform backend API documentation (development only).')
       .setVersion('1.0')
+      .addCookieAuth('access_token', {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'access_token',
+      })
       .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, config);

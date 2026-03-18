@@ -40,6 +40,9 @@ export class AuthController {
   @Public()
   @Post("register")
   @ThrottlePolicy(AUTH_RATE_LIMITS.register.limit, AUTH_RATE_LIMITS.register.ttlMs)
+  @ApiOperation({ summary: "Register a new user account" })
+  @ApiResponse({ status: 201, description: "Registration successful" })
+  @ApiResponse({ status: 409, description: "Email already registered" })
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
     return this.authService.register(dto, {
       ipAddress: extractClientIp(req),
@@ -49,6 +52,9 @@ export class AuthController {
 
   @Public()
   @Get("verify-email")
+  @ApiOperation({ summary: "Verify user email using token" })
+  @ApiResponse({ status: 200, description: "Email verified" })
+  @ApiResponse({ status: 400, description: "Invalid or expired verification token" })
   async verifyEmail(@Query() query: VerifyEmailQueryDto) {
     return this.authService.verifyEmail(query);
   }
@@ -60,6 +66,8 @@ export class AuthController {
     AUTH_RATE_LIMITS.resendVerification.limit,
     AUTH_RATE_LIMITS.resendVerification.ttlMs,
   )
+  @ApiOperation({ summary: "Resend verification email" })
+  @ApiResponse({ status: 200, description: "Verification email resend processed" })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
   }
@@ -68,6 +76,9 @@ export class AuthController {
   @Post("login")
   @HttpCode(200)
   @ThrottlePolicy(AUTH_RATE_LIMITS.loginByIp.limit, AUTH_RATE_LIMITS.loginByIp.ttlMs)
+  @ApiOperation({ summary: "Login with email and password" })
+  @ApiResponse({ status: 200, description: "Login successful" })
+  @ApiResponse({ status: 401, description: "Invalid credentials or email not verified" })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -98,6 +109,8 @@ export class AuthController {
     AUTH_RATE_LIMITS.forgotPassword.limit,
     AUTH_RATE_LIMITS.forgotPassword.ttlMs,
   )
+  @ApiOperation({ summary: "Request password reset email" })
+  @ApiResponse({ status: 200, description: "Password reset request processed" })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
@@ -105,6 +118,9 @@ export class AuthController {
   @Public()
   @Post("reset-password")
   @HttpCode(200)
+  @ApiOperation({ summary: "Reset password with token" })
+  @ApiResponse({ status: 200, description: "Password reset successful" })
+  @ApiResponse({ status: 400, description: "Invalid or expired reset token" })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }

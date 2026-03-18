@@ -15,6 +15,7 @@ import {
   ValidationArguments,
   IsDateString,
 } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
@@ -61,10 +62,12 @@ class MatchesFieldConstraint implements ValidatorConstraintInterface {
 }
 
 export class RegisterDto {
+  @ApiProperty({ example: "user@example.com" })
   @IsEmail()
   @Length(1, 255)
   email!: string;
 
+  @ApiProperty({ example: "StrongP@ssw0rd!" })
   @IsString()
   @Matches(PASSWORD_REGEX, {
     message:
@@ -72,17 +75,21 @@ export class RegisterDto {
   })
   password!: string;
 
+  @ApiProperty({ example: "StrongP@ssw0rd!" })
   @Validate(MatchesFieldConstraint, ["password"])
   password_confirm!: string;
 
+  @ApiProperty({ example: "John Doe" })
   @IsString()
   @Length(2, 50)
   display_name!: string;
 
+  @ApiProperty({ example: "2000-01-01" })
   @IsDateString()
   @Validate(IsAdult13Constraint)
   date_of_birth!: string;
 
+  @ApiProperty({ enum: Gender, example: Gender.MALE })
   @IsEnum(Gender)
   gender!: Gender;
 
@@ -92,6 +99,10 @@ export class RegisterDto {
    * Optional in development — if RECAPTCHA_SECRET is not configured,
    * the RecaptchaService will skip verification gracefully.
    */
+  @ApiPropertyOptional({
+    example: "03AFcWeA6y4...",
+    description: "Google reCAPTCHA token.",
+  })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
@@ -99,39 +110,47 @@ export class RegisterDto {
 }
 
 export class LoginDto {
+  @ApiProperty({ example: "user@example.com" })
   @IsEmail()
   email!: string;
 
+  @ApiProperty({ example: "StrongP@ssw0rd!" })
   @IsString()
   @MinLength(1)
   password!: string;
 
+  @ApiPropertyOptional({ example: true, default: false })
   @IsOptional()
   @IsBoolean()
   remember_me?: boolean;
 }
 
 export class VerifyEmailQueryDto {
+  @ApiProperty({ example: "verification-token-from-email" })
   @IsString()
   @IsNotEmpty()
   token!: string;
 }
 
 export class ResendVerificationDto {
+  @ApiProperty({ example: "user@example.com" })
   @IsEmail()
   email!: string;
 }
 
 export class ForgotPasswordDto {
+  @ApiProperty({ example: "user@example.com" })
   @IsEmail()
   email!: string;
 }
 
 export class ResetPasswordDto {
+  @ApiProperty({ example: "password-reset-token-from-email" })
   @IsString()
   @IsNotEmpty()
   token!: string;
 
+  @ApiProperty({ example: "NewStrongP@ssw0rd!" })
   @IsString()
   @Matches(PASSWORD_REGEX, {
     message:
@@ -139,6 +158,7 @@ export class ResetPasswordDto {
   })
   new_password!: string;
 
+  @ApiProperty({ example: "NewStrongP@ssw0rd!" })
   @Validate(MatchesFieldConstraint, ["new_password"])
   new_password_confirm!: string;
 }
