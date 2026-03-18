@@ -53,7 +53,7 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.1",
-    "rxjs": "^7.8.1",
+    "rxjs": "^7.8.2",
     "socket.io": "^4.7.4",
     "stripe": "^14.15.0"
   },
@@ -65,10 +65,11 @@
     "@types/express": "^4.17.25",
     "@types/helmet": "^0.0.48",
     "@types/jest": "^29.5.11",
-    "@types/multer": "^1.4.11",
+    "@types/multer": "^1.4.13",
     "@types/node": "^20.11.5",
     "@types/passport-google-oauth20": "^2.0.14",
     "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "eslint": "^8.56.0",
@@ -94,7 +95,10 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": ["ts-jest", { "diagnostics": false }]
+    },
+    "moduleNameMapper": {
+      "^rxjs/operators$": "<rootDir>/../node_modules/rxjs/dist/cjs/operators/index.js"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s",
@@ -111,6 +115,9 @@
       "lcov",
       "html"
     ]
+  },
+  "prisma": {
+    "seed": "node node_modules/ts-node/dist/bin.js prisma/seed.ts"
   },
   "engines": {
     "node": ">=18.0.0"
