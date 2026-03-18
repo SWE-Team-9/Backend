@@ -72,6 +72,16 @@ enum SocialPlatform {
   YOUTUBE
   WEBSITE
   FACEBOOK
+  TWITTER
+  SPOTIFY
+  APPLE_MUSIC
+  BANDCAMP
+  SOUNDCLOUD
+  PATREON
+  TWITCH
+  DISCORD
+  LINKEDIN
+  GITHUB
   OTHER
 }
 
@@ -490,6 +500,7 @@ model UserSocialLink {
   userId    String         @map("user_id") @db.Uuid
   platform  SocialPlatform
   url       String
+  sortOrder Int            @default(0) @map("sort_order")
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
