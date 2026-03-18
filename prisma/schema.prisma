@@ -284,7 +284,7 @@ model User {
   accountStatus  AccountStatus @default(ACTIVE) @map("account_status")
   suspendedUntil DateTime?     @map("suspended_until") @db.Timestamptz
   isVerified     Boolean       @default(false) @map("is_verified")
-  dateOfBirth    DateTime      @db.Date @map("date_of_birth")
+  dateOfBirth    DateTime      @map("date_of_birth") @db.Date
   gender         Gender
   lastLoginAt    DateTime?     @map("last_login_at") @db.Timestamptz
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
@@ -292,10 +292,10 @@ model User {
   deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz
 
   // Relations
-  profile                  UserProfile?
-  authIdentities           AuthIdentity[]
-  devices                  UserDevice[]
-  sessions                 UserSession[]
+  profile        UserProfile?
+  authIdentities AuthIdentity[]
+  devices        UserDevice[]
+
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
   emailChangeRequests      EmailChangeRequest[]
@@ -326,6 +326,8 @@ model User {
   receivedActions          ModerationAction[]        @relation("TargetUserAction")
   subscriptions            UserSubscription[]
   offlineDownloads         OfflineDownload[]
+  authSessions             Session[]                 @relation("authSessions")
+  UserSession              UserSession[]
 
   @@index([email])
   @@index([accountStatus])
@@ -403,8 +405,8 @@ model UserSession {
   revokedAt        DateTime? @map("revoked_at") @db.Timestamptz
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device     UserDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device     UserDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   playEvents PlayEvent[]
 
   @@index([userId])
@@ -881,16 +883,16 @@ model Conversation {
 }
 
 model ConversationParticipant {
-  conversationId      String    @map("conversation_id") @db.Uuid
-  userId              String    @map("user_id") @db.Uuid
-  lastReadMessageId   String?   @map("last_read_message_id") @db.Uuid
-  lastReadAt          DateTime? @map("last_read_at") @db.Timestamptz
-  isArchived          Boolean   @default(false) @map("is_archived")
-  joinedAt            DateTime  @default(now()) @map("joined_at") @db.Timestamptz
+  conversationId    String    @map("conversation_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  lastReadMessageId String?   @map("last_read_message_id") @db.Uuid
+  lastReadAt        DateTime? @map("last_read_at") @db.Timestamptz
+  isArchived        Boolean   @default(false) @map("is_archived")
+  joinedAt          DateTime  @default(now()) @map("joined_at") @db.Timestamptz
 
-  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lastReadMessage  Message?     @relation("LastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadMessage Message?     @relation("LastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
 
   @@id([conversationId, userId])
   @@index([userId])
@@ -907,12 +909,12 @@ model Message {
   editedAt       DateTime?   @map("edited_at") @db.Timestamptz
   deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz
 
-  conversation             Conversation              @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender                   User                      @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  share                    MessageShare?
-  playEvents               PlayEvent[]
-  notifications            Notification[]
-  lastReadByParticipants   ConversationParticipant[] @relation("LastReadMessage")
+  conversation           Conversation              @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender                 User                      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  share                  MessageShare?
+  playEvents             PlayEvent[]
+  notifications          Notification[]
+  lastReadByParticipants ConversationParticipant[] @relation("LastReadMessage")
 
   @@index([conversationId])
   @@index([senderId])
@@ -936,25 +938,25 @@ model MessageShare {
 // =============================================================================
 
 model Notification {
-  id          String                  @id @default(uuid()) @db.Uuid
-  recipientId String                  @map("recipient_id") @db.Uuid
-  actorId     String?                 @map("actor_id") @db.Uuid
-  entityType  NotificationEntityType  @map("entity_type")
-  trackId     String?                 @map("track_id") @db.Uuid
-  playlistId  String?                 @map("playlist_id") @db.Uuid
-  commentId   String?                 @map("comment_id") @db.Uuid
-  messageId   String?                 @map("message_id") @db.Uuid
-  eventType   NotificationEventType   @map("event_type")
-  metadata    Json?                   @db.JsonB
-  readAt      DateTime?               @map("read_at") @db.Timestamptz
-  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  id          String                 @id @default(uuid()) @db.Uuid
+  recipientId String                 @map("recipient_id") @db.Uuid
+  actorId     String?                @map("actor_id") @db.Uuid
+  entityType  NotificationEntityType @map("entity_type")
+  trackId     String?                @map("track_id") @db.Uuid
+  playlistId  String?                @map("playlist_id") @db.Uuid
+  commentId   String?                @map("comment_id") @db.Uuid
+  messageId   String?                @map("message_id") @db.Uuid
+  eventType   NotificationEventType  @map("event_type")
+  metadata    Json?                  @db.JsonB
+  readAt      DateTime?              @map("read_at") @db.Timestamptz
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz
 
-  recipient User          @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  actor     User?         @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
-  track     Track?        @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  playlist  Playlist?     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
-  comment   TrackComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  message   Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  recipient  User                   @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor      User?                  @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  track      Track?                 @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  playlist   Playlist?              @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  comment    TrackComment?          @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  message    Message?               @relation(fields: [messageId], references: [id], onDelete: Cascade)
   deliveries NotificationDelivery[]
 
   @@index([recipientId])
@@ -998,11 +1000,11 @@ model ModerationReport {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
   resolvedAt     DateTime?      @map("resolved_at") @db.Timestamptz
 
-  reporter     User          @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
-  reportedUser User?         @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
-  track        Track?        @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  playlist     Playlist?     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
-  comment      TrackComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter     User               @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser User?              @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  track        Track?             @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  playlist     Playlist?          @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  comment      TrackComment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
   actions      ModerationAction[]
 
   @@index([reporterId])
@@ -1039,16 +1041,16 @@ model ModerationAction {
 // =============================================================================
 
 model SubscriptionPlan {
-  id              String            @id @default(uuid()) @db.Uuid
-  code            String            @unique
+  id              String           @id @default(uuid()) @db.Uuid
+  code            String           @unique
   name            String
   tier            SubscriptionTier
-  priceCents      Int               @map("price_cents")
-  billingInterval BillingInterval   @map("billing_interval")
-  uploadLimit     Int               @default(-1) @map("upload_limit")
-  features        Json              @default("{}") @db.JsonB
-  isActive        Boolean           @default(true) @map("is_active")
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  priceCents      Int              @map("price_cents")
+  billingInterval BillingInterval  @map("billing_interval")
+  uploadLimit     Int              @default(-1) @map("upload_limit")
+  features        Json             @default("{}") @db.JsonB
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
 
   subscriptions     UserSubscription[]
   availabilityRules TrackAvailabilityRule[]
@@ -1082,16 +1084,16 @@ model UserSubscription {
 }
 
 model BillingInvoice {
-  id                 String        @id @default(uuid()) @db.Uuid
-  subscriptionId     String        @map("subscription_id") @db.Uuid
-  stripeInvoiceId    String        @unique @map("stripe_invoice_id")
-  amountDueCents     Int           @map("amount_due_cents")
-  amountPaidCents    Int           @default(0) @map("amount_paid_cents")
-  currency           String        @db.Char(3)
-  status             InvoiceStatus @default(OPEN)
-  dueAt              DateTime?     @map("due_at") @db.Timestamptz
-  paidAt             DateTime?     @map("paid_at") @db.Timestamptz
-  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  id              String        @id @default(uuid()) @db.Uuid
+  subscriptionId  String        @map("subscription_id") @db.Uuid
+  stripeInvoiceId String        @unique @map("stripe_invoice_id")
+  amountDueCents  Int           @map("amount_due_cents")
+  amountPaidCents Int           @default(0) @map("amount_paid_cents")
+  currency        String        @db.Char(3)
+  status          InvoiceStatus @default(OPEN)
+  dueAt           DateTime?     @map("due_at") @db.Timestamptz
+  paidAt          DateTime?     @map("paid_at") @db.Timestamptz
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   subscription UserSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   payments     PaymentEvent[]
@@ -1160,7 +1162,7 @@ model TrackDailyStat {
 }
 
 model DailyPlatformMetric {
-  metricDate        DateTime @id @db.Date @map("metric_date")
+  metricDate        DateTime @id @map("metric_date") @db.Date
   activeUsers       Int      @default(0) @map("active_users")
   newUsers          Int      @default(0) @map("new_users")
   tracksUploaded    Int      @default(0) @map("tracks_uploaded")
@@ -1169,4 +1171,19 @@ model DailyPlatformMetric {
   activeSubscribers Int      @default(0) @map("active_subscribers")
 
   @@map("daily_platform_metrics")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  refreshToken String   @unique
+  deviceInfo   String   @map("device_info")
+  ipAddress    String   @map("ip_address")
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation("authSessions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }
