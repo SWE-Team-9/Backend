@@ -1,9 +1,6 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-<<<<<<< HEAD
-=======
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
->>>>>>> 53a71a2 (add swagger, fix csp, fix prisma volume)
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
