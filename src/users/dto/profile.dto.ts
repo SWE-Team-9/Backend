@@ -1,7 +1,8 @@
-import {
+﻿import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -15,16 +16,14 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { AccountType } from '@prisma/client';
 
 // =============================================================================
-// Profile DTOs — Member 4 (Profile & Identity Engineer)
+// Profile DTOs
 // =============================================================================
 
-// ─── Handle validation regex ──────────────────────────────────────────────────
-// Handles must be 3–30 lowercase alphanumeric characters or underscores.
 const HANDLE_REGEX = /^[a-z0-9_]{3,30}$/;
 
-// ─── Allowed genre slugs ──────────────────────────────────────────────────────
 export const ALLOWED_GENRES = [
   'electronic',
   'hip-hop',
@@ -60,7 +59,6 @@ export const ALLOWED_GENRES = [
 
 export type GenreSlug = (typeof ALLOWED_GENRES)[number];
 
-// ─── Allowed external link platforms ─────────────────────────────────────────
 export const ALLOWED_PLATFORMS = [
   'website',
   'twitter',
@@ -85,6 +83,7 @@ export type PlatformSlug = (typeof ALLOWED_PLATFORMS)[number];
 // UpdateProfileDto
 // =============================================================================
 
+// Partial update - fields absent from the body are left unchanged.
 export class UpdateProfileDto {
   /**
    * New display name (shown throughout the UI).
@@ -95,26 +94,18 @@ export class UpdateProfileDto {
   @Length(2, 50)
   display_name?: string;
 
-  /**
-   * Short bio / artist description.
-   */
   @IsOptional()
   @IsString()
   @MaxLength(500)
   bio?: string;
 
-  /**
-   * City, country, or region the user wants to show publicly.
-   */
   @IsOptional()
   @IsString()
   @MaxLength(100)
   location?: string;
 
-  /**
-   * Personal or artist website URL.
-   * Must be a valid https URL (SSRF-safe validation done in the service).
-   */
+  // SSRF validation is deferred to the service; IsUrl alone is not SSRF-safe.
+  // Send '' (empty string) to clear a previously set URL.
   @IsOptional()
   @IsUrl({ protocols: ['https'], require_tld: true, require_protocol: true })
   @MaxLength(255)
@@ -127,15 +118,23 @@ export class UpdateProfileDto {
   @IsBoolean()
   is_private?: boolean;
 
-  /**
-   * List of genre slugs the user wants to associate with their profile.
-   * Maximum 5 genres.
-   */
+  // Replaces the full set atomically - send [] to clear all genres.
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
   @IsString({ each: true })
+  @IsIn(ALLOWED_GENRES as unknown as string[], { each: true })
   favorite_genres?: string[];
+
+  /**
+   * Switch between LISTENER and ARTIST profile types.
+   * Artists get additional public fields (e.g. track count).
+   */
+  @IsOptional()
+  @IsEnum(AccountType, {
+    message: 'account_type must be either LISTENER or ARTIST.',
+  })
+  account_type?: AccountType;
 }
 
 // =============================================================================
@@ -157,25 +156,17 @@ export class CheckHandleQueryDto {
 // =============================================================================
 
 export class ExternalLinkItemDto {
-  /**
-   * Platform slug identifying the social network or service.
-   */
   @IsString()
   @IsEnum(ALLOWED_PLATFORMS, {
     message: `platform must be one of: ${ALLOWED_PLATFORMS.join(', ')}`,
   })
   platform!: PlatformSlug;
 
-  /**
-   * Full HTTPS URL for the link.
-   */
   @IsUrl({ protocols: ['https'], require_tld: true, require_protocol: true })
   @MaxLength(2048)
   url!: string;
 
-  /**
-   * 0-based sort position for rendering the links list.
-   */
+  // Defaults to insertion order if omitted.
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -186,11 +177,7 @@ export class ExternalLinkItemDto {
 // UpdateExternalLinksDto
 // =============================================================================
 
-/**
- * Full-replace semantics — the client sends the complete desired list of links.
- * The service deletes all existing links and inserts the new set.
- * Maximum 10 links per user.
- */
+// Full-replace - client sends the complete desired list; existing links are dropped.
 export class UpdateExternalLinksDto {
   @IsArray()
   @ArrayMaxSize(10)
