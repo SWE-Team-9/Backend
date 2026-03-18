@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as argon2 from "argon2";
 import { AuthService } from "./auth.service";
@@ -203,6 +208,32 @@ describe("AuthService", () => {
         ),
       ).rejects.toThrow(ConflictException);
     });
+
+    it("propagates CAPTCHA verification failure", async () => {
+      (recaptchaService.verifyToken as jest.Mock).mockRejectedValueOnce(
+        new UnauthorizedException({
+          code: "CAPTCHA_FAILED",
+          message: "CAPTCHA verification failed.",
+        }),
+      );
+
+      await expect(
+        service.register(
+          {
+            email: "new@user.com",
+            password: "SecureP@ss1",
+            password_confirm: "SecureP@ss1",
+            display_name: "New User",
+            date_of_birth: "2000-01-01",
+            gender: Gender.MALE,
+            captchaToken: "bad-captcha-token",
+          },
+          { ipAddress: "1.1.1.1", userAgent: "UA" },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(db.user.create).not.toHaveBeenCalled();
+    });
   });
 
   describe("verifyEmail", () => {
@@ -310,6 +341,46 @@ describe("AuthService", () => {
       expect(result.accessToken).toBe("access-token");
       expect(result.refreshToken).toBe("refresh-token");
     });
+
+    it("rejects login when email is not verified", async () => {
+      db.user.findUnique.mockResolvedValue({
+        id: "user-1",
+        email: "u@test.com",
+        passwordHash: "stored-hash",
+        isVerified: false,
+        accountStatus: "ACTIVE",
+        systemRole: "USER",
+      });
+
+      await expect(
+        service.login(
+          { email: "u@test.com", password: "CorrectP@ss1", remember_me: false },
+          { ipAddress: "2.2.2.2", userAgent: "UA" },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+    });
+
+    it("rejects login when account status is not ACTIVE", async () => {
+      db.user.findUnique.mockResolvedValue({
+        id: "user-1",
+        email: "u@test.com",
+        passwordHash: "stored-hash",
+        isVerified: true,
+        accountStatus: "SUSPENDED",
+        systemRole: "USER",
+      });
+
+      await expect(
+        service.login(
+          { email: "u@test.com", password: "CorrectP@ss1", remember_me: false },
+          { ipAddress: "2.2.2.2", userAgent: "UA" },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+    });
   });
 
   describe("forgotPassword", () => {
@@ -369,6 +440,7 @@ describe("AuthService", () => {
       );
       expect(db.passwordResetToken.update).toHaveBeenCalled();
       expect(sessionManagementService.deleteUserSessions).toHaveBeenCalledWith("user-1");
+      expect(sessionManagementService.deleteUserSessions).toHaveBeenCalledTimes(1);
       expect(result.message).toContain("Password has been reset");
     });
   });

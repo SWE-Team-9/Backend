@@ -12,11 +12,14 @@ import {
 import { AuthGuard } from "@nestjs/passport";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
-import { Public } from "../common/decorators/public.decorator";
-import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
-import { extractClientIp, normalizeUserAgent } from "../common/utils/security.utils";
-import { AuthService } from "./auth.service";
-import { AUTH_RATE_LIMITS } from "./constants/auth.constants";
+import { Public } from "../../common/decorators/public.decorator";
+import { ThrottlePolicy } from "../../common/decorators/throttle-policy.decorator";
+import {
+  extractClientIp,
+  normalizeUserAgent,
+} from "../../common/utils/security.utils";
+import { AuthService } from "../auth.service";
+import { AUTH_RATE_LIMITS } from "../constants/auth.constants";
 import {
   ForgotPasswordDto,
   LoginDto,
@@ -24,9 +27,9 @@ import {
   ResendVerificationDto,
   ResetPasswordDto,
   VerifyEmailQueryDto,
-} from "./dto/auth.dto";
-import { SessionManagementService } from "./services/session-management.service";
-import { TokenService } from "./services/token.service";
+} from "../dto/auth.dto";
+import { SessionManagementService } from "../services/session-management.service";
+import { TokenService } from "../services/token.service";
 
 @ApiTags("Auth")
 @Controller("auth")
