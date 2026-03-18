@@ -6,6 +6,10 @@ import { createHash, randomBytes } from 'crypto';
 export class SessionManagementService {
   constructor(private prisma: PrismaService) {}
 
+  private get db(): any {
+    return this.prisma as any;
+  }
+
   /**
    * Create a new session for a user
    * @param userId - The user ID
@@ -23,7 +27,7 @@ export class SessionManagementService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
 
-    return this.prisma.session.create({
+    return this.db.session.create({
       data: {
         userId,
         deviceInfo,
@@ -39,7 +43,7 @@ export class SessionManagementService {
    * @param refreshToken - The refresh token to identify the session
    */
   async deleteSessionByToken(refreshToken: string) {
-    return this.prisma.session.deleteMany({
+    return this.db.session.deleteMany({
       where: {
         refreshToken,
       },
@@ -51,7 +55,7 @@ export class SessionManagementService {
    * @param userId - The user ID
    */
   async deleteUserSessions(userId: string) {
-    return this.prisma.session.deleteMany({
+    return this.db.session.deleteMany({
       where: {
         userId,
       },
@@ -63,7 +67,7 @@ export class SessionManagementService {
    * @param refreshToken - The refresh token
    */
   async getSessionByToken(refreshToken: string) {
-    return this.prisma.session.findFirst({
+    return this.db.session.findFirst({
       where: {
         refreshToken,
       },
@@ -75,7 +79,7 @@ export class SessionManagementService {
    * @param userId - The user ID
    */
   async getActiveSessionsByUserId(userId: string) {
-    return this.prisma.session.findMany({
+    return this.db.session.findMany({
       where: {
         userId,
         expiresAt: {
@@ -101,7 +105,7 @@ export class SessionManagementService {
    * @param userId - The user ID (for authorization check)
    */
   async deleteSessionById(sessionId: string, userId: string) {
-    const session = await this.prisma.session.findUnique({
+    const session = await this.db.session.findUnique({
       where: { id: sessionId },
     });
 
@@ -109,7 +113,7 @@ export class SessionManagementService {
       throw new BadRequestException('Session not found or unauthorized');
     }
 
-    return this.prisma.session.delete({
+    return this.db.session.delete({
       where: { id: sessionId },
     });
   }
@@ -122,7 +126,7 @@ export class SessionManagementService {
    */
   async requestEmailChange(userId: string, newEmail: string) {
     // Check if new email is already in use
-    const existingUser = await this.prisma.user.findUnique({
+    const existingUser = await this.db.user.findUnique({
       where: { email: newEmail },
     });
 
@@ -139,7 +143,7 @@ export class SessionManagementService {
     expiresAt.setHours(expiresAt.getHours() + 24);
 
     // Create email change request
-    await this.prisma.emailChangeRequest.create({
+    await this.db.emailChangeRequest.create({
       data: {
         userId,
         newEmail,
@@ -160,7 +164,7 @@ export class SessionManagementService {
     const tokenHash = this.hashToken(token);
 
     // Find email change request
-    const emailChangeRequest = await this.prisma.emailChangeRequest.findFirst({
+    const emailChangeRequest = await this.db.emailChangeRequest.findFirst({
       where: {
         userId,
         tokenHash,
@@ -180,13 +184,13 @@ export class SessionManagementService {
     }
 
     // Update user email and mark request as consumed
-    const user = await this.prisma.user.update({
+    const user = await this.db.user.update({
       where: { id: userId },
       data: { email: emailChangeRequest.newEmail },
     });
 
     // Mark request as consumed
-    await this.prisma.emailChangeRequest.update({
+    await this.db.emailChangeRequest.update({
       where: { id: emailChangeRequest.id },
       data: { consumedAt: new Date() },
     });
