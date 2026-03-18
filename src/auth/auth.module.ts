@@ -3,13 +3,13 @@ import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 
-import { AuthController } from "./auth.controller";
+import { AuthController, AuthSessionController } from "./controllers";
 import { AuthService } from "./auth.service";
 
 import { TokenService } from "./services/token.service";
 import { CookieService } from "./services/cookie.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionService } from "./services/session.service";
+import { SessionManagementService } from "./services/session-management.service";
 
 import { JwtCookieStrategy } from "./strategies/jwt-cookie.strategy";
 import { GoogleStrategy } from "./strategies/google.strategy";
@@ -37,7 +37,7 @@ import { MailModule } from "../mail/mail.module";
     }),
     MailModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AuthSessionController],
   providers: [
     // ── Member 1 — Backend Lead + Security Owner ──────────────────────────
     TokenService,
@@ -49,14 +49,14 @@ import { MailModule } from "../mail/mail.module";
     AuthService,
 
     // ── Member 3 — OAuth + Sessions Engineer ─────────────────────────────
-    SessionService,
+    SessionManagementService,
     GoogleStrategy,
   ],
   exports: [
     TokenService,
     CookieService,
     RecaptchaService,
-    SessionService,
+    SessionManagementService,
     PassportModule,
     JwtModule,
   ],

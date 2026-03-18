@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -10,7 +11,7 @@ import { Gender } from "./dto/auth.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { TokenService } from "./services/token.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionService } from "./services/session.service";
+import { SessionManagementService } from "./services/session-management.service";
 import { MailService } from "../mail/mail.service";
 import { CookieService } from "./services/cookie.service";
 
@@ -82,7 +83,7 @@ describe("AuthService", () => {
   let db: MockDb;
   let recaptchaService: jest.Mocked<RecaptchaService>;
   let tokenService: jest.Mocked<TokenService>;
-  let sessionService: jest.Mocked<SessionService>;
+  let sessionManagementService: jest.Mocked<SessionManagementService>;
   let mailService: jest.Mocked<MailService>;
 
   beforeEach(async () => {
@@ -114,12 +115,10 @@ describe("AuthService", () => {
           },
         },
         {
-          provide: SessionService,
+          provide: SessionManagementService,
           useValue: {
-            createSession: jest
-              .fn()
-              .mockResolvedValue({ sessionId: "session-1" }),
-            revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+            createSession: jest.fn().mockResolvedValue({ sessionId: "session-1" }),
+            deleteUserSessions: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -141,7 +140,7 @@ describe("AuthService", () => {
     service = module.get(AuthService);
     recaptchaService = module.get(RecaptchaService);
     tokenService = module.get(TokenService);
-    sessionService = module.get(SessionService);
+    sessionManagementService = module.get(SessionManagementService);
     mailService = module.get(MailService);
 
     db.$transaction.mockImplementation(
@@ -208,6 +207,32 @@ describe("AuthService", () => {
           { ipAddress: "1.1.1.1", userAgent: "UA" },
         ),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it("propagates CAPTCHA verification failure", async () => {
+      (recaptchaService.verifyToken as jest.Mock).mockRejectedValueOnce(
+        new UnauthorizedException({
+          code: "CAPTCHA_FAILED",
+          message: "CAPTCHA verification failed.",
+        }),
+      );
+
+      await expect(
+        service.register(
+          {
+            email: "new@user.com",
+            password: "SecureP@ss1",
+            password_confirm: "SecureP@ss1",
+            display_name: "New User",
+            date_of_birth: "2000-01-01",
+            gender: Gender.MALE,
+            captchaToken: "bad-captcha-token",
+          },
+          { ipAddress: "1.1.1.1", userAgent: "UA" },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(db.user.create).not.toHaveBeenCalled();
     });
   });
 
@@ -309,12 +334,52 @@ describe("AuthService", () => {
         role: "USER",
       });
       expect(tokenService.createRefreshToken).toHaveBeenCalledWith(true);
-      expect(sessionService.createSession).toHaveBeenCalled();
+      expect(sessionManagementService.createSession).toHaveBeenCalled();
       expect(db.user.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: "user-1" } }),
       );
       expect(result.accessToken).toBe("access-token");
       expect(result.refreshToken).toBe("refresh-token");
+    });
+
+    it("rejects login when email is not verified", async () => {
+      db.user.findUnique.mockResolvedValue({
+        id: "user-1",
+        email: "u@test.com",
+        passwordHash: "stored-hash",
+        isVerified: false,
+        accountStatus: "ACTIVE",
+        systemRole: "USER",
+      });
+
+      await expect(
+        service.login(
+          { email: "u@test.com", password: "CorrectP@ss1", remember_me: false },
+          { ipAddress: "2.2.2.2", userAgent: "UA" },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+    });
+
+    it("rejects login when account status is not ACTIVE", async () => {
+      db.user.findUnique.mockResolvedValue({
+        id: "user-1",
+        email: "u@test.com",
+        passwordHash: "stored-hash",
+        isVerified: true,
+        accountStatus: "SUSPENDED",
+        systemRole: "USER",
+      });
+
+      await expect(
+        service.login(
+          { email: "u@test.com", password: "CorrectP@ss1", remember_me: false },
+          { ipAddress: "2.2.2.2", userAgent: "UA" },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(tokenService.signAccessToken).not.toHaveBeenCalled();
     });
   });
 
@@ -376,9 +441,8 @@ describe("AuthService", () => {
         expect.objectContaining({ where: { id: "user-1" } }),
       );
       expect(db.passwordResetToken.update).toHaveBeenCalled();
-      expect(sessionService.revokeAllUserSessions).toHaveBeenCalledWith(
-        "user-1",
-      );
+      expect(sessionManagementService.deleteUserSessions).toHaveBeenCalledWith("user-1");
+      expect(sessionManagementService.deleteUserSessions).toHaveBeenCalledTimes(1);
       expect(result.message).toContain("Password has been reset");
     });
   });

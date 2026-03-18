@@ -21,6 +21,10 @@ export class OAuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  private get db(): any {
+    return this.prisma as any;
+  }
+
   // ---------------------------------------------------------------------------
   // Utility: Hash tokens for secure storage
   // ---------------------------------------------------------------------------
@@ -65,7 +69,7 @@ export class OAuthService {
     clientId: string,
     clientSecret: string,
   ): Promise<any> {
-    const client = await this.prisma.apiClient.findUnique({
+    const client = await this.db.apiClient.findUnique({
       where: { clientId },
     });
 
@@ -108,7 +112,7 @@ export class OAuthService {
     codeChallengeOpt?: { challenge: string; method: string },
   ): Promise<{ code: string; state: string }> {
     // Validate client and redirect URI
-    const client = await this.prisma.apiClient.findUnique({
+    const client = await this.db.apiClient.findUnique({
       where: { clientId },
     });
 
@@ -138,7 +142,7 @@ export class OAuthService {
 
     // Store in database
     try {
-      await this.prisma.apiAuthCode.create({
+      await this.db.apiAuthCode.create({
         data: {
           clientId: client.id,
           userId,
@@ -187,7 +191,7 @@ export class OAuthService {
 
     // 2. Find authorization code
     const codeHash = this.hashToken(code);
-    const authCode = await this.prisma.apiAuthCode.findUnique({
+    const authCode = await this.db.apiAuthCode.findUnique({
       where: { codeHash },
       include: { user: true },
     });
@@ -225,7 +229,7 @@ export class OAuthService {
     }
 
     // 4. Mark code as consumed
-    await this.prisma.apiAuthCode.update({
+    await this.db.apiAuthCode.update({
       where: { id: authCode.id },
       data: { consumedAt: new Date() },
     });
@@ -240,7 +244,7 @@ export class OAuthService {
     const refreshTokenExpiresAt = new Date(Date.now() + this.REFRESH_TOKEN_TTL_SECONDS * 1000);
 
     try {
-      await this.prisma.apiAccessToken.create({
+      await this.db.apiAccessToken.create({
         data: {
           clientId: client.id,
           userId: authCode.userId,
@@ -293,7 +297,7 @@ export class OAuthService {
 
     // 2. Find refresh token and validate it
     const refreshTokenHash = this.hashToken(refreshToken);
-    const tokenRecord = await this.prisma.apiAccessToken.findUnique({
+    const tokenRecord = await this.db.apiAccessToken.findUnique({
       where: { refreshTokenHash },
       include: { user: true },
     });
@@ -311,7 +315,7 @@ export class OAuthService {
     }
 
     // 3. Revoke the old token pair
-    await this.prisma.apiAccessToken.update({
+    await this.db.apiAccessToken.update({
       where: { id: tokenRecord.id },
       data: { revokedAt: new Date() },
     });
@@ -326,7 +330,7 @@ export class OAuthService {
     const refreshTokenExpiresAt = new Date(Date.now() + this.REFRESH_TOKEN_TTL_SECONDS * 1000);
 
     try {
-      await this.prisma.apiAccessToken.create({
+      await this.db.apiAccessToken.create({
         data: {
           clientId: client.id,
           userId: tokenRecord.userId,
@@ -384,7 +388,7 @@ export class OAuthService {
     const tokenHash = this.hashToken(token);
 
     // 3. Search for token and revoke if found
-    const tokenRecord = await this.prisma.apiAccessToken.findFirst({
+    const tokenRecord = await this.db.apiAccessToken.findFirst({
       where: {
         clientId: client.id,
         OR: [
@@ -395,7 +399,7 @@ export class OAuthService {
     });
 
     if (tokenRecord && !tokenRecord.revokedAt) {
-      await this.prisma.apiAccessToken.update({
+      await this.db.apiAccessToken.update({
         where: { id: tokenRecord.id },
         data: { revokedAt: new Date() },
       });

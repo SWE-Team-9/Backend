@@ -25,7 +25,7 @@ import {
 } from "./dto/auth.dto";
 import { CookieService } from "./services/cookie.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionService } from "./services/session.service";
+import { SessionManagementService } from "./services/session-management.service";
 import { TokenService } from "./services/token.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
@@ -37,7 +37,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
     private readonly recaptchaService: RecaptchaService,
-    private readonly sessionService: SessionService,
+    private readonly sessionManagementService: SessionManagementService,
     private readonly mailService: MailService,
     private readonly cookieService: CookieService,
   ) {}
@@ -236,13 +236,12 @@ export class AuthService {
     const rememberMe = dto.remember_me ?? false;
     const refresh = this.tokenService.createRefreshToken(rememberMe);
 
-    await this.sessionService.createSession({
-      userId: user.id,
-      refreshTokenHash: refresh.tokenHash,
-      expiresAt: refresh.expiresAt,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-    });
+    await this.sessionManagementService.createSession(
+      user.id,
+      context.userAgent ?? "unknown",
+      context.ipAddress ?? "unknown",
+      refresh.tokenHash,
+    );
 
     await this.db.user.update({
       where: { id: user.id },
@@ -346,7 +345,7 @@ export class AuthService {
       });
     });
 
-    await this.sessionService.revokeAllUserSessions(resetToken.userId);
+  await this.sessionManagementService.deleteUserSessions(resetToken.userId);
 
     return { message: "Password has been reset successfully." };
   }
@@ -376,11 +375,13 @@ export class AuthService {
   }> {
     const refreshTokenHash = this.tokenService.hashToken(rawRefreshToken);
     const session =
-      await this.sessionService.getActiveSessionByRefreshHash(refreshTokenHash);
+      await this.sessionManagementService.getSessionByToken(refreshTokenHash);
 
     if (!session || session.expiresAt <= new Date()) {
       if (session) {
-        await this.sessionService.revokeSessionByRefreshHash(refreshTokenHash);
+        await this.sessionManagementService.deleteSessionByToken(
+          refreshTokenHash,
+        );
       }
       throw new UnauthorizedException({
         code: "REFRESH_TOKEN_INVALID",
@@ -400,7 +401,7 @@ export class AuthService {
     });
 
     if (!user || user.accountStatus !== "ACTIVE") {
-      await this.sessionService.revokeSessionByRefreshHash(refreshTokenHash);
+      await this.sessionManagementService.deleteSessionByToken(refreshTokenHash);
       throw new UnauthorizedException({
         code: "REFRESH_TOKEN_INVALID",
         message: "Invalid or expired refresh token.",
@@ -410,13 +411,13 @@ export class AuthService {
     const rememberMe =
       session.expiresAt.getTime() - Date.now() > 10 * 24 * 60 * 60 * 1000;
     const nextRefresh = this.tokenService.createRefreshToken(rememberMe);
-    await this.sessionService.rotateSessionRefreshToken({
-      sessionId: session.id,
-      newRefreshTokenHash: nextRefresh.tokenHash,
-      expiresAt: nextRefresh.expiresAt,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-    });
+    await this.sessionManagementService.deleteSessionByToken(refreshTokenHash);
+    await this.sessionManagementService.createSession(
+      user.id,
+      context.userAgent ?? session.deviceInfo ?? "unknown",
+      context.ipAddress ?? session.ipAddress ?? "unknown",
+      nextRefresh.tokenHash,
+    );
 
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
@@ -438,15 +439,16 @@ export class AuthService {
 
   async logoutByRefreshToken(rawRefreshToken: string): Promise<void> {
     const refreshTokenHash = this.tokenService.hashToken(rawRefreshToken);
-    await this.sessionService.revokeSessionByRefreshHash(refreshTokenHash);
+    await this.sessionManagementService.deleteSessionByToken(refreshTokenHash);
   }
 
   async logoutAllSessions(userId: string): Promise<void> {
-    await this.sessionService.revokeAllUserSessions(userId);
+    await this.sessionManagementService.deleteUserSessions(userId);
   }
 
   async listActiveSessions(userId: string) {
-    const sessions = await this.sessionService.listActiveUserSessions(userId);
+    const sessions =
+      await this.sessionManagementService.getActiveSessionsByUserId(userId);
     return {
       sessions,
       count: sessions.length,
@@ -454,11 +456,9 @@ export class AuthService {
   }
 
   async revokeSession(userId: string, sessionId: string): Promise<void> {
-    const revoked = await this.sessionService.revokeUserSessionById(
-      userId,
-      sessionId,
-    );
-    if (!revoked) {
+    try {
+      await this.sessionManagementService.deleteSessionById(sessionId, userId);
+    } catch {
       throw new BadRequestException({
         code: "SESSION_NOT_FOUND",
         message: "Session not found.",
@@ -504,7 +504,7 @@ export class AuthService {
       },
     });
 
-    await this.sessionService.revokeAllUserSessions(userId);
+    await this.sessionManagementService.deleteUserSessions(userId);
 
     return {
       message: "Password changed successfully.",
@@ -698,13 +698,12 @@ export class AuthService {
     ipAddress?: string;
     userAgent?: string;
   }): Promise<void> {
-    await this.sessionService.createSession({
-      userId: params.userId,
-      refreshTokenHash: params.refreshTokenHash,
-      expiresAt: params.expiresAt,
-      ipAddress: params.ipAddress,
-      userAgent: params.userAgent,
-    });
+    await this.sessionManagementService.createSession(
+      params.userId,
+      params.userAgent ?? "unknown",
+      params.ipAddress ?? "unknown",
+      params.refreshTokenHash,
+    );
   }
 
   private async issueEmailVerificationToken(

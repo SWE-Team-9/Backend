@@ -16,19 +16,18 @@ import {
 import { AuthGuard } from "@nestjs/passport";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
-
-import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { Public } from "../common/decorators/public.decorator";
-import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { Public } from "../../common/decorators/public.decorator";
+import { ThrottlePolicy } from "../../common/decorators/throttle-policy.decorator";
 import {
   extractClientIp,
   normalizeUserAgent,
-} from "../common/utils/security.utils";
-import { AuthService } from "./auth.service";
+} from "../../common/utils/security.utils";
+import { AuthService } from "../auth.service";
 import {
   AUTH_RATE_LIMITS,
   REFRESH_COOKIE_NAME,
-} from "./constants/auth.constants";
+} from "../constants/auth.constants";
 import {
   ChangePasswordDto,
   ConfirmEmailChangeDto,
@@ -40,10 +39,10 @@ import {
   ResendVerificationDto,
   ResetPasswordDto,
   VerifyEmailQueryDto,
-} from "./dto/auth.dto";
-import { RefreshTokenDto } from "./dto/refresh-token.dto";
-import { CookieService } from "./services/cookie.service";
-import { TokenService } from "./services/token.service";
+} from "../dto/auth.dto";
+import { RefreshTokenDto } from "../dto/refresh-token.dto";
+import { CookieService } from "../services/cookie.service";
+import { TokenService } from "../services/token.service";
 
 @ApiTags("Auth")
 @Controller("auth")
