@@ -1,12 +1,12 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { ArgumentsHost } from '@nestjs/common';
-import { GlobalHttpExceptionFilter } from './global-http-exception.filter';
+import { HttpException, HttpStatus } from "@nestjs/common";
+import { ArgumentsHost } from "@nestjs/common";
+import { GlobalHttpExceptionFilter } from "./global-http-exception.filter";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildHost(url = '/test/path'): ArgumentsHost {
+function buildHost(url = "/test/path"): ArgumentsHost {
   const mockResponse = {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
@@ -35,7 +35,7 @@ function getStatusCall(host: ArgumentsHost): number {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('GlobalHttpExceptionFilter', () => {
+describe("GlobalHttpExceptionFilter", () => {
   let filter: GlobalHttpExceptionFilter;
 
   beforeEach(() => {
@@ -46,29 +46,35 @@ describe('GlobalHttpExceptionFilter', () => {
   // Response shape
   // -------------------------------------------------------------------------
 
-  describe('response shape', () => {
-    it('should always include statusCode, error, message, timestamp, and path', () => {
-      const host = buildHost('/api/v1/auth/login');
-      filter.catch(new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED), host);
+  describe("response shape", () => {
+    it("should always include statusCode, error, message, timestamp, and path", () => {
+      const host = buildHost("/api/v1/auth/login");
+      filter.catch(
+        new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED),
+        host,
+      );
 
       const payload = getJsonPayload(host)!;
-      expect(payload).toHaveProperty('statusCode');
-      expect(payload).toHaveProperty('error');
-      expect(payload).toHaveProperty('message');
-      expect(payload).toHaveProperty('timestamp');
-      expect(payload).toHaveProperty('path');
+      expect(payload).toHaveProperty("statusCode");
+      expect(payload).toHaveProperty("error");
+      expect(payload).toHaveProperty("message");
+      expect(payload).toHaveProperty("timestamp");
+      expect(payload).toHaveProperty("path");
     });
 
-    it('should set path to the request URL', () => {
-      const host = buildHost('/api/v1/profiles/me');
-      filter.catch(new HttpException('Not Found', HttpStatus.NOT_FOUND), host);
+    it("should set path to the request URL", () => {
+      const host = buildHost("/api/v1/profiles/me");
+      filter.catch(new HttpException("Not Found", HttpStatus.NOT_FOUND), host);
 
-      expect(getJsonPayload(host)!.path).toBe('/api/v1/profiles/me');
+      expect(getJsonPayload(host)!.path).toBe("/api/v1/profiles/me");
     });
 
-    it('should set timestamp as a valid ISO-8601 date string', () => {
+    it("should set timestamp as a valid ISO-8601 date string", () => {
       const host = buildHost();
-      filter.catch(new HttpException('Bad Request', HttpStatus.BAD_REQUEST), host);
+      filter.catch(
+        new HttpException("Bad Request", HttpStatus.BAD_REQUEST),
+        host,
+      );
 
       const ts = getJsonPayload(host)!.timestamp as string;
       expect(new Date(ts).toISOString()).toBe(ts);
@@ -79,7 +85,7 @@ describe('GlobalHttpExceptionFilter', () => {
   // HTTP status codes
   // -------------------------------------------------------------------------
 
-  describe('HTTP status code passthrough', () => {
+  describe("HTTP status code passthrough", () => {
     it.each([
       [HttpStatus.BAD_REQUEST, 400],
       [HttpStatus.UNAUTHORIZED, 401],
@@ -88,30 +94,33 @@ describe('GlobalHttpExceptionFilter', () => {
       [HttpStatus.CONFLICT, 409],
       [HttpStatus.UNPROCESSABLE_ENTITY, 422],
       [HttpStatus.TOO_MANY_REQUESTS, 429],
-    ])('should respond with %i for an HttpException with status %i', (inputStatus, expectedStatus) => {
-      const host = buildHost();
-      filter.catch(new HttpException('msg', inputStatus), host);
+    ])(
+      "should respond with %i for an HttpException with status %i",
+      (inputStatus, expectedStatus) => {
+        const host = buildHost();
+        filter.catch(new HttpException("msg", inputStatus), host);
 
-      expect(getStatusCall(host)).toBe(expectedStatus);
-      expect(getJsonPayload(host)!.statusCode).toBe(expectedStatus);
-    });
+        expect(getStatusCall(host)).toBe(expectedStatus);
+        expect(getJsonPayload(host)!.statusCode).toBe(expectedStatus);
+      },
+    );
 
-    it('should respond with 500 for a plain Error (non-HTTP exception)', () => {
+    it("should respond with 500 for a plain Error (non-HTTP exception)", () => {
       const host = buildHost();
-      filter.catch(new Error('something broke'), host);
+      filter.catch(new Error("something broke"), host);
 
       expect(getStatusCall(host)).toBe(500);
       expect(getJsonPayload(host)!.statusCode).toBe(500);
     });
 
-    it('should respond with 500 for a thrown string', () => {
+    it("should respond with 500 for a thrown string", () => {
       const host = buildHost();
-      filter.catch('oops' as unknown as Error, host);
+      filter.catch("oops" as unknown as Error, host);
 
       expect(getStatusCall(host)).toBe(500);
     });
 
-    it('should respond with 500 for a thrown null', () => {
+    it("should respond with 500 for a thrown null", () => {
       const host = buildHost();
       filter.catch(null, host);
 
@@ -123,47 +132,50 @@ describe('GlobalHttpExceptionFilter', () => {
   // Default error codes per status
   // -------------------------------------------------------------------------
 
-  describe('default error code mapping', () => {
-    it('should map 400 to VALIDATION_FAILED', () => {
+  describe("default error code mapping", () => {
+    it("should map 400 to VALIDATION_FAILED", () => {
       const host = buildHost();
-      filter.catch(new HttpException('bad', HttpStatus.BAD_REQUEST), host);
-      expect(getJsonPayload(host)!.error).toBe('VALIDATION_FAILED');
+      filter.catch(new HttpException("bad", HttpStatus.BAD_REQUEST), host);
+      expect(getJsonPayload(host)!.error).toBe("VALIDATION_FAILED");
     });
 
-    it('should map 401 to NOT_AUTHENTICATED', () => {
+    it("should map 401 to NOT_AUTHENTICATED", () => {
       const host = buildHost();
-      filter.catch(new HttpException('unauth', HttpStatus.UNAUTHORIZED), host);
-      expect(getJsonPayload(host)!.error).toBe('NOT_AUTHENTICATED');
+      filter.catch(new HttpException("unauth", HttpStatus.UNAUTHORIZED), host);
+      expect(getJsonPayload(host)!.error).toBe("NOT_AUTHENTICATED");
     });
 
-    it('should map 403 to FORBIDDEN', () => {
+    it("should map 403 to FORBIDDEN", () => {
       const host = buildHost();
-      filter.catch(new HttpException('forbidden', HttpStatus.FORBIDDEN), host);
-      expect(getJsonPayload(host)!.error).toBe('FORBIDDEN');
+      filter.catch(new HttpException("forbidden", HttpStatus.FORBIDDEN), host);
+      expect(getJsonPayload(host)!.error).toBe("FORBIDDEN");
     });
 
-    it('should map 404 to NOT_FOUND', () => {
+    it("should map 404 to NOT_FOUND", () => {
       const host = buildHost();
-      filter.catch(new HttpException('not found', HttpStatus.NOT_FOUND), host);
-      expect(getJsonPayload(host)!.error).toBe('NOT_FOUND');
+      filter.catch(new HttpException("not found", HttpStatus.NOT_FOUND), host);
+      expect(getJsonPayload(host)!.error).toBe("NOT_FOUND");
     });
 
-    it('should map 409 to CONFLICT', () => {
+    it("should map 409 to CONFLICT", () => {
       const host = buildHost();
-      filter.catch(new HttpException('conflict', HttpStatus.CONFLICT), host);
-      expect(getJsonPayload(host)!.error).toBe('CONFLICT');
+      filter.catch(new HttpException("conflict", HttpStatus.CONFLICT), host);
+      expect(getJsonPayload(host)!.error).toBe("CONFLICT");
     });
 
-    it('should map 429 to RATE_LIMIT_EXCEEDED', () => {
+    it("should map 429 to RATE_LIMIT_EXCEEDED", () => {
       const host = buildHost();
-      filter.catch(new HttpException('too many', HttpStatus.TOO_MANY_REQUESTS), host);
-      expect(getJsonPayload(host)!.error).toBe('RATE_LIMIT_EXCEEDED');
+      filter.catch(
+        new HttpException("too many", HttpStatus.TOO_MANY_REQUESTS),
+        host,
+      );
+      expect(getJsonPayload(host)!.error).toBe("RATE_LIMIT_EXCEEDED");
     });
 
-    it('should map 500 (non-HTTP exception) to INTERNAL_SERVER_ERROR', () => {
+    it("should map 500 (non-HTTP exception) to INTERNAL_SERVER_ERROR", () => {
       const host = buildHost();
-      filter.catch(new Error('crash'), host);
-      expect(getJsonPayload(host)!.error).toBe('INTERNAL_SERVER_ERROR');
+      filter.catch(new Error("crash"), host);
+      expect(getJsonPayload(host)!.error).toBe("INTERNAL_SERVER_ERROR");
     });
   });
 
@@ -171,11 +183,14 @@ describe('GlobalHttpExceptionFilter', () => {
   // Message parsing — string body
   // -------------------------------------------------------------------------
 
-  describe('string exception body', () => {
-    it('should use the string directly as the message', () => {
+  describe("string exception body", () => {
+    it("should use the string directly as the message", () => {
       const host = buildHost();
-      filter.catch(new HttpException('Email already in use', HttpStatus.CONFLICT), host);
-      expect(getJsonPayload(host)!.message).toBe('Email already in use');
+      filter.catch(
+        new HttpException("Email already in use", HttpStatus.CONFLICT),
+        host,
+      );
+      expect(getJsonPayload(host)!.message).toBe("Email already in use");
     });
   });
 
@@ -183,47 +198,50 @@ describe('GlobalHttpExceptionFilter', () => {
   // Message parsing — object body with string message
   // -------------------------------------------------------------------------
 
-  describe('object exception body — single string message', () => {
-    it('should use message string from the exception response object', () => {
-      const host = buildHost();
-      filter.catch(
-        new HttpException({ message: 'Invalid credentials.' }, HttpStatus.UNAUTHORIZED),
-        host,
-      );
-      expect(getJsonPayload(host)!.message).toBe('Invalid credentials.');
-    });
-
-    it('should prefer the custom code field over the default error code', () => {
+  describe("object exception body — single string message", () => {
+    it("should use message string from the exception response object", () => {
       const host = buildHost();
       filter.catch(
         new HttpException(
-          { code: 'CAPTCHA_FAILED', message: 'CAPTCHA verification failed.' },
+          { message: "Invalid credentials." },
           HttpStatus.UNAUTHORIZED,
         ),
         host,
       );
-      expect(getJsonPayload(host)!.error).toBe('CAPTCHA_FAILED');
+      expect(getJsonPayload(host)!.message).toBe("Invalid credentials.");
     });
 
-    it('should fall back to the error field if code is absent', () => {
+    it("should prefer the custom code field over the default error code", () => {
       const host = buildHost();
       filter.catch(
         new HttpException(
-          { error: 'MY_CUSTOM_ERROR', message: 'something' },
+          { code: "CAPTCHA_FAILED", message: "CAPTCHA verification failed." },
+          HttpStatus.UNAUTHORIZED,
+        ),
+        host,
+      );
+      expect(getJsonPayload(host)!.error).toBe("CAPTCHA_FAILED");
+    });
+
+    it("should fall back to the error field if code is absent", () => {
+      const host = buildHost();
+      filter.catch(
+        new HttpException(
+          { error: "MY_CUSTOM_ERROR", message: "something" },
           HttpStatus.BAD_REQUEST,
         ),
         host,
       );
-      expect(getJsonPayload(host)!.error).toBe('MY_CUSTOM_ERROR');
+      expect(getJsonPayload(host)!.error).toBe("MY_CUSTOM_ERROR");
     });
 
-    it('should fall back to default error code when neither code nor error is set', () => {
+    it("should fall back to default error code when neither code nor error is set", () => {
       const host = buildHost();
       filter.catch(
-        new HttpException({ message: 'Oops' }, HttpStatus.NOT_FOUND),
+        new HttpException({ message: "Oops" }, HttpStatus.NOT_FOUND),
         host,
       );
-      expect(getJsonPayload(host)!.error).toBe('NOT_FOUND');
+      expect(getJsonPayload(host)!.error).toBe("NOT_FOUND");
     });
   });
 
@@ -231,34 +249,39 @@ describe('GlobalHttpExceptionFilter', () => {
   // Message parsing — array of messages (ValidationPipe output)
   // -------------------------------------------------------------------------
 
-  describe('object exception body — array of messages', () => {
-    it('should join array messages into a single comma-separated string', () => {
+  describe("object exception body — array of messages", () => {
+    it("should join array messages into a single comma-separated string", () => {
       const host = buildHost();
       filter.catch(
         new HttpException(
-          { message: ['email must be an email', 'password is too weak'], error: 'Bad Request' },
+          {
+            message: ["email must be an email", "password is too weak"],
+            error: "Bad Request",
+          },
           HttpStatus.BAD_REQUEST,
         ),
         host,
       );
       expect(getJsonPayload(host)!.message).toBe(
-        'email must be an email, password is too weak',
+        "email must be an email, password is too weak",
       );
     });
 
-    it('should handle a single-element array', () => {
+    it("should handle a single-element array", () => {
       const host = buildHost();
       filter.catch(
         new HttpException(
-          { message: ['captchaToken must be a string'] },
+          { message: ["captchaToken must be a string"] },
           HttpStatus.BAD_REQUEST,
         ),
         host,
       );
-      expect(getJsonPayload(host)!.message).toBe('captchaToken must be a string');
+      expect(getJsonPayload(host)!.message).toBe(
+        "captchaToken must be a string",
+      );
     });
 
-    it('should handle an empty array with the fallback message', () => {
+    it("should handle an empty array with the fallback message", () => {
       const host = buildHost();
       filter.catch(
         new HttpException({ message: [] }, HttpStatus.BAD_REQUEST),
@@ -266,7 +289,7 @@ describe('GlobalHttpExceptionFilter', () => {
       );
       // An empty join produces an empty string — the filter should still not crash
       const payload = getJsonPayload(host)!;
-      expect(payload).toHaveProperty('message');
+      expect(payload).toHaveProperty("message");
     });
   });
 
@@ -274,22 +297,22 @@ describe('GlobalHttpExceptionFilter', () => {
   // Non-HTTP exceptions — fallback behaviour
   // -------------------------------------------------------------------------
 
-  describe('non-HTTP exceptions', () => {
-    it('should return a safe fallback message for plain Error', () => {
+  describe("non-HTTP exceptions", () => {
+    it("should return a safe fallback message for plain Error", () => {
       const host = buildHost();
-      filter.catch(new Error('DB connection lost'), host);
+      filter.catch(new Error("DB connection lost"), host);
 
       const payload = getJsonPayload(host)!;
-      expect(payload.message).toBe('An unexpected error occurred.');
-      expect(payload.error).toBe('INTERNAL_SERVER_ERROR');
+      expect(payload.message).toBe("An unexpected error occurred.");
+      expect(payload.error).toBe("INTERNAL_SERVER_ERROR");
     });
 
-    it('should not expose the internal error message to the client', () => {
+    it("should not expose the internal error message to the client", () => {
       const host = buildHost();
-      filter.catch(new Error('secret internal detail'), host);
+      filter.catch(new Error("secret internal detail"), host);
 
       const payload = getJsonPayload(host)!;
-      expect(payload.message).not.toContain('secret internal detail');
+      expect(payload.message).not.toContain("secret internal detail");
     });
   });
 
@@ -297,12 +320,15 @@ describe('GlobalHttpExceptionFilter', () => {
   // Guard integration scenario — simulating guard-thrown exceptions
   // -------------------------------------------------------------------------
 
-  describe('guard-thrown exception scenarios', () => {
-    it('should handle JwtAuthGuard NOT_AUTHENTICATED exception', () => {
-      const host = buildHost('/api/v1/profiles/me');
+  describe("guard-thrown exception scenarios", () => {
+    it("should handle JwtAuthGuard NOT_AUTHENTICATED exception", () => {
+      const host = buildHost("/api/v1/profiles/me");
       filter.catch(
         new HttpException(
-          { code: 'NOT_AUTHENTICATED', message: 'Authentication is required to access this resource.' },
+          {
+            code: "NOT_AUTHENTICATED",
+            message: "Authentication is required to access this resource.",
+          },
           HttpStatus.UNAUTHORIZED,
         ),
         host,
@@ -310,15 +336,20 @@ describe('GlobalHttpExceptionFilter', () => {
 
       const payload = getJsonPayload(host)!;
       expect(payload.statusCode).toBe(401);
-      expect(payload.error).toBe('NOT_AUTHENTICATED');
-      expect(payload.message).toBe('Authentication is required to access this resource.');
+      expect(payload.error).toBe("NOT_AUTHENTICATED");
+      expect(payload.message).toBe(
+        "Authentication is required to access this resource.",
+      );
     });
 
-    it('should handle RolesGuard FORBIDDEN exception', () => {
-      const host = buildHost('/api/v1/admin/users');
+    it("should handle RolesGuard FORBIDDEN exception", () => {
+      const host = buildHost("/api/v1/admin/users");
       filter.catch(
         new HttpException(
-          { code: 'FORBIDDEN', message: 'You do not have permission to access this resource.' },
+          {
+            code: "FORBIDDEN",
+            message: "You do not have permission to access this resource.",
+          },
           HttpStatus.FORBIDDEN,
         ),
         host,
@@ -326,19 +357,22 @@ describe('GlobalHttpExceptionFilter', () => {
 
       const payload = getJsonPayload(host)!;
       expect(payload.statusCode).toBe(403);
-      expect(payload.error).toBe('FORBIDDEN');
+      expect(payload.error).toBe("FORBIDDEN");
     });
 
-    it('should handle ThrottlerGuard rate-limit exception', () => {
-      const host = buildHost('/api/v1/auth/login');
+    it("should handle ThrottlerGuard rate-limit exception", () => {
+      const host = buildHost("/api/v1/auth/login");
       filter.catch(
-        new HttpException('ThrottlerException: Too Many Requests', HttpStatus.TOO_MANY_REQUESTS),
+        new HttpException(
+          "ThrottlerException: Too Many Requests",
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
         host,
       );
 
       const payload = getJsonPayload(host)!;
       expect(payload.statusCode).toBe(429);
-      expect(payload.error).toBe('RATE_LIMIT_EXCEEDED');
+      expect(payload.error).toBe("RATE_LIMIT_EXCEEDED");
     });
   });
 });

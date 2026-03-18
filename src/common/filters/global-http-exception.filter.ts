@@ -4,8 +4,8 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
+} from "@nestjs/common";
+import { Request, Response } from "express";
 
 type ExceptionBody = {
   statusCode?: number;
@@ -45,17 +45,17 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     exceptionResponse: string | ExceptionBody | undefined,
     status: number,
   ) {
-    if (typeof exceptionResponse === 'string') {
+    if (typeof exceptionResponse === "string") {
       return {
         error: this.defaultErrorCode(status),
         message: exceptionResponse,
       };
     }
 
-    if (exceptionResponse && typeof exceptionResponse === 'object') {
+    if (exceptionResponse && typeof exceptionResponse === "object") {
       const message = Array.isArray(exceptionResponse.message)
-        ? exceptionResponse.message.join(', ')
-        : (exceptionResponse.message ?? 'An unexpected error occurred.');
+        ? exceptionResponse.message.join(", ")
+        : (exceptionResponse.message ?? "An unexpected error occurred.");
 
       return {
         error:
@@ -68,26 +68,26 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
     return {
       error: this.defaultErrorCode(status),
-      message: 'An unexpected error occurred.',
+      message: "An unexpected error occurred.",
     };
   }
 
   private defaultErrorCode(status: number) {
     switch (status) {
       case HttpStatus.BAD_REQUEST:
-        return 'VALIDATION_FAILED';
+        return "VALIDATION_FAILED";
       case HttpStatus.UNAUTHORIZED:
-        return 'NOT_AUTHENTICATED';
+        return "NOT_AUTHENTICATED";
       case HttpStatus.FORBIDDEN:
-        return 'FORBIDDEN';
+        return "FORBIDDEN";
       case HttpStatus.NOT_FOUND:
-        return 'NOT_FOUND';
+        return "NOT_FOUND";
       case HttpStatus.CONFLICT:
-        return 'CONFLICT';
+        return "CONFLICT";
       case HttpStatus.TOO_MANY_REQUESTS:
-        return 'RATE_LIMIT_EXCEEDED';
+        return "RATE_LIMIT_EXCEEDED";
       default:
-        return 'INTERNAL_SERVER_ERROR';
+        return "INTERNAL_SERVER_ERROR";
     }
   }
 }

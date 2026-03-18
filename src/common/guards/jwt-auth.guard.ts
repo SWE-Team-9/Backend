@@ -2,13 +2,13 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { AuthGuard } from '@nestjs/passport';
-import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { AuthGuard } from "@nestjs/passport";
+import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt-cookie') {
+export class JwtAuthGuard extends AuthGuard("jwt-cookie") {
   constructor(private readonly reflector: Reflector) {
     super();
   }
@@ -33,8 +33,8 @@ export class JwtAuthGuard extends AuthGuard('jwt-cookie') {
   ): TUser {
     if (err || !user) {
       throw new UnauthorizedException({
-        code: 'NOT_AUTHENTICATED',
-        message: 'Authentication is required to access this resource.',
+        code: "NOT_AUTHENTICATED",
+        message: "Authentication is required to access this resource.",
       });
     }
     return user;

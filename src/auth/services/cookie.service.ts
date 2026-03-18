@@ -1,13 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Response } from 'express';
+import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Response } from "express";
 import {
   ACCESS_COOKIE_NAME,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_COOKIE_NAME,
   REFRESH_TOKEN_REMEMBER_ME_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
-} from '../constants/auth.constants';
+} from "../constants/auth.constants";
 
 @Injectable()
 export class CookieService {
@@ -21,50 +21,50 @@ export class CookieService {
   }) {
     const { response, accessToken, refreshToken, rememberMe = false } = params;
     const isSecureCookie = this.configService.get<boolean>(
-      'security.authCookieSecure',
+      "security.authCookieSecure",
       false,
     );
 
     response.cookie(ACCESS_COOKIE_NAME, accessToken, {
       httpOnly: true,
       secure: isSecureCookie,
-      sameSite: 'strict',
+      sameSite: "strict",
       maxAge: ACCESS_TOKEN_TTL_SECONDS * 1000,
-      path: '/',
+      path: "/",
     });
 
     response.cookie(REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
       secure: isSecureCookie,
-      sameSite: 'strict',
+      sameSite: "strict",
       maxAge:
         (rememberMe
           ? REFRESH_TOKEN_REMEMBER_ME_TTL_SECONDS
           : REFRESH_TOKEN_TTL_SECONDS) * 1000,
-      path: '/',
+      path: "/",
     });
   }
 
   clearAuthCookies(response: Response) {
     const isSecureCookie = this.configService.get<boolean>(
-      'security.authCookieSecure',
+      "security.authCookieSecure",
       false,
     );
 
-    response.cookie(ACCESS_COOKIE_NAME, '', {
+    response.cookie(ACCESS_COOKIE_NAME, "", {
       httpOnly: true,
       secure: isSecureCookie,
-      sameSite: 'strict',
+      sameSite: "strict",
       maxAge: 0,
-      path: '/',
+      path: "/",
     });
 
-    response.cookie(REFRESH_COOKIE_NAME, '', {
+    response.cookie(REFRESH_COOKIE_NAME, "", {
       httpOnly: true,
       secure: isSecureCookie,
-      sameSite: 'strict',
+      sameSite: "strict",
       maxAge: 0,
-      path: '/',
+      path: "/",
     });
   }
 }

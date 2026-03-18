@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { createHash, randomBytes } from 'crypto';
+import { Injectable, BadRequestException } from "@nestjs/common";
+import { PrismaService } from "../../prisma/prisma.service";
+import { createHash, randomBytes } from "crypto";
 
 @Injectable()
 export class SessionManagementService {
@@ -94,7 +94,7 @@ export class SessionManagementService {
         createdAt: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
   }
@@ -110,7 +110,7 @@ export class SessionManagementService {
     });
 
     if (!session || session.userId !== userId) {
-      throw new BadRequestException('Session not found or unauthorized');
+      throw new BadRequestException("Session not found or unauthorized");
     }
 
     return this.db.session.delete({
@@ -131,11 +131,11 @@ export class SessionManagementService {
     });
 
     if (existingUser) {
-      throw new BadRequestException('Email is already in use');
+      throw new BadRequestException("Email is already in use");
     }
 
     // Generate token
-    const rawToken = randomBytes(32).toString('base64url');
+    const rawToken = randomBytes(32).toString("base64url");
     const tokenHash = this.hashToken(rawToken);
 
     // Expire in 24 hours
@@ -172,15 +172,15 @@ export class SessionManagementService {
     });
 
     if (!emailChangeRequest) {
-      throw new BadRequestException('Invalid or expired token');
+      throw new BadRequestException("Invalid or expired token");
     }
 
     if (new Date() > emailChangeRequest.expiresAt) {
-      throw new BadRequestException('Token has expired');
+      throw new BadRequestException("Token has expired");
     }
 
     if (emailChangeRequest.consumedAt) {
-      throw new BadRequestException('Token has already been used');
+      throw new BadRequestException("Token has already been used");
     }
 
     // Update user email and mark request as consumed
@@ -203,6 +203,6 @@ export class SessionManagementService {
    * @param value - The value to hash
    */
   private hashToken(value: string): string {
-    return createHash('sha256').update(value).digest('hex');
+    return createHash("sha256").update(value).digest("hex");
   }
 }

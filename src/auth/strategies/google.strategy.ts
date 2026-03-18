@@ -41,7 +41,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
           gender: "PREFER_NOT_TO_SAY",
           profile: {
             create: {
-              handle: email.split("@")[0] + "_" + Math.random().toString(36).slice(2, 9),
+              handle:
+                email.split("@")[0] +
+                "_" +
+                Math.random().toString(36).slice(2, 9),
               displayName: displayName || email.split("@")[0],
             },
           },

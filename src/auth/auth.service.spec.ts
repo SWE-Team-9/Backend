@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as argon2 from "argon2";
 import { AuthService } from "./auth.service";
@@ -112,7 +116,9 @@ describe("AuthService", () => {
         {
           provide: SessionService,
           useValue: {
-            createSession: jest.fn().mockResolvedValue({ sessionId: "session-1" }),
+            createSession: jest
+              .fn()
+              .mockResolvedValue({ sessionId: "session-1" }),
             revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
           },
         },
@@ -138,8 +144,8 @@ describe("AuthService", () => {
     sessionService = module.get(SessionService);
     mailService = module.get(MailService);
 
-    db.$transaction.mockImplementation(async (cb: (tx: MockDb) => Promise<unknown>) =>
-      cb(db),
+    db.$transaction.mockImplementation(
+      async (cb: (tx: MockDb) => Promise<unknown>) => cb(db),
     );
 
     (argon2.hash as jest.Mock).mockResolvedValue("argon-hash");
@@ -316,7 +322,9 @@ describe("AuthService", () => {
     it("returns generic message even if user does not exist", async () => {
       db.user.findUnique.mockResolvedValue(null);
 
-      const result = await service.forgotPassword({ email: "missing@test.com" });
+      const result = await service.forgotPassword({
+        email: "missing@test.com",
+      });
 
       expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
       expect(result.message).toContain("If the email exists");
@@ -368,7 +376,9 @@ describe("AuthService", () => {
         expect.objectContaining({ where: { id: "user-1" } }),
       );
       expect(db.passwordResetToken.update).toHaveBeenCalled();
-      expect(sessionService.revokeAllUserSessions).toHaveBeenCalledWith("user-1");
+      expect(sessionService.revokeAllUserSessions).toHaveBeenCalledWith(
+        "user-1",
+      );
       expect(result.message).toContain("Password has been reset");
     });
   });

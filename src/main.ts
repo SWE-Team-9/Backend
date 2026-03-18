@@ -1,6 +1,6 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
@@ -33,7 +33,7 @@ async function bootstrap() {
     helmet({
       // This is a JSON API — browsers should never render its responses as HTML.
       // CSP blocks iframing and restricts what a browser does with the response.
-     contentSecurityPolicy: {
+      contentSecurityPolicy: {
         useDefaults: false,
         directives: {
           defaultSrc: ["'none'"],
@@ -176,18 +176,20 @@ async function bootstrap() {
   // ── Swagger ──────────────────────────────────────────────────────────────────
   if (!isProduction) {
     const config = new DocumentBuilder()
-      .setTitle('IQA3 API')
-      .setDescription('Social Streaming Platform backend API documentation (development only).')
-      .setVersion('1.0')
-      .addCookieAuth('access_token', {
-        type: 'apiKey',
-        in: 'cookie',
-        name: 'access_token',
+      .setTitle("IQA3 API")
+      .setDescription(
+        "Social Streaming Platform backend API documentation (development only).",
+      )
+      .setVersion("1.0")
+      .addCookieAuth("access_token", {
+        type: "apiKey",
+        in: "cookie",
+        name: "access_token",
       })
       .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup("api/docs", app, document);
   }
 
   await app.listen(port);
@@ -199,4 +201,3 @@ async function bootstrap() {
 }
 
 void bootstrap();
-

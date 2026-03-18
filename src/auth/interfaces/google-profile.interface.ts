@@ -3,7 +3,7 @@ export interface GoogleProfile {
   displayName: string;
   emails: Array<{ value: string; verified: boolean }>;
   photos: Array<{ value: string }>;
-  provider: 'google';
+  provider: "google";
   _raw: string;
   _json: {
     sub: string;

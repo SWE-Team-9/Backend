@@ -3,14 +3,18 @@
   Injectable,
   InternalServerErrorException,
   Logger,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { randomUUID } from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 
-export type UploadType = 'avatar' | 'cover';
+export type UploadType = "avatar" | "cover";
 
 export interface UploadResult {
   url: string;
@@ -24,17 +28,13 @@ interface UploadMetadata {
   originalName: string;
 }
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-]);
+const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 // Map mime type to a safe file extension - never derive from user input
 const MIME_TO_EXT: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
 };
 
 // Abstracts local-disk and S3 behind a single upload/delete interface.
@@ -42,7 +42,7 @@ const MIME_TO_EXT: Record<string, string> = {
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private readonly provider: 'local' | 's3';
+  private readonly provider: "local" | "s3";
   private readonly localUploadDir: string;
   private readonly localUploadUrl: string;
   private readonly maxAvatarBytes: number;
@@ -52,23 +52,38 @@ export class StorageService {
   private readonly cdnUrl: string;
 
   constructor(private readonly config: ConfigService) {
-    this.provider = this.config.get<'local' | 's3'>('storage.provider', 'local');
-    this.localUploadDir = this.config.get<string>('storage.localUploadDir', './uploads');
-    this.localUploadUrl = this.config.get<string>(
-      'storage.localUploadUrl',
-      'http://localhost:3000/uploads',
+    this.provider = this.config.get<"local" | "s3">(
+      "storage.provider",
+      "local",
     );
-    this.maxAvatarBytes = this.config.get<number>('storage.maxAvatarBytes', 5 * 1024 * 1024);
-    this.maxCoverBytes = this.config.get<number>('storage.maxCoverBytes', 15 * 1024 * 1024);
-    this.s3Bucket = this.config.get<string>('storage.s3Bucket', '');
-    this.cdnUrl = this.config.get<string>('storage.cdnUrl', '');
+    this.localUploadDir = this.config.get<string>(
+      "storage.localUploadDir",
+      "./uploads",
+    );
+    this.localUploadUrl = this.config.get<string>(
+      "storage.localUploadUrl",
+      "http://localhost:3000/uploads",
+    );
+    this.maxAvatarBytes = this.config.get<number>(
+      "storage.maxAvatarBytes",
+      5 * 1024 * 1024,
+    );
+    this.maxCoverBytes = this.config.get<number>(
+      "storage.maxCoverBytes",
+      15 * 1024 * 1024,
+    );
+    this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
+    this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
 
-    if (this.provider === 's3') {
+    if (this.provider === "s3") {
       this.s3Client = new S3Client({
-        region: this.config.get<string>('storage.s3Region', 'us-east-1'),
+        region: this.config.get<string>("storage.s3Region", "us-east-1"),
         credentials: {
-          accessKeyId: this.config.get<string>('storage.awsAccessKeyId', ''),
-          secretAccessKey: this.config.get<string>('storage.awsSecretAccessKey', ''),
+          accessKeyId: this.config.get<string>("storage.awsAccessKeyId", ""),
+          secretAccessKey: this.config.get<string>(
+            "storage.awsSecretAccessKey",
+            "",
+          ),
         },
       });
     } else {
@@ -85,7 +100,7 @@ export class StorageService {
     const ext = MIME_TO_EXT[metadata.mimeType];
     const key = `${metadata.type}/${randomUUID()}.${ext}`;
 
-    if (this.provider === 's3') {
+    if (this.provider === "s3") {
       return this.uploadToS3(file, key, metadata.mimeType);
     }
     return this.uploadToLocal(file, key);
@@ -96,7 +111,7 @@ export class StorageService {
     if (!key) return;
 
     try {
-      if (this.provider === 's3') {
+      if (this.provider === "s3") {
         await this.deleteFromS3(key);
       } else {
         this.deleteFromLocal(key);
@@ -108,9 +123,13 @@ export class StorageService {
     }
   }
 
-  private async uploadToS3(file: Buffer, key: string, mimeType: string): Promise<UploadResult> {
+  private async uploadToS3(
+    file: Buffer,
+    key: string,
+    mimeType: string,
+  ): Promise<UploadResult> {
     if (!this.s3Client) {
-      throw new InternalServerErrorException('S3 client not initialised.');
+      throw new InternalServerErrorException("S3 client not initialised.");
     }
 
     await this.s3Client.send(
@@ -119,7 +138,7 @@ export class StorageService {
         Key: key,
         Body: file,
         ContentType: mimeType,
-        CacheControl: 'public, max-age=31536000, immutable',
+        CacheControl: "public, max-age=31536000, immutable",
       }),
     );
 
@@ -135,12 +154,25 @@ export class StorageService {
     );
   }
 
-  private async uploadToLocal(file: Buffer, key: string): Promise<UploadResult> {
+  private async uploadToLocal(
+    file: Buffer,
+    key: string,
+  ): Promise<UploadResult> {
     const fullPath = path.join(this.localUploadDir, key);
-    const dir = path.dirname(fullPath);
+    const resolvedUploadDir = path.resolve(this.localUploadDir);
+    const resolvedFilePath = path.resolve(fullPath);
+
+    // Prevent path traversal attacks (e.g., key = "../../etc/passwd")
+    if (!resolvedFilePath.startsWith(resolvedUploadDir)) {
+      throw new BadRequestException(
+        "Invalid file path. Path traversal is not allowed.",
+      );
+    }
+
+    const dir = path.dirname(resolvedFilePath);
 
     await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(fullPath, file);
+    await fs.promises.writeFile(resolvedFilePath, file);
 
     const url = `${this.localUploadUrl}/${key}`;
     return { url, key };
@@ -148,8 +180,17 @@ export class StorageService {
 
   private deleteFromLocal(key: string): void {
     const fullPath = path.join(this.localUploadDir, key);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
+    const resolvedUploadDir = path.resolve(this.localUploadDir);
+    const resolvedFilePath = path.resolve(fullPath);
+
+    // Prevent path traversal attacks
+    if (!resolvedFilePath.startsWith(resolvedUploadDir)) {
+      this.logger.error(`Path traversal attempt detected on delete: ${key}`);
+      return;
+    }
+
+    if (fs.existsSync(resolvedFilePath)) {
+      fs.unlinkSync(resolvedFilePath);
     }
   }
 
@@ -162,7 +203,7 @@ export class StorageService {
   }
 
   private validateFileSize(bytes: number, type: UploadType): void {
-    const limit = type === 'avatar' ? this.maxAvatarBytes : this.maxCoverBytes;
+    const limit = type === "avatar" ? this.maxAvatarBytes : this.maxCoverBytes;
     if (bytes > limit) {
       const limitMb = (limit / (1024 * 1024)).toFixed(0);
       throw new BadRequestException(
