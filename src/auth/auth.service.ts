@@ -1,731 +1,872 @@
 import {
+  Injectable,
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  Injectable,
+  GoneException,
+  NotFoundException,
   UnauthorizedException,
+  Logger,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import * as argon2 from "argon2";
-import { randomBytes } from "crypto";
-import {
-  EMAIL_VERIFICATION_TTL_SECONDS,
-  PASSWORD_RESET_TTL_SECONDS,
-  TIMING_SAFE_DUMMY_HASH,
-} from "./constants/auth.constants";
-import {
-  ForgotPasswordDto,
-  LoginDto,
-  ChangePasswordDto,
-  RegisterDto,
-  ResendVerificationDto,
-  ResetPasswordDto,
-  ConfirmEmailChangeDto,
-  RequestEmailChangeDto,
-  VerifyEmailQueryDto,
-} from "./dto/auth.dto";
-import { CookieService } from "./services/cookie.service";
-import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionManagementService } from "./services/session-management.service";
-import { TokenService } from "./services/token.service";
+import * as crypto from "crypto";
+
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
-import { sanitizeHandle } from "../common/utils/security.utils";
+import { TokenService } from "./services/token.service";
+import { SessionService } from "./services/session.service";
+import { RecaptchaService } from "./services/recaptcha.service";
+
+import {
+  RegisterDto,
+  LoginDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
+  RequestEmailChangeDto,
+} from "./dto/auth.dto";
+
+// Token expiry durations
+const EMAIL_VERIFY_EXPIRY_HOURS = 24;
+const PASSWORD_RESET_EXPIRY_HOURS = 1;
+const EMAIL_CHANGE_EXPIRY_HOURS = 1;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly tokenService: TokenService,
-    private readonly recaptchaService: RecaptchaService,
-    private readonly sessionManagementService: SessionManagementService,
     private readonly mailService: MailService,
-    private readonly cookieService: CookieService,
+    private readonly tokenService: TokenService,
+    private readonly sessionService: SessionService,
+    private readonly recaptchaService: RecaptchaService,
+    private readonly configService: ConfigService,
   ) {}
 
-  private get db(): any {
-    return this.prisma as any;
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 1: Register
+  // ═══════════════════════════════════════════════════════════════════════════
+  async register(dto: RegisterDto, ip?: string) {
+    // Verify CAPTCHA
+    await this.recaptchaService.verify(dto.captcha_token, ip);
 
-  async register(
-    dto: RegisterDto,
-    context: { ipAddress?: string; userAgent?: string },
-  ): Promise<{ message: string }> {
-    await this.recaptchaService.verifyToken(
-      dto.captchaToken ?? "",
-      context.ipAddress,
-    );
-
-    const existing = await this.db.user.findUnique({
-      where: { email: dto.email },
-      select: { id: true },
+    // Check if email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
     });
-
-    if (existing) {
+    if (existingUser) {
       throw new ConflictException({
-        code: "EMAIL_ALREADY_REGISTERED",
+        statusCode: 409,
+        error: "EMAIL_ALREADY_EXISTS",
         message: "An account with this email already exists.",
       });
     }
 
+    // Hash the password
     const passwordHash = await argon2.hash(dto.password);
-    const uniqueHandle = await this.buildUniqueHandle(dto.display_name);
 
-    const { userId, displayName } = await this.db.$transaction(
-      async (tx: any) => {
-        const user = await tx.user.create({
-          data: {
-            email: dto.email,
-            passwordHash,
-            dateOfBirth: new Date(dto.date_of_birth),
-            gender: dto.gender,
-          },
-          select: { id: true },
-        });
+    // Create user, profile, and auth identity in a transaction
+    const user = await this.prisma.$transaction(async (tx: any) => {
+      // Create the user
+      const newUser = await tx.user.create({
+        data: {
+          email: dto.email.toLowerCase(),
+          passwordHash,
+          dateOfBirth: new Date(dto.date_of_birth),
+          gender: dto.gender,
+          isVerified: false,
+        },
+      });
 
-        await tx.userProfile.create({
-          data: {
-            userId: user.id,
-            displayName: dto.display_name,
-            handle: uniqueHandle,
-          },
-        });
+      // Create user profile with auto-generated handle
+      const handle = await this.buildUniqueHandle(dto.display_name, tx);
+      await tx.userProfile.create({
+        data: {
+          userId: newUser.id,
+          handle,
+          displayName: dto.display_name,
+        },
+      });
 
-        await tx.authIdentity.create({
-          data: {
-            userId: user.id,
-            provider: "LOCAL",
-            providerEmail: dto.email,
-          },
-        });
+      // Create local auth identity
+      await tx.authIdentity.create({
+        data: {
+          userId: newUser.id,
+          provider: "LOCAL",
+        },
+      });
 
-        return { userId: user.id, displayName: dto.display_name };
-      },
-    );
+      return newUser;
+    });
 
-    await this.issueEmailVerificationToken(userId, dto.email, displayName);
+    // Send verification email
+    await this.sendVerificationEmail(user.id, dto.email, dto.display_name);
 
     return {
-      message:
-        "Registration successful. Please check your email for a verification link.",
+      message: "Registration successful. Please check your email to verify your account.",
+      user: {
+        id: user.id,
+        email: user.email,
+        display_name: dto.display_name,
+        is_verified: false,
+        created_at: user.createdAt,
+      },
     };
   }
 
-  async verifyEmail(dto: VerifyEmailQueryDto): Promise<{ message: string }> {
-    const tokenHash = this.tokenService.hashToken(dto.token);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 2: Verify Email
+  // ═══════════════════════════════════════════════════════════════════════════
+  async verifyEmail(token: string) {
+    const tokenHash = this.tokenService.hashToken(token);
 
-    const verification = await this.db.emailVerificationToken.findFirst({
-      where: {
-        tokenHash,
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      select: {
-        id: true,
-        userId: true,
-      },
+    // Find the token
+    const record = await this.prisma.emailVerificationToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
     });
 
-    if (!verification) {
+    if (!record || record.consumedAt) {
       throw new BadRequestException({
-        code: "EMAIL_VERIFICATION_TOKEN_INVALID",
-        message: "Invalid or expired email verification token.",
+        statusCode: 400,
+        error: "INVALID_TOKEN",
+        message: "This verification link is invalid or has already been used.",
       });
     }
 
-    await this.db.$transaction(async (tx: any) => {
-      await tx.user.update({
-        where: { id: verification.userId },
+    if (record.expiresAt < new Date()) {
+      throw new GoneException({
+        statusCode: 410,
+        error: "TOKEN_EXPIRED",
+        message: "This verification link has expired. Please request a new one.",
+      });
+    }
+
+    if (record.user.isVerified) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: "ALREADY_VERIFIED",
+        message: "This account is already verified.",
+      });
+    }
+
+    // Mark user as verified and consume the token
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
         data: { isVerified: true },
-      });
-
-      await tx.emailVerificationToken.update({
-        where: { id: verification.id },
+      }),
+      this.prisma.emailVerificationToken.update({
+        where: { id: record.id },
         data: { consumedAt: new Date() },
-      });
+      }),
+    ]);
 
-      await tx.emailVerificationToken.deleteMany({
-        where: {
-          userId: verification.userId,
-          id: { not: verification.id },
-        },
-      });
-    });
-
-    return { message: "Email verified successfully." };
+    return { message: "Email verified successfully. You can now log in." };
   }
 
-  async resendVerification(
-    dto: ResendVerificationDto,
-  ): Promise<{ message: string }> {
-    const user = await this.db.user.findUnique({
-      where: { email: dto.email },
-      select: {
-        id: true,
-        email: true,
-        isVerified: true,
-        profile: {
-          select: { displayName: true },
-        },
-      },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 3: Resend Verification Email
+  // ═══════════════════════════════════════════════════════════════════════════
+  async resendVerification(email: string) {
+    // Always return success to prevent email enumeration
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      include: { profile: true },
     });
 
     if (user && !user.isVerified) {
-      await this.issueEmailVerificationToken(
+      // Invalidate old verification tokens
+      await this.prisma.emailVerificationToken.updateMany({
+        where: { userId: user.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+
+      // Send a new verification email
+      await this.sendVerificationEmail(
         user.id,
         user.email,
-        user.profile?.displayName ?? undefined,
+        user.profile?.displayName,
       );
     }
 
     return {
-      message:
-        "If the account exists and is not verified, a new verification email has been sent.",
+      message: "If an unverified account with this email exists, a new verification link has been sent.",
     };
   }
 
-  async login(
-    dto: LoginDto,
-    context: { ipAddress?: string; userAgent?: string },
-  ): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    rememberMe: boolean;
-    user: { id: string; email: string; role: string; isVerified: boolean };
-  }> {
-    const user = await this.db.user.findUnique({
-      where: { email: dto.email },
-      select: {
-        id: true,
-        email: true,
-        passwordHash: true,
-        isVerified: true,
-        accountStatus: true,
-        systemRole: true,
-      },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 4: Login
+  // ═══════════════════════════════════════════════════════════════════════════
+  async login(dto: LoginDto, ip: string, userAgent: string) {
+    // Find user by email
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+      include: { profile: true },
     });
 
-    const hashToVerify = user?.passwordHash ?? TIMING_SAFE_DUMMY_HASH;
-    const passwordValid = await argon2.verify(hashToVerify, dto.password);
-
-    if (!user || !user.passwordHash || !passwordValid) {
+    // If user doesn't exist, still hash to prevent timing attacks
+    if (!user) {
+      await argon2.hash("dummy-password-for-timing-safety");
       throw new UnauthorizedException({
-        code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
+        statusCode: 401,
+        error: "INVALID_CREDENTIALS",
+        message: "The email or password you entered is incorrect.",
       });
     }
 
-    if (!user.isVerified) {
+    // Check password
+    if (!user.passwordHash) {
       throw new UnauthorizedException({
-        code: "EMAIL_NOT_VERIFIED",
+        statusCode: 401,
+        error: "INVALID_CREDENTIALS",
+        message: "The email or password you entered is incorrect.",
+      });
+    }
+
+    const passwordValid = await argon2.verify(user.passwordHash, dto.password);
+    if (!passwordValid) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "INVALID_CREDENTIALS",
+        message: "The email or password you entered is incorrect.",
+      });
+    }
+
+    // Check if email is verified
+    if (!user.isVerified) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "EMAIL_NOT_VERIFIED",
         message: "Please verify your email before logging in.",
       });
     }
 
-    if (user.accountStatus !== "ACTIVE") {
+    // Check account status
+    if (user.accountStatus === "SUSPENDED") {
       throw new ForbiddenException({
-        code: "ACCOUNT_UNAVAILABLE",
-        message: "Your account is currently unavailable.",
+        statusCode: 403,
+        error: "ACCOUNT_SUSPENDED",
+        message: `Your account is suspended until ${user.suspendedUntil?.toISOString() ?? "further notice"}.`,
+      });
+    }
+    if (user.accountStatus === "BANNED") {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "ACCOUNT_BANNED",
+        message: "Your account has been permanently banned.",
       });
     }
 
-    const accessToken = this.tokenService.signAccessToken({
-      sub: user.id,
-      role: user.systemRole,
+    // Create tokens and session
+    const accessToken = this.tokenService.signAccessToken(user.id, user.systemRole);
+    const { raw: refreshToken, hash: refreshTokenHash } = this.tokenService.createRefreshToken();
+
+    const sessionId = await this.sessionService.createSession({
+      userId: user.id,
+      refreshTokenHash,
+      ipAddress: ip,
+      userAgent,
+      rememberMe: dto.remember_me,
     });
 
-    const rememberMe = dto.remember_me ?? false;
-    const refresh = this.tokenService.createRefreshToken(rememberMe);
-
-    await this.sessionManagementService.createSession(
-      user.id,
-      context.userAgent ?? "unknown",
-      context.ipAddress ?? "unknown",
-      refresh.tokenHash,
-    );
-
-    await this.db.user.update({
+    // Update last login time
+    await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
 
     return {
       accessToken,
-      refreshToken: refresh.rawToken,
-      rememberMe,
+      refreshToken,
+      sessionId,
       user: {
         id: user.id,
         email: user.email,
-        role: user.systemRole,
-        isVerified: user.isVerified,
+        display_name: user.profile?.displayName ?? "",
+        handle: user.profile?.handle ?? "",
+        avatar_url: user.profile?.avatarUrl ?? null,
+        account_type: user.profile?.accountType ?? "LISTENER",
+        system_role: user.systemRole,
+        is_verified: user.isVerified,
       },
     };
   }
 
-  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
-    const user = await this.db.user.findUnique({
-      where: { email: dto.email },
-      select: {
-        id: true,
-        email: true,
-        passwordHash: true,
-        profile: { select: { displayName: true } },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoints 5 & 6: Google OAuth Login
+  // ═══════════════════════════════════════════════════════════════════════════
+  async googleLogin(
+    googleUser: {
+      googleId: string;
+      email: string;
+      displayName: string;
+      avatarUrl: string | null;
+    },
+    ip: string,
+    userAgent: string,
+  ) {
+    const email = googleUser.email.toLowerCase();
+
+    // Case A: Check if Google identity already exists
+    const authIdentity = await this.prisma.authIdentity.findFirst({
+      where: {
+        provider: "GOOGLE",
+        providerUserId: googleUser.googleId,
       },
+      include: { user: { include: { profile: true } } },
     });
 
-    if (user?.passwordHash) {
-      const rawToken = randomBytes(48).toString("base64url");
-      const tokenHash = this.tokenService.hashToken(rawToken);
-      const expiresAt = new Date(
-        Date.now() + PASSWORD_RESET_TTL_SECONDS * 1000,
-      );
+    let user: any;
 
-      await this.db.$transaction(async (tx: any) => {
-        await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
-        await tx.passwordResetToken.create({
-          data: {
-            userId: user.id,
-            tokenHash,
-            expiresAt,
-          },
-        });
+    if (authIdentity) {
+      // Existing Google user — just log them in
+      user = authIdentity.user;
+    } else {
+      // Case B: Check if a user with this email already exists (registered via email)
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email },
+        include: { profile: true },
       });
 
+      if (existingUser) {
+        // Link Google identity to existing account
+        await this.prisma.authIdentity.create({
+          data: {
+            userId: existingUser.id,
+            provider: "GOOGLE",
+            providerUserId: googleUser.googleId,
+            providerEmail: email,
+          },
+        });
+        user = existingUser;
+      } else {
+        // Case C: Brand new user — create everything
+        user = await this.prisma.$transaction(async (tx: any) => {
+          const newUser = await tx.user.create({
+            data: {
+              email,
+              isVerified: true, // Google already verified the email
+              dateOfBirth: new Date("2000-01-01"), // Placeholder
+              gender: "PREFER_NOT_TO_SAY",
+            },
+          });
+
+          const handle = await this.buildUniqueHandle(googleUser.displayName, tx);
+          await tx.userProfile.create({
+            data: {
+              userId: newUser.id,
+              handle,
+              displayName: googleUser.displayName,
+              avatarUrl: googleUser.avatarUrl,
+            },
+          });
+
+          await tx.authIdentity.create({
+            data: {
+              userId: newUser.id,
+              provider: "GOOGLE",
+              providerUserId: googleUser.googleId,
+              providerEmail: email,
+            },
+          });
+
+          return {
+            ...newUser,
+            profile: {
+              handle,
+              displayName: googleUser.displayName,
+              avatarUrl: googleUser.avatarUrl,
+              accountType: "LISTENER",
+            },
+          };
+        });
+      }
+    }
+
+    // Create tokens and session
+    const accessToken = this.tokenService.signAccessToken(user.id, user.systemRole ?? "USER");
+    const { raw: refreshToken, hash: refreshTokenHash } = this.tokenService.createRefreshToken();
+
+    await this.sessionService.createSession({
+      userId: user.id,
+      refreshTokenHash,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    // Update last login time
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    return { accessToken, refreshToken };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 7: Refresh Token
+  // ═══════════════════════════════════════════════════════════════════════════
+  async refresh(refreshTokenRaw: string) {
+    const tokenHash = this.tokenService.hashToken(refreshTokenRaw);
+
+    // Find active session with this token
+    const session = await this.sessionService.findActiveSessionByHash(tokenHash);
+
+    if (!session) {
+      // Token reuse detection: if this hash belongs to a revoked session,
+      // someone is replaying an old token -> revoke ALL sessions for safety
+      const revokedSession = await this.sessionService.wasTokenReusedFromRevokedSession(tokenHash);
+      if (revokedSession) {
+        this.logger.warn(`Refresh token reuse detected for user ${revokedSession.userId}. Revoking all sessions.`);
+        await this.sessionService.revokeAllUserSessions(revokedSession.userId);
+        throw new UnauthorizedException({
+          statusCode: 401,
+          error: "TOKEN_REUSE_DETECTED",
+          message: "A previously used refresh token was reused. All sessions have been revoked for security.",
+        });
+      }
+
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "INVALID_REFRESH_TOKEN",
+        message: "Invalid or expired refresh token.",
+      });
+    }
+
+    // Check account status
+    if (session.user.accountStatus === "SUSPENDED") {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "ACCOUNT_SUSPENDED",
+        message: "Your account has been suspended.",
+      });
+    }
+
+    // Rotate the refresh token
+    const { raw: newRefreshToken, hash: newHash } = this.tokenService.createRefreshToken();
+    const newSessionId = await this.sessionService.rotateRefreshToken(session, newHash);
+
+    // Sign a new access token
+    const accessToken = this.tokenService.signAccessToken(
+      session.user.id,
+      session.user.systemRole,
+    );
+
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+      sessionId: newSessionId,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 8: Logout
+  // ═══════════════════════════════════════════════════════════════════════════
+  async logout(refreshTokenRaw: string | undefined) {
+    if (refreshTokenRaw) {
+      const tokenHash = this.tokenService.hashToken(refreshTokenRaw);
+      const session = await this.sessionService.findActiveSessionByHash(tokenHash);
+      if (session) {
+        await this.sessionService.revokeSession(session.id);
+      }
+    }
+    return { message: "Logged out successfully" };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 9: Logout All Devices
+  // ═══════════════════════════════════════════════════════════════════════════
+  async logoutAll(userId: string) {
+    const revokedCount = await this.sessionService.revokeAllUserSessions(userId);
+    return {
+      message: "All sessions have been revoked. You have been logged out of all devices.",
+      revoked_count: revokedCount,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 10: Forgot Password
+  // ═══════════════════════════════════════════════════════════════════════════
+  async forgotPassword(email: string) {
+    // Always return success to prevent email enumeration
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      include: { profile: true },
+    });
+
+    if (user) {
+      // Invalidate old reset tokens
+      await this.prisma.passwordResetToken.updateMany({
+        where: { userId: user.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+
+      // Create a new reset token
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = this.tokenService.hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_HOURS * 60 * 60 * 1000);
+
+      await this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      // Send the reset email
       await this.mailService.sendPasswordResetEmail({
         to: user.email,
-        displayName: user.profile?.displayName ?? undefined,
+        displayName: user.profile?.displayName,
         token: rawToken,
       });
     }
 
     return {
-      message: "If the email exists, a password reset link has been sent.",
+      message: "If an account with this email exists, a password reset link has been sent.",
     };
   }
 
-  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 11: Reset Password
+  // ═══════════════════════════════════════════════════════════════════════════
+  async resetPassword(dto: ResetPasswordDto) {
     const tokenHash = this.tokenService.hashToken(dto.token);
 
-    const resetToken = await this.db.passwordResetToken.findFirst({
-      where: {
-        tokenHash,
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      select: {
-        id: true,
-        userId: true,
-      },
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
     });
 
-    if (!resetToken) {
+    if (!record || record.consumedAt) {
       throw new BadRequestException({
-        code: "PASSWORD_RESET_TOKEN_INVALID",
-        message: "Invalid or expired password reset token.",
+        statusCode: 400,
+        error: "INVALID_TOKEN",
+        message: "This reset link is invalid or has already been used.",
       });
     }
 
+    if (record.expiresAt < new Date()) {
+      throw new GoneException({
+        statusCode: 410,
+        error: "TOKEN_EXPIRED",
+        message: "This reset link has expired. Please request a new one.",
+      });
+    }
+
+    // Hash new password and update
     const passwordHash = await argon2.hash(dto.new_password);
 
-    await this.db.$transaction(async (tx: any) => {
-      await tx.user.update({
-        where: { id: resetToken.userId },
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
         data: { passwordHash },
-      });
-
-      await tx.passwordResetToken.update({
-        where: { id: resetToken.id },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: record.id },
         data: { consumedAt: new Date() },
-      });
+      }),
+    ]);
 
-      await tx.passwordResetToken.deleteMany({
-        where: {
-          userId: resetToken.userId,
-          id: { not: resetToken.id },
-        },
-      });
-    });
+    // Revoke all sessions (force re-login)
+    await this.sessionService.revokeAllUserSessions(record.userId);
 
-  await this.sessionManagementService.deleteUserSessions(resetToken.userId);
-
-    return { message: "Password has been reset successfully." };
+    return { message: "Password reset successful. Please log in with your new password." };
   }
 
-  applyAuthCookies(params: {
-    response: Parameters<CookieService["setAuthCookies"]>[0]["response"];
-    accessToken: string;
-    refreshToken: string;
-    rememberMe: boolean;
-  }): void {
-    this.cookieService.setAuthCookies({
-      response: params.response,
-      accessToken: params.accessToken,
-      refreshToken: params.refreshToken,
-      rememberMe: params.rememberMe,
-    });
-  }
-
-  async refreshSession(
-    rawRefreshToken: string,
-    context: { ipAddress?: string; userAgent?: string },
-  ): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    rememberMe: boolean;
-    user: { id: string; email: string; role: string; isVerified: boolean };
-  }> {
-    const refreshTokenHash = this.tokenService.hashToken(rawRefreshToken);
-    const session =
-      await this.sessionManagementService.getSessionByToken(refreshTokenHash);
-
-    if (!session || session.expiresAt <= new Date()) {
-      if (session) {
-        await this.sessionManagementService.deleteSessionByToken(
-          refreshTokenHash,
-        );
-      }
-      throw new UnauthorizedException({
-        code: "REFRESH_TOKEN_INVALID",
-        message: "Invalid or expired refresh token.",
-      });
-    }
-
-    const user = await this.db.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        email: true,
-        systemRole: true,
-        isVerified: true,
-        accountStatus: true,
-      },
-    });
-
-    if (!user || user.accountStatus !== "ACTIVE") {
-      await this.sessionManagementService.deleteSessionByToken(refreshTokenHash);
-      throw new UnauthorizedException({
-        code: "REFRESH_TOKEN_INVALID",
-        message: "Invalid or expired refresh token.",
-      });
-    }
-
-    const rememberMe =
-      session.expiresAt.getTime() - Date.now() > 10 * 24 * 60 * 60 * 1000;
-    const nextRefresh = this.tokenService.createRefreshToken(rememberMe);
-    await this.sessionManagementService.deleteSessionByToken(refreshTokenHash);
-    await this.sessionManagementService.createSession(
-      user.id,
-      context.userAgent ?? session.deviceInfo ?? "unknown",
-      context.ipAddress ?? session.ipAddress ?? "unknown",
-      nextRefresh.tokenHash,
-    );
-
-    const accessToken = this.tokenService.signAccessToken({
-      sub: user.id,
-      role: user.systemRole,
-    });
-
-    return {
-      accessToken,
-      refreshToken: nextRefresh.rawToken,
-      rememberMe,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.systemRole,
-        isVerified: user.isVerified,
-      },
-    };
-  }
-
-  async logoutByRefreshToken(rawRefreshToken: string): Promise<void> {
-    const refreshTokenHash = this.tokenService.hashToken(rawRefreshToken);
-    await this.sessionManagementService.deleteSessionByToken(refreshTokenHash);
-  }
-
-  async logoutAllSessions(userId: string): Promise<void> {
-    await this.sessionManagementService.deleteUserSessions(userId);
-  }
-
-  async listActiveSessions(userId: string) {
-    const sessions =
-      await this.sessionManagementService.getActiveSessionsByUserId(userId);
-    return {
-      sessions,
-      count: sessions.length,
-    };
-  }
-
-  async revokeSession(userId: string, sessionId: string): Promise<void> {
-    try {
-      await this.sessionManagementService.deleteSessionById(sessionId, userId);
-    } catch {
-      throw new BadRequestException({
-        code: "SESSION_NOT_FOUND",
-        message: "Session not found.",
-      });
-    }
-  }
-
-  async changePassword(
-    userId: string,
-    dto: ChangePasswordDto,
-  ): Promise<{ message: string }> {
-    const user = await this.db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        passwordHash: true,
-      },
-    });
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 12: Change Password
+  // ═══════════════════════════════════════════════════════════════════════════
+  async changePassword(userId: string, currentSessionId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException({
-        code: "NOT_AUTHENTICATED",
-        message: "Authentication is required to access this resource.",
+        statusCode: 401,
+        error: "NOT_AUTHENTICATED",
+        message: "User not found.",
       });
     }
 
-    const validCurrentPassword = await argon2.verify(
-      user.passwordHash,
-      dto.current_password,
-    );
-    if (!validCurrentPassword) {
+    // Verify current password
+    const currentValid = await argon2.verify(user.passwordHash, dto.current_password);
+    if (!currentValid) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "INCORRECT_PASSWORD",
+        message: "The current password you entered is incorrect.",
+      });
+    }
+
+    // Check that new password is different from current
+    if (dto.current_password === dto.new_password) {
       throw new BadRequestException({
-        code: "CURRENT_PASSWORD_INVALID",
-        message: "Current password is incorrect.",
+        statusCode: 400,
+        error: "VALIDATION_FAILED",
+        message: "New password must be different from your current password.",
       });
     }
 
-    const newPasswordHash = await argon2.hash(dto.new_password);
-    await this.db.user.update({
+    // Hash and update
+    const passwordHash = await argon2.hash(dto.new_password);
+    await this.prisma.user.update({
       where: { id: userId },
+      data: { passwordHash },
+    });
+
+    // Revoke all OTHER sessions (keep current one active)
+    await this.sessionService.revokeOtherSessions(userId, currentSessionId);
+
+    return { message: "Password changed successfully. All other sessions have been revoked." };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 13: Request Email Change
+  // ═══════════════════════════════════════════════════════════════════════════
+  async requestEmailChange(userId: string, dto: RequestEmailChangeDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "NOT_AUTHENTICATED",
+        message: "User not found.",
+      });
+    }
+
+    // Verify current password
+    const valid = await argon2.verify(user.passwordHash, dto.current_password);
+    if (!valid) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "INCORRECT_PASSWORD",
+        message: "The current password you entered is incorrect.",
+      });
+    }
+
+    // Check if new email is already taken
+    const emailTaken = await this.prisma.user.findUnique({
+      where: { email: dto.new_email.toLowerCase() },
+    });
+    if (emailTaken) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: "EMAIL_ALREADY_EXISTS",
+        message: "This email is already used by another account.",
+      });
+    }
+
+    // Invalidate old email change requests
+    await this.prisma.emailChangeRequest.updateMany({
+      where: { userId, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+
+    // Create new email change request
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = this.tokenService.hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + EMAIL_CHANGE_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    await this.prisma.emailChangeRequest.create({
       data: {
-        passwordHash: newPasswordHash,
+        userId,
+        newEmail: dto.new_email.toLowerCase(),
+        tokenHash,
+        expiresAt,
       },
     });
 
-    await this.sessionManagementService.deleteUserSessions(userId);
+    // Send confirmation email to the NEW address
+    await this.mailService.sendEmailChangeVerificationEmail({
+      to: dto.new_email,
+      displayName: user.profile?.displayName,
+      token: rawToken,
+      newEmail: dto.new_email,
+    });
 
     return {
-      message: "Password changed successfully.",
+      message: "A confirmation link has been sent to your new email address. The link expires in 1 hour.",
     };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 14: Confirm Email Change
+  // ═══════════════════════════════════════════════════════════════════════════
+  async confirmEmailChange(token: string) {
+    const tokenHash = this.tokenService.hashToken(token);
+
+    const record = await this.prisma.emailChangeRequest.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!record || record.consumedAt) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_TOKEN",
+        message: "This confirmation link is invalid or has already been used.",
+      });
+    }
+
+    if (record.expiresAt < new Date()) {
+      throw new GoneException({
+        statusCode: 410,
+        error: "TOKEN_EXPIRED",
+        message: "This confirmation link has expired.",
+      });
+    }
+
+    // Final check: make sure nobody took the email in the meantime
+    const emailTaken = await this.prisma.user.findUnique({
+      where: { email: record.newEmail },
+    });
+    if (emailTaken) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: "EMAIL_ALREADY_EXISTS",
+        message: "This email has been taken by another account since you requested the change.",
+      });
+    }
+
+    // Apply the email change
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { email: record.newEmail },
+      }),
+      this.prisma.emailChangeRequest.update({
+        where: { id: record.id },
+        data: { consumedAt: new Date() },
+      }),
+    ]);
+
+    // Revoke all sessions (force re-login with new email)
+    await this.sessionService.revokeAllUserSessions(record.userId);
+
+    return { message: "Email changed successfully. Please log in with your new email." };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 15: Get Current User
+  // ═══════════════════════════════════════════════════════════════════════════
   async getMe(userId: string) {
-    const user = await this.db.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        systemRole: true,
-        isVerified: true,
-        accountStatus: true,
-        profile: {
-          select: {
-            handle: true,
-            displayName: true,
-            avatarUrl: true,
-          },
+      include: {
+        profile: true,
+        subscriptions: {
+          where: { status: "ACTIVE" },
+          include: { plan: true },
+          take: 1,
         },
       },
     });
 
     if (!user) {
       throw new UnauthorizedException({
-        code: "NOT_AUTHENTICATED",
-        message: "Authentication is required to access this resource.",
+        statusCode: 401,
+        error: "NOT_AUTHENTICATED",
+        message: "User not found.",
       });
     }
+
+    const activeSub = user.subscriptions[0];
 
     return {
       id: user.id,
       email: user.email,
-      role: user.systemRole,
+      display_name: user.profile?.displayName ?? "",
+      handle: user.profile?.handle ?? "",
+      avatar_url: user.profile?.avatarUrl ?? null,
+      account_type: user.profile?.accountType ?? "LISTENER",
+      system_role: user.systemRole,
       is_verified: user.isVerified,
-      account_status: user.accountStatus,
-      profile: user.profile
-        ? {
-            handle: user.profile.handle,
-            display_name: user.profile.displayName,
-            avatar_url: user.profile.avatarUrl,
-          }
-        : null,
+      subscription_tier: activeSub?.plan?.name ?? "FREE",
+      created_at: user.createdAt,
     };
   }
 
-  async requestEmailChange(
-    userId: string,
-    dto: RequestEmailChangeDto,
-  ): Promise<{ message: string }> {
-    const user = await this.db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        passwordHash: true,
-        profile: { select: { displayName: true } },
-      },
-    });
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 16: Get Active Sessions
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getActiveSessions(userId: string, currentRefreshTokenRaw?: string) {
+    const sessions = await this.sessionService.getActiveSessions(userId);
 
-    if (!user || !user.passwordHash) {
-      throw new UnauthorizedException({
-        code: "NOT_AUTHENTICATED",
-        message: "Authentication is required to access this resource.",
-      });
+    // Figure out which session is the current one
+    let currentSessionHash: string | null = null;
+    if (currentRefreshTokenRaw) {
+      currentSessionHash = this.tokenService.hashToken(currentRefreshTokenRaw);
     }
 
-    const validCurrentPassword = await argon2.verify(
-      user.passwordHash,
-      dto.current_password,
-    );
-    if (!validCurrentPassword) {
-      throw new BadRequestException({
-        code: "CURRENT_PASSWORD_INVALID",
-        message: "Current password is incorrect.",
-      });
-    }
-
-    if (dto.new_email.toLowerCase() === user.email.toLowerCase()) {
-      throw new BadRequestException({
-        code: "EMAIL_UNCHANGED",
-        message: "New email must be different from current email.",
-      });
-    }
-
-    const existing = await this.db.user.findUnique({
-      where: { email: dto.new_email },
-      select: { id: true },
-    });
-    if (existing) {
-      throw new ConflictException({
-        code: "EMAIL_ALREADY_REGISTERED",
-        message: "An account with this email already exists.",
-      });
-    }
-
-    const rawToken = randomBytes(48).toString("base64url");
-    const tokenHash = this.tokenService.hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await this.db.$transaction(async (tx: any) => {
-      await tx.emailChangeRequest.deleteMany({ where: { userId } });
-      await tx.emailChangeRequest.create({
-        data: {
-          userId,
-          newEmail: dto.new_email,
-          tokenHash,
-          expiresAt,
+    return {
+      sessions: sessions.map((s: any) => ({
+        id: s.id,
+        device: {
+          platform: s.device?.platform ?? "WEB",
+          device_name: s.device?.deviceName ?? "Unknown",
         },
-      });
-    });
-
-    await this.mailService.sendEmailChangeVerificationEmail({
-      to: user.email,
-      displayName: user.profile?.displayName ?? undefined,
-      token: rawToken,
-      newEmail: dto.new_email,
-    });
-
-    return {
-      message:
-        "Email change request created. Confirm from the verification link sent to your current email.",
+        ip_address: s.ipAddress,
+        user_agent: s.userAgent,
+        is_current: s.refreshTokenHash === currentSessionHash,
+        created_at: s.createdAt,
+        expires_at: s.expiresAt,
+      })),
     };
   }
 
-  async confirmEmailChange(
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 17: Revoke a Specific Session
+  // ═══════════════════════════════════════════════════════════════════════════
+  async revokeSession(
     userId: string,
-    dto: ConfirmEmailChangeDto,
-  ): Promise<{ message: string; email: string }> {
-    const tokenHash = this.tokenService.hashToken(dto.token);
-    const request = await this.db.emailChangeRequest.findFirst({
-      where: {
-        userId,
-        tokenHash,
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      select: {
-        id: true,
-        newEmail: true,
-      },
-    });
-
-    if (!request) {
-      throw new BadRequestException({
-        code: "EMAIL_CHANGE_TOKEN_INVALID",
-        message: "Invalid or expired email change token.",
+    sessionId: string,
+    currentRefreshTokenRaw?: string,
+  ) {
+    // Find the session
+    const session = await this.sessionService.findSessionByIdAndUser(sessionId, userId);
+    if (!session) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "SESSION_NOT_FOUND",
+        message: "Session not found, does not belong to you, or is already revoked.",
       });
     }
 
-    const existing = await this.db.user.findUnique({
-      where: { email: request.newEmail },
-      select: { id: true },
-    });
-    if (existing && existing.id !== userId) {
-      throw new ConflictException({
-        code: "EMAIL_ALREADY_REGISTERED",
-        message: "An account with this email already exists.",
-      });
+    // Don't allow revoking the current session
+    if (currentRefreshTokenRaw) {
+      const currentHash = this.tokenService.hashToken(currentRefreshTokenRaw);
+      if (session.refreshTokenHash === currentHash) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: "CANNOT_REVOKE_CURRENT",
+          message: "You cannot revoke the session you are currently using. Use the logout endpoint instead.",
+        });
+      }
     }
 
-    await this.db.$transaction(async (tx: any) => {
-      await tx.user.update({
-        where: { id: userId },
-        data: { email: request.newEmail, isVerified: true },
-      });
-
-      await tx.authIdentity.updateMany({
-        where: { userId, provider: "LOCAL" },
-        data: { providerEmail: request.newEmail },
-      });
-
-      await tx.emailChangeRequest.update({
-        where: { id: request.id },
-        data: { consumedAt: new Date() },
-      });
-    });
-
-    return {
-      message: "Email changed successfully.",
-      email: request.newEmail,
-    };
+    await this.sessionService.revokeSession(sessionId);
+    return { message: "Session revoked successfully" };
   }
 
-  async createOAuthSession(params: {
-    userId: string;
-    refreshTokenHash: string;
-    expiresAt: Date;
-    ipAddress?: string;
-    userAgent?: string;
-  }): Promise<void> {
-    await this.sessionManagementService.createSession(
-      params.userId,
-      params.userAgent ?? "unknown",
-      params.ipAddress ?? "unknown",
-      params.refreshTokenHash,
-    );
-  }
-
-  private async issueEmailVerificationToken(
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Helper: Send verification email
+  // ═══════════════════════════════════════════════════════════════════════════
+  private async sendVerificationEmail(
     userId: string,
     email: string,
     displayName?: string,
-  ): Promise<void> {
-    const rawToken = randomBytes(48).toString("base64url");
+  ) {
+    const rawToken = crypto.randomBytes(32).toString("hex");
     const tokenHash = this.tokenService.hashToken(rawToken);
-    const expiresAt = new Date(
-      Date.now() + EMAIL_VERIFICATION_TTL_SECONDS * 1000,
-    );
+    const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000);
 
-    await this.db.$transaction(async (tx: any) => {
-      await tx.emailVerificationToken.deleteMany({ where: { userId } });
-      await tx.emailVerificationToken.create({
-        data: {
-          userId,
-          tokenHash,
-          expiresAt,
-        },
-      });
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt,
+      },
     });
 
     await this.mailService.sendVerificationEmail({
@@ -735,26 +876,43 @@ export class AuthService {
     });
   }
 
-  private async buildUniqueHandle(displayName: string): Promise<string> {
-    const baseHandle = sanitizeHandle(displayName);
-    let candidate = baseHandle;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Helper: Build a unique handle from a display name
+  // ═══════════════════════════════════════════════════════════════════════════
+  private async buildUniqueHandle(
+    displayName: string,
+    tx?: any,
+  ): Promise<string> {
+    const db = tx || this.prisma;
 
-    for (let index = 0; index < 20; index += 1) {
-      const existing = await this.db.userProfile.findUnique({
-        where: { handle: candidate },
-        select: { userId: true },
+    // Sanitize: lowercase, replace spaces/special chars with hyphens
+    let base = displayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .substring(0, 25);
+
+    if (!base) base = "user";
+
+    // Check if handle is taken, if so add random suffix
+    let handle = base;
+    let attempts = 0;
+
+    while (attempts < 10) {
+      const existing = await db.userProfile.findUnique({
+        where: { handle },
       });
+      if (!existing) return handle;
 
-      if (!existing) {
-        return candidate;
-      }
-
-      candidate = `${baseHandle}_${Math.floor(Math.random() * 10_000)}`.slice(
-        0,
-        30,
-      );
+      // Add a random 4-digit suffix
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      handle = `${base}-${suffix}`;
+      attempts++;
     }
 
-    return `${baseHandle}_${Date.now().toString(36)}`.slice(0, 30);
+    // Fallback: use UUID snippet
+    handle = `${base}-${crypto.randomBytes(3).toString("hex")}`;
+    return handle;
   }
 }

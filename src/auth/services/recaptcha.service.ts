@@ -1,86 +1,77 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-
-type RecaptchaResponse = {
-  success: boolean;
-  score?: number;
-  action?: string;
-  challenge_ts?: string;
-  hostname?: string;
-  "error-codes"?: string[];
-};
 
 @Injectable()
 export class RecaptchaService {
   private readonly logger = new Logger(RecaptchaService.name);
+  private readonly secret: string;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    this.secret = this.configService.get<string>("security.recaptchaSecret") ?? "";
+  }
 
-  async verifyToken(
-    token: string,
-    remoteIp?: string,
-  ): Promise<RecaptchaResponse> {
-    const secret = this.configService.get<string>("security.recaptchaSecret");
+  // Verify a reCAPTCHA token with Google's API
+  async verify(token: string | undefined, remoteIp?: string): Promise<void> {
+    // Skip verification in development if no secret is configured
+    if (!this.secret) {
+      this.logger.warn("RECAPTCHA_SECRET is not set — skipping CAPTCHA verification.");
+      return;
+    }
 
-    // Dev-mode bypass: if no secret is configured, skip CAPTCHA verification
-    // and log a warning so the team knows it is disabled.
-    if (!secret) {
-      this.logger.warn(
-        "RECAPTCHA_SECRET is not configured — CAPTCHA verification is DISABLED. " +
-          "This is only acceptable in local development.",
+    if (!token) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          error: "CAPTCHA_TOKEN_MISSING",
+          message: "CAPTCHA token is required.",
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
       );
-      return { success: true };
     }
-
-    if (!token || token.trim() === "") {
-      throw new UnauthorizedException({
-        code: "CAPTCHA_TOKEN_MISSING",
-        message: "A CAPTCHA token is required.",
-      });
-    }
-
-    const body = new URLSearchParams({ secret, response: token });
-
-    if (remoteIp) {
-      body.append("remoteip", remoteIp);
-    }
-
-    let result: Response;
 
     try {
-      result = await fetch("https://www.google.com/recaptcha/api/siteverify", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
+      const params = new URLSearchParams({
+        secret: this.secret,
+        response: token,
       });
-    } catch {
-      throw new ServiceUnavailableException({
-        code: "CAPTCHA_UNAVAILABLE",
-        message: "Unable to reach the CAPTCHA verification service.",
-      });
+      if (remoteIp) {
+        params.append("remoteip", remoteIp);
+      }
+
+      const response = await fetch(
+        "https://www.google.com/recaptcha/api/siteverify",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        },
+      );
+
+      const data = (await response.json()) as { success: boolean };
+
+      if (!data.success) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+            error: "CAPTCHA_FAILED",
+            message: "CAPTCHA verification failed. Please try again.",
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+    } catch (error) {
+      // If it's already our HttpException, re-throw it
+      if (error instanceof HttpException) throw error;
+
+      this.logger.error("CAPTCHA verification request failed", error);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+          error: "CAPTCHA_UNAVAILABLE",
+          message: "CAPTCHA service is temporarily unavailable.",
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
-
-    if (!result.ok) {
-      throw new ServiceUnavailableException({
-        code: "CAPTCHA_UNAVAILABLE",
-        message: "Unable to verify CAPTCHA token at this time.",
-      });
-    }
-
-    const data = (await result.json()) as RecaptchaResponse;
-
-    if (!data.success) {
-      throw new UnauthorizedException({
-        code: "CAPTCHA_FAILED",
-        message: "CAPTCHA verification failed. Please try again.",
-      });
-    }
-
-    return data;
   }
 }
