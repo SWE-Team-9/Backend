@@ -24,7 +24,7 @@ import { Public } from '../common/decorators/public.decorator';
  * - PKCE support for public clients (mobile apps, SPAs)
  */
 @ApiTags('OAuth2 Provider')
-@Controller('api/v1/oauth')
+@Controller('oauth')
 export class OAuthController {
   constructor(private readonly oauthService: OAuthService) {}
 
