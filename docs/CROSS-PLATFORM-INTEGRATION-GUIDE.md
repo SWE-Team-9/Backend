@@ -23,6 +23,7 @@
 10. [DTO Validation Summary](#10-dto-validation-summary)
 11. [Secure Storage Guidelines](#11-secure-storage-guidelines)
 12. [Offline & Background Considerations](#12-offline--background-considerations)
+13. [Environment Setup & Credentials Guide](#13-environment-setup--credentials-guide)
 
 ---
 
@@ -750,8 +751,123 @@ Implement exponential backoff or show a countdown timer.
 
 ---
 
+## 13. Environment Setup & Credentials Guide
+
+Before the backend can run, you need a `.env` file. Copy `.env.example` and fill in real values:
+
+```bash
+cp .env.example .env
+```
+
+### Required Variables
+
+| Variable | Where to Get It | Example |
+|---|---|---|
+| `DATABASE_URL` | Your PostgreSQL host (local Docker, Supabase, Neon, AWS RDS) | `postgresql://postgres:password@localhost:5432/iqa3?schema=public` |
+| `JWT_SECRET` | **Generate yourself** — a long random string (≥ 32 chars). Use a password generator or `openssl rand -hex 32` | `a1b2c3d4e5...` (64 hex chars) |
+| `JWT_REFRESH_SECRET` | Same as above — a **different** random string | `f6g7h8i9j0...` |
+| `CLIENT_URL` | The URL of your frontend app | `http://localhost:5173` (dev) |
+
+### Google OAuth Credentials
+
+You need these three values for Google Login to work:
+
+| Variable | Value |
+|---|---|
+| `GOOGLE_CLIENT_ID` | From Google Cloud Console (see below) |
+| `GOOGLE_CLIENT_SECRET` | From Google Cloud Console (see below) |
+| `GOOGLE_CALLBACK_URL` | `http://localhost:3000/api/v1/auth/google/callback` (dev) |
+
+#### How to Get GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Select your project from the top-left dropdown (or create one)
+3. Search **"Credentials"** in the top search bar → select the result under **APIs & Services**
+4. Under **OAuth 2.0 Client IDs**, click your app name (e.g., "Web client")
+5. Copy the **Client ID** and **Client secret** from the right panel
+
+#### Setting Up the Callback URL
+
+The `GOOGLE_CALLBACK_URL` is the exact URL Google redirects to after the user logs in. **It must match what's registered in Google Cloud Console.**
+
+| Environment | GOOGLE_CALLBACK_URL |
+|---|---|
+| Local dev | `http://localhost:3000/api/v1/auth/google/callback` |
+| Production | `https://api.yourdomain.com/api/v1/auth/google/callback` |
+| Mobile (custom scheme) | Set `FRONTEND_URL` to `spotly://auth/callback` for the post-login redirect |
+
+**Critical:** On the same Credentials page where you found the Client ID, scroll to **Authorized redirect URIs**, click **"ADD URI"**, paste your callback URL exactly, and hit **Save**. If this doesn't match, Google OAuth will fail with a redirect_uri_mismatch error.
+
+### Optional Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | Server port |
+| `NODE_ENV` | `development` | `development` or `production` |
+| `JWT_ACCESS_EXPIRY` | `15m` | Access token lifetime |
+| `JWT_REFRESH_EXPIRY` | `7d` | Refresh token lifetime |
+| `AUTH_COOKIE_SECURE` | `false` | Set `true` in production (requires HTTPS) |
+| `RECAPTCHA_SECRET` | — | Google reCAPTCHA v3 secret key |
+| `FRONTEND_URL` | `http://localhost:3000` | Where Google OAuth redirects after callback |
+
+### Email / SMTP
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MAIL_HOST` | `smtp.mailtrap.io` | SMTP server |
+| `MAIL_PORT` | `2525` | SMTP port |
+| `MAIL_SECURE` | `false` | Use TLS |
+| `MAIL_USER` | — | SMTP username |
+| `MAIL_PASS` | — | SMTP password |
+| `MAIL_FROM` | `Spotly <noreply@spotly.app>` | Sender address |
+
+> **Tip for development:** Use [Mailtrap](https://mailtrap.io) or [Ethereal](https://ethereal.email) to catch emails without sending real ones.
+
+### Complete `.env` Template
+
+```env
+# ─── Server ──────────────────────────────────────────
+PORT=3000
+NODE_ENV=development
+CLIENT_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
+
+# ─── Database ────────────────────────────────────────
+DATABASE_URL="postgresql://postgres:password@localhost:5432/iqa3?schema=public"
+
+# ─── JWT (generate your own secrets!) ────────────────
+JWT_SECRET=replace_with_a_long_random_string_at_least_32_chars
+JWT_REFRESH_SECRET=replace_with_a_different_long_random_string
+JWT_ACCESS_EXPIRY=15m
+JWT_REFRESH_EXPIRY=7d
+
+# ─── Google OAuth 2.0 ───────────────────────────────
+GOOGLE_CLIENT_ID=your_client_id_from_google_console
+GOOGLE_CLIENT_SECRET=your_client_secret_from_google_console
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
+
+# ─── Auth Cookies ────────────────────────────────────
+AUTH_COOKIE_SECURE=false
+
+# ─── Email (SMTP) ───────────────────────────────────
+MAIL_HOST=smtp.mailtrap.io
+MAIL_PORT=2525
+MAIL_USER=your_mailtrap_user
+MAIL_PASS=your_mailtrap_pass
+MAIL_FROM=Spotly <noreply@spotly.app>
+
+# ─── reCAPTCHA (optional) ───────────────────────────
+RECAPTCHA_SECRET=your_recaptcha_secret
+```
+
+---
+
 ## Quick Start Checklist
 
+- [ ] Copy `.env.example` to `.env` and fill in all required values
+- [ ] Get Google OAuth credentials from [Google Cloud Console](https://console.cloud.google.com/)
+- [ ] Add your callback URL to Google's **Authorized redirect URIs**
+- [ ] Generate strong random strings for `JWT_SECRET` and `JWT_REFRESH_SECRET`
 - [ ] Configure HTTP client with a **persistent cookie jar**
 - [ ] Set base URL to `http://<host>:3000/api/v1`
 - [ ] Implement the **401 → refresh → retry** interceptor pattern
