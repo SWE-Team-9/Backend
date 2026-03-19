@@ -27,25 +27,23 @@ async function bootstrap() {
   // ── Global prefix ────────────────────────────────────────────────────────────
   app.setGlobalPrefix("api/v1");
 
-  // ── Helmet — OWASP A05 (Security Misconfiguration) ──────────────────────────
-  // Sets all security-relevant HTTP response headers.
+  // ── Helmet — Relaxed for development/MVP ──────────────────────────────────────
+  // Security headers are less strict to allow frontend integration.
   app.use(
     helmet({
-      // This is a JSON API — browsers should never render its responses as HTML.
-      // CSP blocks iframing and restricts what a browser does with the response.
+      // Relaxed CSP for development - allows self and unsafe-inline
       contentSecurityPolicy: {
-        useDefaults: false,
         directives: {
-          defaultSrc: ["'none'"],
-          scriptSrc: isProduction ? ["'none'"] : ["'self'", "'unsafe-inline'"],
-          styleSrc: isProduction ? ["'none'"] : ["'self'", "'unsafe-inline'"],
-          imgSrc: isProduction ? ["'none'"] : ["'self'", "data:"],
-          fontSrc: isProduction ? ["'none'"] : ["'self'"],
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:"],
+          fontSrc: ["'self'"],
           objectSrc: ["'none'"],
-          mediaSrc: ["'none'"],
+          mediaSrc: ["'self'"],
           frameSrc: ["'none'"],
           frameAncestors: ["'none'"],
-          formAction: ["'none'"],
+          formAction: ["'self'"],
           ...(isProduction ? { upgradeInsecureRequests: [] } : {}),
         },
       },
@@ -125,25 +123,15 @@ async function bootstrap() {
   // Required to read httpOnly auth cookies in guards and controllers.
   app.use(cookieParser());
 
-  // ── CORS — OWASP A05 ────────────────────────────────────────────────────────
-  // Only the configured frontend origin may make credentialed cross-origin
-  // requests.  Any other origin will have its preflight rejected.
-  const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
+  // ── CORS — Relaxed for development/MVP ────────────────────────────────────────
+  // Allow requests from any origin to make development and integration easier.
   app.enableCors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. server-to-server, curl in dev)
-      // and requests from the exact configured CLIENT_URL.
-      if (!origin || origin === clientUrl) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS policy: origin "${origin}" is not allowed.`));
-      }
-    },
+    origin: true, // Allow any origin
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    // Do not expose custom response headers to the browser unless explicitly needed.
-    exposedHeaders: [],
+    // Expose Authorization header if frontend needs to read it
+    exposedHeaders: ["Authorization"],
     // Cache preflight result for 10 minutes to reduce OPTIONS traffic.
     maxAge: 600,
   });

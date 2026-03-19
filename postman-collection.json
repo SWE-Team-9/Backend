@@ -1,0 +1,200 @@
+{
+  "info": {
+    "name": "Spotly Auth API",
+    "description": "Complete auth endpoint collection for Spotly",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "1. Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user@example.com\",\"password\":\"SecurePass123!\",\"password_confirm\":\"SecurePass123!\",\"display_name\":\"John Doe\",\"date_of_birth\":\"1995-05-15\",\"gender\":\"MALE\",\"captchaToken\":\"test-token\"}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/register",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "2. Verify Email",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/auth/verify-email?token=test-token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "verify-email"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "test-token"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3. Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user@example.com\",\"password\":\"SecurePass123!\",\"rememberMe\":false}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "4. Get Current User",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/auth/me",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "5. Get Sessions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/auth/sessions",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "sessions"]
+            }
+          }
+        },
+        {
+          "name": "6. Refresh Token",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "http://localhost:3000/auth/refresh",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "7. Logout",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "http://localhost:3000/auth/localhost:3000/auth/logout",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "8. Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user@example.com\"}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/forgot-password",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "9. Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"token\":\"reset-token\",\"newPassword\":\"NewPass456!\"}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/reset-password",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "10. Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"currentPassword\":\"OldPass123!\",\"newPassword\":\"NewPass456!\"}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/change-password",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "change-password"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

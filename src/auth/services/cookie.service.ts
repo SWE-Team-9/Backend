@@ -1,70 +1,67 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Response } from "express";
-import {
-  ACCESS_COOKIE_NAME,
-  ACCESS_TOKEN_TTL_SECONDS,
-  REFRESH_COOKIE_NAME,
-  REFRESH_TOKEN_REMEMBER_ME_TTL_SECONDS,
-  REFRESH_TOKEN_TTL_SECONDS,
-} from "../constants/auth.constants";
+
+// Cookie names
+const ACCESS_COOKIE = "access_token";
+const REFRESH_COOKIE = "refresh_token";
+
+// TTLs in milliseconds
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
+const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class CookieService {
-  constructor(private readonly configService: ConfigService) {}
+  private readonly isSecure: boolean;
 
-  setAuthCookies(params: {
-    response: Response;
-    accessToken: string;
-    refreshToken: string;
-    rememberMe?: boolean;
-  }) {
-    const { response, accessToken, refreshToken, rememberMe = false } = params;
-    const isSecureCookie = this.configService.get<boolean>(
-      "security.authCookieSecure",
-      false,
-    );
+  constructor(private readonly configService: ConfigService) {
+    this.isSecure =
+      this.configService.get<boolean>("security.authCookieSecure") ?? false;
+  }
 
-    response.cookie(ACCESS_COOKIE_NAME, accessToken, {
+  // Set both access and refresh token cookies on the response
+  setAuthCookies(
+    res: Response,
+    accessToken: string,
+    refreshToken: string,
+    rememberMe = false,
+  ): void {
+    // Access token cookie — short-lived
+    res.cookie(ACCESS_COOKIE, accessToken, {
       httpOnly: true,
-      secure: isSecureCookie,
-      sameSite: "strict",
-      maxAge: ACCESS_TOKEN_TTL_SECONDS * 1000,
+      secure: this.isSecure,
+      sameSite: "lax",
       path: "/",
+      maxAge: FIFTEEN_MINUTES,
     });
 
-    response.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+    // Refresh token cookie — longer-lived
+    res.cookie(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
-      secure: isSecureCookie,
-      sameSite: "strict",
-      maxAge:
-        (rememberMe
-          ? REFRESH_TOKEN_REMEMBER_ME_TTL_SECONDS
-          : REFRESH_TOKEN_TTL_SECONDS) * 1000,
+      secure: this.isSecure,
+      sameSite: "lax",
       path: "/",
+      maxAge: rememberMe ? THIRTY_DAYS : SEVEN_DAYS,
     });
   }
 
-  clearAuthCookies(response: Response) {
-    const isSecureCookie = this.configService.get<boolean>(
-      "security.authCookieSecure",
-      false,
-    );
-
-    response.cookie(ACCESS_COOKIE_NAME, "", {
+  // Clear both auth cookies (used on logout)
+  clearAuthCookies(res: Response): void {
+    res.cookie(ACCESS_COOKIE, "", {
       httpOnly: true,
-      secure: isSecureCookie,
-      sameSite: "strict",
-      maxAge: 0,
+      secure: this.isSecure,
+      sameSite: "lax",
       path: "/",
+      maxAge: 0,
     });
 
-    response.cookie(REFRESH_COOKIE_NAME, "", {
+    res.cookie(REFRESH_COOKIE, "", {
       httpOnly: true,
-      secure: isSecureCookie,
-      sameSite: "strict",
-      maxAge: 0,
+      secure: this.isSecure,
+      sameSite: "lax",
       path: "/",
+      maxAge: 0,
     });
   }
 }

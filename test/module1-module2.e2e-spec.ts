@@ -3,7 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 
-import { AuthController } from "../src/auth/auth.controller";
+import { AuthController } from "../src/auth/controllers/auth.controller";
 import { AuthService } from "../src/auth/auth.service";
 import { CookieService } from "../src/auth/services/cookie.service";
 import { TokenService } from "../src/auth/services/token.service";

@@ -1,200 +1,204 @@
 import {
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
-  Length,
   Matches,
+  MaxLength,
   MinLength,
   Validate,
+  ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
-  ValidationArguments,
-  IsDateString,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+// ─── Password regex ──────────────────────────────────────────────────────────
+// At least 8 chars, one uppercase, one lowercase, one digit, one special char.
+const PASSWORD_REGEX =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+const PASSWORD_MESSAGE =
+  "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
 
+// ─── Gender enum (matches Prisma) ─────────────────────────────────────────────
 export enum Gender {
   MALE = "MALE",
   FEMALE = "FEMALE",
   PREFER_NOT_TO_SAY = "PREFER_NOT_TO_SAY",
 }
 
-@ValidatorConstraint({ name: "isAdult13", async: false })
-class IsAdult13Constraint implements ValidatorConstraintInterface {
-  validate(value: string): boolean {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return false;
-    }
-
-    const now = new Date();
-    const age = now.getFullYear() - date.getFullYear();
-    const hasHadBirthdayThisYear =
-      now.getMonth() > date.getMonth() ||
-      (now.getMonth() === date.getMonth() && now.getDate() >= date.getDate());
-
-    return hasHadBirthdayThisYear ? age >= 13 : age - 1 >= 13;
-  }
-
-  defaultMessage(): string {
-    return "User must be at least 13 years old.";
-  }
-}
-
+// ─── Custom validator: passwords must match ───────────────────────────────────
 @ValidatorConstraint({ name: "matchesField", async: false })
 class MatchesFieldConstraint implements ValidatorConstraintInterface {
-  validate(value: string, args: ValidationArguments): boolean {
-    const [field] = args.constraints;
-    const relatedValue = (args.object as Record<string, string>)[field];
+  validate(value: string, args: ValidationArguments) {
+    const relatedField = args.constraints[0] as string;
+    const relatedValue = (args.object as Record<string, unknown>)[
+      relatedField
+    ];
     return value === relatedValue;
   }
 
-  defaultMessage(args: ValidationArguments): string {
-    const [field] = args.constraints;
-    return `${args.property} must match ${field}.`;
+  defaultMessage(args: ValidationArguments) {
+    return `${args.property} must match ${args.constraints[0]}.`;
   }
 }
 
+// ─── Custom validator: user must be at least 13 years old ─────────────────────
+@ValidatorConstraint({ name: "isAdult13", async: false })
+class IsAdult13Constraint implements ValidatorConstraintInterface {
+  validate(value: string) {
+    const dob = new Date(value);
+    if (isNaN(dob.getTime())) return false;
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age >= 13;
+  }
+
+  defaultMessage() {
+    return "You must be at least 13 years old to register.";
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 1: Register
+// ══════════════════════════════════════════════════════════════════════════════
 export class RegisterDto {
-  @ApiProperty({ example: "user@example.com" })
-  @IsEmail()
-  @Length(1, 255)
+  @IsEmail({}, { message: "Please provide a valid email address." })
+  @MaxLength(255)
   email!: string;
 
-  @ApiProperty({ example: "StrongP@ssw0rd!" })
   @IsString()
-  @Matches(PASSWORD_REGEX, {
-    message:
-      "password must include uppercase, lowercase, number, and special character.",
-  })
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
   password!: string;
 
-  @ApiProperty({ example: "StrongP@ssw0rd!" })
+  @IsString()
   @Validate(MatchesFieldConstraint, ["password"])
   password_confirm!: string;
 
-  @ApiProperty({ example: "John Doe" })
   @IsString()
-  @Length(2, 50)
+  @MinLength(2, { message: "Display name must be between 2 and 50 characters." })
+  @MaxLength(50, { message: "Display name must be between 2 and 50 characters." })
   display_name!: string;
 
-  @ApiProperty({ example: "2000-01-01" })
-  @IsDateString()
+  @IsDateString({}, { message: "Date of birth must be a valid ISO date (YYYY-MM-DD)." })
   @Validate(IsAdult13Constraint)
   date_of_birth!: string;
 
-  @ApiProperty({ enum: Gender, example: Gender.MALE })
-  @IsEnum(Gender)
+  @IsEnum(Gender, { message: "Gender must be one of: MALE, FEMALE, PREFER_NOT_TO_SAY." })
   gender!: Gender;
 
-  /**
-   * Google reCAPTCHA v3 token obtained from the frontend.
-   * Required in production to prevent automated registration abuse.
-   * Optional in development — if RECAPTCHA_SECRET is not configured,
-   * the RecaptchaService will skip verification gracefully.
-   */
-  @ApiPropertyOptional({
-    example: "03AFcWeA6y4...",
-    description: "Google reCAPTCHA token.",
-  })
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  captchaToken?: string;
+  captcha_token?: string;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 2: Verify Email (query param)
+// ══════════════════════════════════════════════════════════════════════════════
+export class VerifyEmailDto {
+  @IsString()
+  @IsNotEmpty({ message: "Verification token is required." })
+  token!: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 3: Resend Verification
+// ══════════════════════════════════════════════════════════════════════════════
+export class ResendVerificationDto {
+  @IsEmail({}, { message: "Please provide a valid email address." })
+  email!: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 4: Login
+// ══════════════════════════════════════════════════════════════════════════════
 export class LoginDto {
-  @ApiProperty({ example: "user@example.com" })
-  @IsEmail()
+  @IsEmail({}, { message: "Please provide a valid email address." })
   email!: string;
 
-  @ApiProperty({ example: "StrongP@ssw0rd!" })
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty({ message: "Password is required." })
   password!: string;
 
-  @ApiPropertyOptional({ example: true, default: false })
   @IsOptional()
   @IsBoolean()
   remember_me?: boolean;
 }
 
-export class VerifyEmailQueryDto {
-  @ApiProperty({ example: "verification-token-from-email" })
-  @IsString()
-  @IsNotEmpty()
-  token!: string;
-}
-
-export class ResendVerificationDto {
-  @ApiProperty({ example: "user@example.com" })
-  @IsEmail()
-  email!: string;
-}
-
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 10: Forgot Password
+// ══════════════════════════════════════════════════════════════════════════════
 export class ForgotPasswordDto {
-  @ApiProperty({ example: "user@example.com" })
-  @IsEmail()
+  @IsEmail({}, { message: "Please provide a valid email address." })
   email!: string;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 11: Reset Password
+// ══════════════════════════════════════════════════════════════════════════════
 export class ResetPasswordDto {
-  @ApiProperty({ example: "password-reset-token-from-email" })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: "Reset token is required." })
   token!: string;
 
-  @ApiProperty({ example: "NewStrongP@ssw0rd!" })
   @IsString()
-  @Matches(PASSWORD_REGEX, {
-    message:
-      "new_password must include uppercase, lowercase, number, and special character.",
-  })
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
   new_password!: string;
 
-  @ApiProperty({ example: "NewStrongP@ssw0rd!" })
+  @IsString()
   @Validate(MatchesFieldConstraint, ["new_password"])
   new_password_confirm!: string;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 12: Change Password
+// ══════════════════════════════════════════════════════════════════════════════
 export class ChangePasswordDto {
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty({ message: "Current password is required." })
   current_password!: string;
 
   @IsString()
-  @Matches(PASSWORD_REGEX, {
-    message:
-      "new_password must include uppercase, lowercase, number, and special character.",
-  })
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
   new_password!: string;
 
+  @IsString()
   @Validate(MatchesFieldConstraint, ["new_password"])
   new_password_confirm!: string;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 13: Request Email Change
+// ══════════════════════════════════════════════════════════════════════════════
 export class RequestEmailChangeDto {
-  @IsEmail()
+  @IsEmail({}, { message: "Please provide a valid email address." })
   new_email!: string;
 
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty({ message: "Current password is required." })
   current_password!: string;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 14: Confirm Email Change
+// ══════════════════════════════════════════════════════════════════════════════
 export class ConfirmEmailChangeDto {
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: "Confirmation token is required." })
   token!: string;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 17: Revoke Session (path param)
+// ══════════════════════════════════════════════════════════════════════════════
 export class RevokeSessionParamsDto {
-  @IsUUID()
+  @IsUUID("4", { message: "Session ID must be a valid UUID." })
   sessionId!: string;
 }

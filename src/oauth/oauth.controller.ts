@@ -2,6 +2,8 @@ import { Controller, Get, Post, Body, Query, Redirect, BadRequestException, Http
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { OAuthService } from './oauth.service';
 import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 
 /**
  * OAuth2 Provider Controller (RFC 6749, RFC 7009, RFC 7636)
@@ -115,15 +117,10 @@ export class OAuthController {
   })
   @Get('authorize')
   @Redirect()
-  async authorize(@Query() query: AuthorizeDto) {
-    // TODO: In a real app, you would:
-    // 1. Check if user is authenticated
-    // 2. Display a consent screen
-    // 3. Wait for user approval
-    // 4. Call oauthService.generateAuthorizationCode()
-    //
-    // For now, this returns an error. The frontend should handle the flow.
-
+  async authorize(
+    @Query() query: AuthorizeDto,
+    @CurrentUser('userId') userId: string,
+  ) {
     if (query.response_type !== 'code') {
       throw new BadRequestException('unsupported_response_type');
     }
@@ -136,7 +133,7 @@ export class OAuthController {
     // Generate authorization code
     const { code, state } = await this.oauthService.generateAuthorizationCode(
       query.client_id,
-      'user-id-here', // TODO: Get from authenticated user context
+      userId,
       query.redirect_uri,
       query.scope,
       query.state,
@@ -241,6 +238,7 @@ export class OAuthController {
     description: 'invalid_client (bad credentials)',
   })
   @Post('token')
+  @Public()
   @HttpCode(200)
   async token(@Body() body: TokenDto) {
     if (body.grant_type === 'authorization_code') {
@@ -328,6 +326,7 @@ This prevents attackers from enumerating valid tokens.
     description: 'Unauthorized (invalid client credentials)',
   })
   @Post('revoke')
+  @Public()
   @HttpCode(200)
   async revoke(@Body() body: RevokeDto) {
     return await this.oauthService.revokeToken(

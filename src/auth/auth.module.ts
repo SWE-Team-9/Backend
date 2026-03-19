@@ -3,62 +3,46 @@ import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 
-import { AuthController, AuthSessionController } from "./controllers";
-import { AuthService } from "./auth.service";
+import { MailModule } from "../mail/mail.module";
 
+import { AuthService } from "./auth.service";
 import { TokenService } from "./services/token.service";
 import { CookieService } from "./services/cookie.service";
+import { SessionService } from "./services/session.service";
 import { RecaptchaService } from "./services/recaptcha.service";
-import { SessionManagementService } from "./services/session-management.service";
 
 import { JwtCookieStrategy } from "./strategies/jwt-cookie.strategy";
 import { GoogleStrategy } from "./strategies/google.strategy";
 
-import { MailModule } from "../mail/mail.module";
+import { AuthController } from "./controllers/auth.controller";
 
 @Module({
   imports: [
-    ConfigModule,
-    PassportModule.register({ defaultStrategy: "jwt-cookie" }),
+    PassportModule,
+    MailModule,
     JwtModule.registerAsync({
+      imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.getOrThrow<string>("security.jwtSecret"),
+      useFactory: (config: ConfigService) => ({
+        secret: config.get("security.jwtSecret"),
         signOptions: {
-          expiresIn:
-            configService.get<string>("security.jwtAccessExpiry") ?? "15m",
-          issuer:
-            configService.get<string>("security.jwtIssuer") ?? "spotly-api",
-          audience:
-            configService.get<string>("security.jwtAudience") ??
-            "spotly-client",
+          expiresIn: "15m",
+          issuer: config.get("security.jwtIssuer") ?? "spotly-api",
+          audience: config.get("security.jwtAudience") ?? "spotly-client",
         },
       }),
     }),
-    MailModule,
   ],
-  controllers: [AuthController, AuthSessionController],
+  controllers: [AuthController],
   providers: [
-    // ── Member 1 — Backend Lead + Security Owner ──────────────────────────
+    AuthService,
     TokenService,
     CookieService,
+    SessionService,
     RecaptchaService,
     JwtCookieStrategy,
-
-    // ── Member 2 — Core Authentication Engineer ───────────────────────────
-    AuthService,
-
-    // ── Member 3 — OAuth + Sessions Engineer ─────────────────────────────
-    SessionManagementService,
     GoogleStrategy,
   ],
-  exports: [
-    TokenService,
-    CookieService,
-    RecaptchaService,
-    SessionManagementService,
-    PassportModule,
-    JwtModule,
-  ],
+  exports: [AuthService],
 })
 export class AuthModule {}
