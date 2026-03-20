@@ -66,7 +66,13 @@ export class AuthService {
     // Hash the password
     const passwordHash = await argon2.hash(dto.password);
 
-    // Create user, profile, and auth identity in a transaction
+    // Generate verification token before the transaction so it's ready to store atomically
+    const rawVerificationToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = this.tokenService.hashToken(rawVerificationToken);
+    const tokenExpiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    // Create user, profile, auth identity, AND email token in one transaction.
+    // If anything here fails the entire insert is rolled back — no orphaned rows.
     const user = await this.prisma.$transaction(async (tx: any) => {
       // Create the user
       const newUser = await tx.user.create({
@@ -97,11 +103,22 @@ export class AuthService {
         },
       });
 
+      // Create email verification token inside the transaction so it rolls back
+      // together with the user if anything goes wrong.
+      await tx.emailVerificationToken.create({
+        data: {
+          userId: newUser.id,
+          tokenHash,
+          expiresAt: tokenExpiresAt,
+        },
+      });
+
       return newUser;
     });
 
-    // Send verification email
-    await this.sendVerificationEmail(user.id, dto.email, dto.display_name);
+    // Send verification email AFTER the transaction commits (non-fatal — user
+    // can always request a resend via /auth/resend-verification).
+    await this.sendVerificationEmail(dto.email, dto.display_name, rawVerificationToken);
 
     return {
       message: "Registration successful. Please check your email to verify your account.",
@@ -183,12 +200,16 @@ export class AuthService {
         data: { consumedAt: new Date() },
       });
 
-      // Send a new verification email
-      await this.sendVerificationEmail(
-        user.id,
-        user.email,
-        user.profile?.displayName,
-      );
+      // Create a fresh token then send the email
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = this.tokenService.hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000);
+
+      await this.prisma.emailVerificationToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
+
+      await this.sendVerificationEmail(user.email, user.profile?.displayName, rawToken);
     }
 
     return {
@@ -517,11 +538,17 @@ export class AuthService {
       });
 
       // Send the reset email
-      await this.mailService.sendPasswordResetEmail({
-        to: user.email,
-        displayName: user.profile?.displayName,
-        token: rawToken,
-      });
+      try {
+        await this.mailService.sendPasswordResetEmail({
+          to: user.email,
+          displayName: user.profile?.displayName,
+          token: rawToken,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send password reset email to ${user.email}: ${(err as Error).message}`,
+        );
+      }
     }
 
     return {
@@ -679,12 +706,18 @@ export class AuthService {
     });
 
     // Send confirmation email to the NEW address
-    await this.mailService.sendEmailChangeVerificationEmail({
-      to: dto.new_email,
-      displayName: user.profile?.displayName,
-      token: rawToken,
-      newEmail: dto.new_email,
-    });
+    try {
+      await this.mailService.sendEmailChangeVerificationEmail({
+        to: dto.new_email,
+        displayName: user.profile?.displayName,
+        token: rawToken,
+        newEmail: dto.new_email,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send email change confirmation to ${dto.new_email}: ${(err as Error).message}`,
+      );
+    }
 
     return {
       message: "A confirmation link has been sent to your new email address. The link expires in 1 hour.",
@@ -850,30 +883,25 @@ export class AuthService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Helper: Send verification email
+  // Helper: Send verification email (mail only — token already saved to DB)
   // ═══════════════════════════════════════════════════════════════════════════
   private async sendVerificationEmail(
-    userId: string,
     email: string,
     displayName?: string,
+    rawToken?: string,
   ) {
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    const tokenHash = this.tokenService.hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000);
-
-    await this.prisma.emailVerificationToken.create({
-      data: {
-        userId,
-        tokenHash,
-        expiresAt,
-      },
-    });
-
-    await this.mailService.sendVerificationEmail({
-      to: email,
-      displayName,
-      token: rawToken,
-    });
+    if (!rawToken) return;
+    try {
+      await this.mailService.sendVerificationEmail({
+        to: email,
+        displayName,
+        token: rawToken,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send verification email to ${email}: ${(err as Error).message}`,
+      );
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

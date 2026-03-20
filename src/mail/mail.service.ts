@@ -21,6 +21,7 @@ const nodemailer = require("nodemailer") as {
     port: number;
     secure: boolean;
     auth: { user: string; pass: string };
+    tls?: { rejectUnauthorized: boolean };
   }) => MailTransporter;
 };
 
@@ -41,18 +42,18 @@ export class MailService {
 
     await this.sendMail({
       to: params.to,
-      subject: "Verify your Spotly account",
+      subject: "Verify your IQA3 account",
       text: [
         `Hi ${params.displayName ?? "there"},`,
         "",
-        "Welcome to Spotly. Verify your email by opening this link:",
+        "Welcome to IQA3. Verify your email by opening this link:",
         verificationUrl,
         "",
         "If you did not create this account, you can ignore this email.",
       ].join("\n"),
       html: [
         `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
-        "<p>Welcome to Spotly. Verify your email by opening this link:</p>",
+        "<p>Welcome to IQA3. Verify your email by opening this link:</p>",
         `<p><a href="${this.escapeHtml(verificationUrl)}">${this.escapeHtml(verificationUrl)}</a></p>`,
         "<p>If you did not create this account, you can ignore this email.</p>",
       ].join(""),
@@ -68,11 +69,11 @@ export class MailService {
 
     await this.sendMail({
       to: params.to,
-      subject: "Reset your Spotly password",
+      subject: "Reset your IQA3 password",
       text: [
         `Hi ${params.displayName ?? "there"},`,
         "",
-        "You requested to reset your Spotly password.",
+        "You requested to reset your IQA3 password.",
         "Open this link to continue:",
         resetUrl,
         "",
@@ -80,7 +81,7 @@ export class MailService {
       ].join("\n"),
       html: [
         `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
-        "<p>You requested to reset your Spotly password.</p>",
+        "<p>You requested to reset your IQA3 password.</p>",
         "<p>Open this link to continue:</p>",
         `<p><a href="${this.escapeHtml(resetUrl)}">${this.escapeHtml(resetUrl)}</a></p>`,
         "<p>If you did not request this, you can ignore this email.</p>",
@@ -98,7 +99,7 @@ export class MailService {
 
     await this.sendMail({
       to: params.to,
-      subject: "Confirm your Spotly email change",
+      subject: "Confirm your IQA3 email change",
       text: [
         `Hi ${params.displayName ?? "there"},`,
         "",
@@ -180,6 +181,9 @@ export class MailService {
         user,
         pass,
       },
+      // Allow self-signed / intermediate certs in dev environments.
+      // Gmail's cert chain can be rejected by some Node.js TLS stacks.
+      tls: { rejectUnauthorized: false },
     });
 
     return this.transporter;
