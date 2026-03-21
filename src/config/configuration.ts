@@ -13,6 +13,10 @@ export default () => ({
     jwtIssuer: process.env.JWT_ISSUER ?? "spotly-api",
     jwtAudience: process.env.JWT_AUDIENCE ?? "spotly-client",
     recaptchaSecret: process.env.RECAPTCHA_SECRET,
+    // reCAPTCHA Enterprise (for platforms that ended up on Enterprise instead of standard)
+    recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
+    recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,
+    recaptchaEnterpriseAndroidSiteKey: process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
     authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? "false") === "true",
   },
   database: {

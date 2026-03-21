@@ -178,11 +178,18 @@ async function bootstrap() {
   const port = Number(process.env.PORT ?? 3000);
 
   // ── Swagger ──────────────────────────────────────────────────────────────────
-  if (!isProduction) {
+  // By default Swagger is ON in development and OFF in production.
+  // You can override this by setting SWAGGER_ENABLED=true in .env
+  // (useful for team/staging servers where NODE_ENV=production but you
+  // still need the docs — e.g. for Postman import or cross-team integration).
+  const swaggerEnabled =
+    process.env.SWAGGER_ENABLED === "true" || !isProduction;
+
+  if (swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle("IQA3 API")
       .setDescription(
-        "Social Streaming Platform backend API documentation (development only).",
+        "Social Streaming Platform backend API documentation.",
       )
       .setVersion("1.0")
       .addCookieAuth("access_token", {
