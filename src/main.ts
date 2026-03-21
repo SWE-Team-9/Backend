@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import * as path from "path";
 import { AppModule } from "./app.module";
 import { GlobalHttpExceptionFilter } from "./common/filters/global-http-exception.filter";
 
@@ -41,6 +42,8 @@ async function bootstrap() {
           styleSrc: isProduction ? ["'none'"] : ["'self'", "'unsafe-inline'"],
           imgSrc: isProduction ? ["'none'"] : ["'self'", "data:"],
           fontSrc: isProduction ? ["'none'"] : ["'self'"],
+          // Allow fetch/XHR in dev so Swagger UI "Try it out" can reach the API.
+          connectSrc: isProduction ? ["'none'"] : ["'self'"],
           objectSrc: ["'none'"],
           mediaSrc: ["'none'"],
           frameSrc: ["'none'"],
@@ -125,15 +128,30 @@ async function bootstrap() {
   // Required to read httpOnly auth cookies in guards and controllers.
   app.use(cookieParser());
 
+  // ── Local static file serving ────────────────────────────────────────────────
+  // Only active when STORAGE_PROVIDER=local (dev default).
+  // Serves uploaded images at /uploads/<type>/<filename>.
+  // Intentionally placed BEFORE the global prefix so the path stays /uploads/…
+  // and is not exposed under /api/v1/.
+  if (process.env.STORAGE_PROVIDER !== 's3') {
+    const uploadDir = path.resolve(
+      process.env.LOCAL_UPLOAD_DIR ?? './uploads',
+    );
+    app.use('/uploads', require('express').static(uploadDir));
+  }
+
   // ── CORS — OWASP A05 ────────────────────────────────────────────────────────
   // Only the configured frontend origin may make credentialed cross-origin
   // requests.  Any other origin will have its preflight rejected.
   const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
+  const serverUrl = `http://localhost:${process.env.PORT ?? 3006}`;
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. server-to-server, curl in dev)
       // and requests from the exact configured CLIENT_URL.
-      if (!origin || origin === clientUrl) {
+      // In dev, also allow same-server origin so Swagger UI "Try it out" works.
+      const allowedOrigins = [clientUrl, ...(!isProduction ? [serverUrl] : [])];
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS policy: origin "${origin}" is not allowed.`));
@@ -177,11 +195,23 @@ async function bootstrap() {
   if (!isProduction) {
     const config = new DocumentBuilder()
       .setTitle('IQA3 API')
+      .setDescription('Social streaming platform — Module 2: User Profiles & Media Storage')
       .setVersion('1.0')
-      .addBearerAuth()
+      .addBearerAuth(
+        { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'Paste the access_token JWT from /auth/login' },
+        'access-token',
+      )
+      .addCookieAuth('access_token', { type: 'apiKey', in: 'cookie', name: 'access_token' }, 'cookie-auth')
+      .addServer(`http://localhost:${process.env.PORT ?? 3006}/`, 'Local dev')
       .build();
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+      },
+    });
   }
 
   await app.listen(port);
