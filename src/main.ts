@@ -124,16 +124,28 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // ── CORS ─────────────────────────────────────────────────────────────────────
-  // Only allow requests from our own frontend.
-  // CLIENT_URL is set in .env (e.g. http://localhost:3000 in dev,
-  // https://yourapp.com in production).
-  // This is important because cookies (httpOnly auth tokens) are sent
-  // automatically by the browser, so we must restrict which origins can
-  // trigger those requests to prevent cross-site attacks (CSRF).
-  const allowedOrigin = process.env.CLIENT_URL ?? "http://localhost:3000";
+  // CORS is a browser security mechanism. It only affects web browsers — mobile
+  // apps and server-to-server calls are NOT restricted by CORS at all.
+  //
+  // For browsers, we need to explicitly allow each frontend origin.
+  // Since our auth uses httpOnly cookies, we MUST restrict to known origins —
+  // otherwise any website could silently trigger authenticated requests on
+  // behalf of your users (CSRF via cookie attachment).
+  //
+  // ALLOWED_ORIGINS in .env is a comma-separated list of allowed URLs, e.g.:
+  //   ALLOWED_ORIGINS=http://localhost:3000,http://localhost:4200
+  // Add the cross-team frontend URL there when you have it.
+  const rawOrigins = process.env.ALLOWED_ORIGINS ?? process.env.CLIENT_URL ?? "http://localhost:3000";
+
+  // Split on commas and trim any accidental whitespace around each URL
+  const allowedOrigins = rawOrigins.split(",").map((o) => o.trim()).filter(Boolean);
 
   app.enableCors({
-    origin: allowedOrigin,
+    // Pass the array to Express — it will match the incoming Origin header
+    // against this list and reflect back only the matched one.
+    // If the origin is not in the list the browser gets no CORS headers
+    // and blocks the request.
+    origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
