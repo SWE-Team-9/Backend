@@ -12,8 +12,9 @@ RUN npm install
 COPY . .
 
 # generate prisma client
-#RUN npx prisma generate
+RUN npx prisma generate
 
-EXPOSE 3000
+EXPOSE 3006
 
-CMD ["npm", "run", "start:dev"]
+# migrate + seed (idempotent) then start the server
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && npm run start:dev"]
