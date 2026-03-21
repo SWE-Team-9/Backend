@@ -20,6 +20,7 @@
     "db:migrate": "npx prisma migrate dev",
     "db:migrate:prod": "npx prisma migrate deploy",
     "db:seed": "ts-node prisma/seed.ts",
+    "test:endpoints": "node node_modules/ts-node/dist/bin.js prisma/test-endpoints.ts",
     "db:reset": "npx prisma migrate reset",
     "db:studio": "npx prisma studio"
   },
