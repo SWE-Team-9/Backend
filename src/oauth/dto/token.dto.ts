@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength } from 'class-validator';
 
 /**
  * OAuth2 Token Request DTO (RFC 6749)
@@ -24,22 +24,25 @@ export class TokenDto {
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(128)
   client_id!: string;
 
   /**
    * REQUIRED. Client secret for authentication.
-   * Confidential clients must include this;verified against client_secret_hash in DB.
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   client_secret!: string;
 
   /**
    * REQUIRED for grant_type=authorization_code.
    * The authorization code previously issued by the authorization endpoint.
+   * Base64url tokens are ~43 chars; allow up to 256 for future-proofing.
    */
   @IsOptional()
   @IsString()
+  @MaxLength(256)
   code?: string;
 
   /**
@@ -48,14 +51,17 @@ export class TokenDto {
    */
   @IsOptional()
   @IsString()
+  @MaxLength(2048)
   redirect_uri?: string;
 
   /**
    * REQUIRED if PKCE was used during authorization request.
    * The original code_verifier (server verifies SHA256(code_verifier) matches code_challenge).
+   * RFC 7636 specifies 43-128 characters.
    */
   @IsOptional()
   @IsString()
+  @MaxLength(128)
   code_verifier?: string;
 
   /**
@@ -64,6 +70,7 @@ export class TokenDto {
    */
   @IsOptional()
   @IsString()
+  @MaxLength(512)
   refresh_token?: string;
 }
 

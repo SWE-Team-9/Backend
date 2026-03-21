@@ -185,7 +185,7 @@ export class OAuthService {
     code: string,
     redirectUri: string,
     codeVerifier?: string,
-  ): Promise<{ access_token: string; refresh_token: string; expires_in: number; scope: string }> {
+  ): Promise<{ access_token: string; token_type: 'Bearer'; refresh_token: string; expires_in: number; scope: string }> {
     // 1. Validate client credentials
     const client = await this.validateClientCredentials(clientId, clientSecret);
 
@@ -260,8 +260,10 @@ export class OAuthService {
     }
 
     // 7. Return tokens
+    // token_type: 'Bearer' is required by RFC 6749 section 5.1.
     return {
       access_token: accessToken,
+      token_type: 'Bearer' as const,
       refresh_token: refreshToken,
       expires_in: this.ACCESS_TOKEN_TTL_SECONDS,
       scope: authCode.scope,
@@ -291,7 +293,7 @@ export class OAuthService {
     clientId: string,
     clientSecret: string,
     refreshToken: string,
-  ): Promise<{ access_token: string; refresh_token: string; expires_in: number; scope: string }> {
+  ): Promise<{ access_token: string; token_type: 'Bearer'; refresh_token: string; expires_in: number; scope: string }> {
     // 1. Validate client credentials
     const client = await this.validateClientCredentials(clientId, clientSecret);
 
@@ -346,8 +348,10 @@ export class OAuthService {
     }
 
     // 6. Return new tokens
+    // token_type: 'Bearer' is required by RFC 6749 section 5.1.
     return {
       access_token: newAccessToken,
+      token_type: 'Bearer' as const,
       refresh_token: newRefreshToken,
       expires_in: this.ACCESS_TOKEN_TTL_SECONDS,
       scope: tokenRecord.scope,

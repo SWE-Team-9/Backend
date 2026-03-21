@@ -123,16 +123,20 @@ async function bootstrap() {
   // Required to read httpOnly auth cookies in guards and controllers.
   app.use(cookieParser());
 
-  // ── CORS — Relaxed for development/MVP ────────────────────────────────────────
-  // Allow requests from any origin to make development and integration easier.
+  // ── CORS ─────────────────────────────────────────────────────────────────────
+  // Only allow requests from our own frontend.
+  // CLIENT_URL is set in .env (e.g. http://localhost:3000 in dev,
+  // https://yourapp.com in production).
+  // This is important because cookies (httpOnly auth tokens) are sent
+  // automatically by the browser, so we must restrict which origins can
+  // trigger those requests to prevent cross-site attacks (CSRF).
+  const allowedOrigin = process.env.CLIENT_URL ?? "http://localhost:3000";
+
   app.enableCors({
-    origin: true, // Allow any origin
+    origin: allowedOrigin,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    // Expose Authorization header if frontend needs to read it
-    exposedHeaders: ["Authorization"],
-    // Cache preflight result for 10 minutes to reduce OPTIONS traffic.
     maxAge: 600,
   });
 

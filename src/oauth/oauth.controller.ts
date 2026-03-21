@@ -4,6 +4,7 @@ import { OAuthService } from './oauth.service';
 import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
 
 /**
  * OAuth2 Provider Controller (RFC 6749, RFC 7009, RFC 7636)
@@ -15,13 +16,14 @@ import { Public } from '../common/decorators/public.decorator';
  * 3. Revoke access/refresh tokens (POST /oauth/revoke)
  *
  * Security Notes:
- * - All tokens are stored as hashes in the database (SHA256)
+ * - All tokens are stored as SHA-256 hashes in the database (never raw)
  * - Tokens are random (not JWTs) generated via crypto.randomBytes
- * - Client secrets are hashed with Argon2
+ * - Client secrets are stored as SHA-256 hashes (appropriate for long random secrets)
  * - All comparisons use timing-safe functions to prevent enumeration attacks
  * - Authorization codes are single-use and expire in 60 seconds
  * - Refresh tokens are rotated on every use (RFC 6749 recommendation)
  * - PKCE support for public clients (mobile apps, SPAs)
+ * - Token and revoke endpoints are rate-limited to stop brute-force attacks
  */
 @ApiTags('OAuth2 Provider')
 @Controller('oauth')
@@ -142,9 +144,12 @@ export class OAuthController {
         : undefined,
     );
 
-    // Redirect back to client with code
+    // Redirect back to the client with the code.
+    // encodeURIComponent on state prevents special characters in the
+    // state value from breaking the URL or being misused as an injection.
+    // The code is already base64url-safe so no encoding needed there.
     return {
-      url: `${query.redirect_uri}?code=${code}&state=${state}`,
+      url: `${query.redirect_uri}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
     };
   }
 
@@ -237,8 +242,11 @@ export class OAuthController {
     status: 401,
     description: 'invalid_client (bad credentials)',
   })
+  // Rate limit: 20 attempts per minute per IP.
+  // This stops attackers from brute-forcing client secrets.
   @Post('token')
   @Public()
+  @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
   async token(@Body() body: TokenDto) {
     if (body.grant_type === 'authorization_code') {
@@ -325,8 +333,10 @@ This prevents attackers from enumerating valid tokens.
     status: 401,
     description: 'Unauthorized (invalid client credentials)',
   })
+  // Rate limit: 20 attempts per minute per IP.
   @Post('revoke')
   @Public()
+  @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
   async revoke(@Body() body: RevokeDto) {
     return await this.oauthService.revokeToken(

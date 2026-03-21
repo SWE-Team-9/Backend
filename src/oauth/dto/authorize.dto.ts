@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MaxLength, IsIn } from 'class-validator';
 
 /**
  * OAuth2 Authorization Request DTO (RFC 6749)
@@ -10,14 +10,17 @@ export class AuthorizeDto {
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(128)
   client_id!: string;
 
   /**
    * Redirect URI for authorization code response.
    * Must match exactly with registered redirect URI.
+   * 2048 chars matches the limit used by most browsers for URL length.
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(2048)
   redirect_uri!: string;
 
   /**
@@ -25,13 +28,16 @@ export class AuthorizeDto {
    */
   @IsString()
   @IsNotEmpty()
+  @IsIn(['code'])
   response_type!: 'code';
 
   /**
    * Space-separated list of scopes (e.g., "read write").
+   * Limit to 256 chars — plenty of room for multiple scopes.
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   scope!: string;
 
   /**
@@ -40,14 +46,16 @@ export class AuthorizeDto {
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   state!: string;
 
   /**
    * PKCE: Code challenge (base64-url-encoded SHA256 hash of code_verifier).
-   * Recommended for public clients like mobile apps.
+   * SHA256 output base64url-encoded is exactly 43 chars.
    */
   @IsOptional()
   @IsString()
+  @MaxLength(128)
   code_challenge?: string;
 
   /**
@@ -55,6 +63,7 @@ export class AuthorizeDto {
    */
   @IsOptional()
   @IsString()
+  @IsIn(['S256'])
   code_challenge_method?: 'S256';
 }
 

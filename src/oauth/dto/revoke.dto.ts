@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength } from 'class-validator';
 
 /**
  * OAuth2 Token Revocation Request DTO (RFC 7009)
@@ -11,15 +11,17 @@ export class RevokeDto {
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   token!: string;
 
   /**
    * OPTIONAL. A hint about the type of token being revoked.
    * Can be "access_token" or "refresh_token".
-   * Helps the server search the token faster.
+   * Helps the server search the token faster, but neither value changes the outcome.
    */
   @IsOptional()
   @IsString()
+  @IsIn(['access_token', 'refresh_token'])
   token_type_hint?: 'access_token' | 'refresh_token';
 
   /**
@@ -27,6 +29,7 @@ export class RevokeDto {
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(128)
   client_id!: string;
 
   /**
@@ -35,6 +38,7 @@ export class RevokeDto {
    */
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   client_secret!: string;
 }
 
