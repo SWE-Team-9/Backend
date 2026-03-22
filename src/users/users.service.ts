@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -130,7 +131,25 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const data: Record<string, unknown> = {};
 
-    if (dto.display_name !== undefined) data.displayName = dto.display_name;
+    if (dto.display_name !== undefined) {
+      const existing = await this.prisma.userProfile.findFirst({
+        where: {
+          displayName: dto.display_name,
+          userId: { not: userId },
+        },
+        select: { userId: true },
+      });
+
+      if (existing) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: "DISPLAY_NAME_ALREADY_EXISTS",
+          message: "This display name is already in use. Please choose a different one.",
+        });
+      }
+
+      data.displayName = dto.display_name;
+    }
     if (dto.bio !== undefined) data.bio = dto.bio;
     if (dto.location !== undefined) data.location = dto.location;
     if (dto.account_type !== undefined) data.accountType = dto.account_type;

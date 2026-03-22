@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 @Injectable()
 export class RecaptchaService {
   private readonly logger = new Logger(RecaptchaService.name);
+  private static readonly VERIFY_TIMEOUT_MS = 8000;
 
   // Standard reCAPTCHA v2/v3 secret keys (one per platform)
   private readonly secrets: string[];
@@ -57,7 +58,7 @@ export class RecaptchaService {
         const params = new URLSearchParams({ secret, response: token });
         if (remoteIp) params.append("remoteip", remoteIp);
 
-        const response = await fetch(
+        const response = await this.fetchWithTimeout(
           "https://www.google.com/recaptcha/api/siteverify",
           {
             method: "POST",
@@ -78,7 +79,7 @@ export class RecaptchaService {
       // The response contains tokenProperties.valid and a risk score (0.0–1.0).
       if (this.enterpriseApiKey && this.enterpriseProjectId && this.enterpriseAndroidSiteKey) {
         const url = `https://recaptchaenterprise.googleapis.com/v1/projects/${this.enterpriseProjectId}/assessments?key=${this.enterpriseApiKey}`;
-        const response = await fetch(url, {
+        const response = await this.fetchWithTimeout(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -119,10 +120,24 @@ export class RecaptchaService {
         {
           statusCode: HttpStatus.SERVICE_UNAVAILABLE,
           error: "CAPTCHA_UNAVAILABLE",
-          message: "CAPTCHA service is temporarily unavailable.",
+          message: "CAPTCHA service timed out or is temporarily unavailable. Please try again.",
         },
         HttpStatus.SERVICE_UNAVAILABLE,
       );
+    }
+  }
+
+  private async fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RecaptchaService.VERIFY_TIMEOUT_MS);
+
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

@@ -143,6 +143,14 @@ export class LoginDto {
   @IsOptional()
   @IsBoolean()
   remember_me?: boolean;
+
+  @ApiPropertyOptional({
+    example: "03AGdBq...",
+    description: "Google reCAPTCHA token (required when CAPTCHA is enabled on the backend)",
+  })
+  @IsOptional()
+  @IsString()
+  captcha_token?: string;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -9,6 +9,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import * as crypto from "crypto";
 
@@ -51,6 +52,8 @@ export class AuthService {
     // Verify CAPTCHA
     await this.recaptchaService.verify(dto.captcha_token, ip);
 
+    await this.ensureDisplayNameAvailable(dto.display_name);
+
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -73,48 +76,76 @@ export class AuthService {
 
     // Create user, profile, auth identity, AND email token in one transaction.
     // If anything here fails the entire insert is rolled back — no orphaned rows.
-    const user = await this.prisma.$transaction(async (tx: any) => {
-      // Create the user
-      const newUser = await tx.user.create({
-        data: {
-          email: dto.email.toLowerCase(),
-          passwordHash,
-          dateOfBirth: new Date(dto.date_of_birth),
-          gender: dto.gender,
-          isVerified: false,
-        },
-      });
+    let user;
+    try {
+      user = await this.prisma.$transaction(async (tx: any) => {
+        // Create the user
+        const newUser = await tx.user.create({
+          data: {
+            email: dto.email.toLowerCase(),
+            passwordHash,
+            dateOfBirth: new Date(dto.date_of_birth),
+            gender: dto.gender,
+            isVerified: false,
+          },
+        });
 
-      // Create user profile with auto-generated handle
-      const handle = await this.buildUniqueHandle(dto.display_name, tx);
-      await tx.userProfile.create({
-        data: {
-          userId: newUser.id,
-          handle,
-          displayName: dto.display_name,
-        },
-      });
+        // Create user profile with auto-generated handle
+        const handle = await this.buildUniqueHandle(dto.display_name, tx);
+        await tx.userProfile.create({
+          data: {
+            userId: newUser.id,
+            handle,
+            displayName: dto.display_name,
+          },
+        });
 
-      // Create local auth identity
-      await tx.authIdentity.create({
-        data: {
-          userId: newUser.id,
-          provider: "LOCAL",
-        },
-      });
+        // Create local auth identity
+        await tx.authIdentity.create({
+          data: {
+            userId: newUser.id,
+            provider: "LOCAL",
+          },
+        });
 
-      // Create email verification token inside the transaction so it rolls back
-      // together with the user if anything goes wrong.
-      await tx.emailVerificationToken.create({
-        data: {
-          userId: newUser.id,
-          tokenHash,
-          expiresAt: tokenExpiresAt,
-        },
-      });
+        // Create email verification token inside the transaction so it rolls back
+        // together with the user if anything goes wrong.
+        await tx.emailVerificationToken.create({
+          data: {
+            userId: newUser.id,
+            tokenHash,
+            expiresAt: tokenExpiresAt,
+          },
+        });
 
-      return newUser;
-    });
+        return newUser;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const target = String((error.meta as any)?.target ?? "").toLowerCase();
+
+        if (target.includes("email")) {
+          throw new ConflictException({
+            statusCode: 409,
+            error: "EMAIL_ALREADY_EXISTS",
+            message: "An account with this email already exists.",
+          });
+        }
+
+        if (target.includes("display") || target.includes("display_name")) {
+          throw new ConflictException({
+            statusCode: 409,
+            error: "DISPLAY_NAME_ALREADY_EXISTS",
+            message: "This display name is already in use. Please choose a different one.",
+          });
+        }
+      }
+
+      throw error;
+    }
 
     // Send verification email AFTER the transaction commits (non-fatal — user
     // can always request a resend via /auth/resend-verification).
@@ -221,6 +252,9 @@ export class AuthService {
   // Endpoint 4: Login
   // ═══════════════════════════════════════════════════════════════════════════
   async login(dto: LoginDto, ip: string, userAgent: string) {
+    // Verify CAPTCHA before credential checks to reduce credential-stuffing risk.
+    await this.recaptchaService.verify(dto.captcha_token, ip);
+
     // Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -374,12 +408,16 @@ export class AuthService {
             },
           });
 
-          const handle = await this.buildUniqueHandle(googleUser.displayName, tx);
+          const uniqueDisplayName = await this.buildUniqueDisplayName(
+            googleUser.displayName,
+            tx,
+          );
+          const handle = await this.buildUniqueHandle(uniqueDisplayName, tx);
           await tx.userProfile.create({
             data: {
               userId: newUser.id,
               handle,
-              displayName: googleUser.displayName,
+              displayName: uniqueDisplayName,
               avatarUrl: googleUser.avatarUrl,
             },
           });
@@ -397,7 +435,7 @@ export class AuthService {
             ...newUser,
             profile: {
               handle,
-              displayName: googleUser.displayName,
+              displayName: uniqueDisplayName,
               avatarUrl: googleUser.avatarUrl,
               accountType: "LISTENER",
             },
@@ -942,5 +980,43 @@ export class AuthService {
     // Fallback: use UUID snippet
     handle = `${base}-${crypto.randomBytes(3).toString("hex")}`;
     return handle;
+  }
+
+  private async ensureDisplayNameAvailable(displayName: string, tx?: any) {
+    const db = tx || this.prisma;
+    const existing = await db.userProfile.findFirst({
+      where: { displayName },
+      select: { userId: true },
+    });
+
+    if (existing) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: "DISPLAY_NAME_ALREADY_EXISTS",
+        message: "This display name is already in use. Please choose a different one.",
+      });
+    }
+  }
+
+  private async buildUniqueDisplayName(displayName: string, tx?: any) {
+    const db = tx || this.prisma;
+    const trimmed = displayName.trim() || "user";
+
+    let candidate = trimmed;
+    let attempts = 0;
+
+    while (attempts < 10) {
+      const existing = await db.userProfile.findFirst({
+        where: { displayName: candidate },
+        select: { userId: true },
+      });
+      if (!existing) return candidate;
+
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      candidate = `${trimmed}-${suffix}`;
+      attempts++;
+    }
+
+    return `${trimmed}-${crypto.randomBytes(3).toString("hex")}`;
   }
 }

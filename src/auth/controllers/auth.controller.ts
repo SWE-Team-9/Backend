@@ -117,7 +117,8 @@ export class AuthController {
     description:
       "Authenticates the user and sets httpOnly cookies: `access_token` (15 min) and `refresh_token` " +
       "(7 days, or 30 days with remember_me). " +
-      "The email must be verified before login is allowed.",
+      "The email must be verified before login is allowed. " +
+      "Requires a reCAPTCHA token when CAPTCHA verification is enabled.",
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
