@@ -349,7 +349,7 @@ model User {
 model UserProfile {
   userId        String            @id @map("user_id") @db.Uuid
   handle        String            @unique @db.Citext
-  displayName   String            @unique @map("display_name") @db.Citext
+  displayName   String            @map("display_name")
   bio           String?           @db.Text
   location      String?
   avatarUrl     String?           @map("avatar_url")
