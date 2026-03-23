@@ -124,6 +124,16 @@ async function bootstrap() {
   // Required to read httpOnly auth cookies in guards and controllers.
   app.use(cookieParser());
 
+  // ── Local static file serving ────────────────────────────────────────────────
+  // Serves uploaded images from /uploads directory when using local storage.
+  // Placed before CORS so paths remain /uploads/… (not wrapped in global prefix).
+  if (process.env.STORAGE_PROVIDER !== 's3') {
+    const uploadDir = path.resolve(
+      process.env.LOCAL_UPLOAD_DIR ?? './uploads',
+    );
+    app.use('/uploads', require('express').static(uploadDir));
+  }
+
   // ── CORS ─────────────────────────────────────────────────────────────────────
   // CORS is a browser security mechanism. It only affects web browsers — mobile
   // apps and server-to-server calls are NOT restricted by CORS at all.
