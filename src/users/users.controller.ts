@@ -10,10 +10,19 @@
   Req,
   UploadedFile,
   UseInterceptors,
-} from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Request } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -29,46 +38,26 @@ import {
 
 // /me and /check-handle must be declared before /:handle so NestJS
 // does not route them as handle parameter matches.
-@ApiTags("Profiles")
-@Controller("profiles")
+@ApiTags('Profiles')
+@ApiBearerAuth()
+@Controller('profiles')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   // GET /profiles/me
-  @Get("me")
-  @ApiOperation({
-    summary: "Get current user's full profile",
-    description: `Retrieve complete profile information for the authenticated user.
-
-Returned data:
-- Handle (URL-safe identifier)
-- Display name
-- Bio / description
-- Profile images (avatar, cover)
-- Location
-- Website (if set and validated)
-- Account type (LISTENER or ARTIST)
-- Visibility (PUBLIC or PRIVATE)
-- Favorite genres (up to 5)
-- Social links (Instagram, YouTube, Twitter, etc.)
-- Track count
-- Follower/Following counts
-- Likes visibility
-- Profile created date
-- Last updated date
-
-Note: Includes all private fields since authenticated user viewing own profile.
-Authentication: Requires valid access token.
-Rate Limited: Default (100 req/min).`,
-  })
-  @ApiResponse({ status: 200, description: "Full user profile" })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
-  @ApiResponse({ status: 404, description: "User not found" })
-  getMyProfile(@CurrentUser("userId") userId: string) {
+  @ApiOperation({ summary: 'Get my profile', description: 'Returns the full profile of the authenticated user. No privacy gating.' })
+  @ApiResponse({ status: 200, description: 'Full profile object.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Get('me')
+  getMyProfile(@CurrentUser('userId') userId: string) {
     return this.usersService.getMyProfile(userId);
   }
 
   // GET /profiles/check-handle?handle=xyz
+  @ApiOperation({ summary: 'Check handle availability', description: 'Returns whether a handle is available. Handles retired within the last 30 days are blocked.' })
+  @ApiQuery({ name: 'handle', description: 'The handle to check (3–30 chars, lowercase letters, numbers, underscores).', example: 'yahia_dev' })
+  @ApiResponse({ status: 200, description: '{ available: boolean }' })
+  @ApiResponse({ status: 400, description: 'Invalid handle format.' })
   @Public()
   @Get("check-handle")
   @ApiOperation({
@@ -97,6 +86,10 @@ Rate Limited: Default (100 req/min).`,
   // GET /profiles/:handle
   // requesterId forwarded when a valid JWT is present; service uses it to
   // bypass privacy gating for the profile owner.
+  @ApiOperation({ summary: 'Get profile by handle', description: 'Public endpoint. Returns reduced shape for private profiles the requester does not own.' })
+  @ApiParam({ name: 'handle', description: 'The user\'s handle.', example: 'yahia_dev' })
+  @ApiResponse({ status: 200, description: 'Full or reduced profile object.' })
+  @ApiResponse({ status: 404, description: 'Profile not found.' })
   @Public()
   @Get(":handle")
   @ApiOperation({
@@ -122,41 +115,11 @@ Rate Limited: Default (100 req/min).`,
   }
 
   // PATCH /profiles/me
-  @Patch("me")
-  @ApiOperation({
-    summary: "Update current user's profile",
-    description: `Partially update profile information (only provided fields are updated).
-
-Updatable fields:
-- display_name: 2–50 characters (shown in UI)
-- bio: Up to 500 characters
-- location: Up to 100 characters
-- website: HTTPS-only, SSRF-validated, XSS-safe (or empty string to clear)
-- is_private: Toggle profile visibility (PUBLIC / PRIVATE)
-- favorite_genres: Array of genres (max 5, from allowed list)
-- account_type: LISTENER or ARTIST
-
-Validation:
-- Handles not editable (permanent)
-- Email changed via separate /request-email-change flow
-- Password changed via separate /change-password flow
-
-Example:
-{
-  display_name: "DJ Mohan Updated",
-  bio: "Music producer & sound engineer",
-  favorite_genres: ["electronic", "house", "techno"],
-  is_private: false,
-  account_type: "ARTIST"
-}
-
-Authentication: Requires valid access token.
-Rate Limited: Default (100 req/min).`,
-  })
-  @ApiResponse({ status: 200, description: "Updated profile" })
-  @ApiResponse({ status: 400, description: "Validation failed (invalid genres, website format, etc.)" })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
-  @ApiResponse({ status: 404, description: "User not found" })
+  @ApiOperation({ summary: 'Update my profile', description: 'Partial update — only fields present in the body are written. Send favorite_genres: [] to clear all genres.' })
+  @ApiResponse({ status: 200, description: 'Updated profile.' })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Patch('me')
   updateProfile(
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateProfileDto,
@@ -166,39 +129,11 @@ Rate Limited: Default (100 req/min).`,
 
   // PUT /profiles/me/links
   // Full-replace - client sends the complete desired list.
-  @Put("me/links")
-  @ApiOperation({
-    summary: "Update external social links (full replace)",
-    description: `Replace entire set of social/external links atomically.
-
-Example request (full replace):
-{
-  links: [
-    { platform: "instagram", url: "https://instagram.com/djmohan" },
-    { platform: "youtube", url: "https://youtube.com/c/djmohan" },
-    { platform: "spotify", url: "https://open.spotify.com/artist/xyz" },
-    { platform: "website", url: "https://djmohan.com" }
-  ]
-}
-
-Supported platforms:
-- website, twitter, instagram, facebook, youtube, tiktok, spotify, apple-music,
-- bandcamp, soundcloud, patreon, twitch, discord, linkedin, github
-
-Validation:
-- URLs must be HTTPS (for security)
-- SSRF validation (blocks internal/cloud metadata endpoints)
-- No duplicates per platform
-- Max 15 links total
-
-Note: Full replace — omitted links are deleted. Send empty array [] to clear all.
-
-Authentication: Requires valid access token.
-Rate Limited: Default (100 req/min).`,
-  })
-  @ApiResponse({ status: 200, description: "Updated social links" })
-  @ApiResponse({ status: 400, description: "Validation failed (invalid URL, blocked hostname, etc.)" })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
+  @ApiOperation({ summary: 'Update external links', description: 'Full-replace — client sends the complete desired list. Send links: [] to clear all.' })
+  @ApiResponse({ status: 200, description: 'Updated links array.' })
+  @ApiResponse({ status: 400, description: 'Validation or SSRF error.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Put('me/links')
   updateLinks(
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateExternalLinksDto,
@@ -208,7 +143,14 @@ Rate Limited: Default (100 req/min).`,
 
   // POST /profiles/me/:type (avatar | cover)
   // Accepts multipart/form-data with a single "file" field.
-  @Post("me/:type")
+  @ApiOperation({ summary: 'Upload avatar or cover photo', description: 'Accepts multipart/form-data with a single "file" field. type must be "avatar" (max 5 MB) or "cover" (max 15 MB). Replaces existing image.' })
+  @ApiParam({ name: 'type', enum: ['avatar', 'cover'], description: 'Image type to upload.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiResponse({ status: 201, description: '{ url: string }' })
+  @ApiResponse({ status: 400, description: 'Invalid file type or size.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Post('me/:type')
   @ThrottlePolicy(10, 60_000)
   @UseInterceptors(FileInterceptor("file"))
   @ApiOperation({

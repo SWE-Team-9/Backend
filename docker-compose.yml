@@ -1,0 +1,17 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: magsw_backend
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    env_file:
+      - .env
+    volumes:
+      - backend_uploads:/app/uploads
+
+volumes:
+  backend_uploads:
+    driver: local
