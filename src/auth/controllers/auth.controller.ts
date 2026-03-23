@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   Res,
   HttpCode,
@@ -33,6 +34,7 @@ import { ThrottlePolicy } from "../../common/decorators/throttle-policy.decorato
 import { GoogleAuthGuard } from "../guards/google-auth.guard";
 import {
   RegisterDto,
+  CheckEmailQueryDto,
   VerifyEmailDto,
   ResendVerificationDto,
   LoginDto,
@@ -73,6 +75,26 @@ export class AuthController {
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
     const ip = req.ip;
     return this.authService.register(dto, ip);
+  }
+
+  // ─── Endpoint 1.1: GET /auth/check-email ───────────────────────────────
+  @ApiOperation({
+    summary: "Check email availability",
+    description:
+      "Checks whether an email can be used for registration. " +
+      "Returns available=false when the email is already registered.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Email availability status.",
+    schema: { example: { available: false, email: "user@example.com" } },
+  })
+  @ApiResponse({ status: 400, description: "Invalid email format." })
+  @Public()
+  @ThrottlePolicy(30, 60_000)
+  @Get("check-email")
+  async checkEmail(@Query() query: CheckEmailQueryDto) {
+    return this.authService.checkEmailAvailability(query.email);
   }
 
   // ─── Endpoint 2: POST /auth/verify-email ───────────────────────────────

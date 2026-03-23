@@ -45,6 +45,20 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
+  async checkEmailAvailability(email: string) {
+    const normalizedEmail = email.toLowerCase();
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+
+    return {
+      available: !existingUser,
+      email: normalizedEmail,
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Endpoint 1: Register
   // ═══════════════════════════════════════════════════════════════════════════

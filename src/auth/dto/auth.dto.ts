@@ -108,6 +108,19 @@ export class RegisterDto {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 1.1: Check Email Availability
+// ══════════════════════════════════════════════════════════════════════════════
+export class CheckEmailQueryDto {
+  @ApiProperty({
+    example: "user@example.com",
+    description: "Email address to check for registration availability",
+  })
+  @IsEmail({}, { message: "Please provide a valid email address." })
+  @MaxLength(255)
+  email!: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Endpoint 2: Verify Email (query param)
 // ══════════════════════════════════════════════════════════════════════════════
 export class VerifyEmailDto {
