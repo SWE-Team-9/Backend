@@ -13,6 +13,7 @@ export default () => ({
     jwtIssuer: process.env.JWT_ISSUER ?? "spotly-api",
     jwtAudience: process.env.JWT_AUDIENCE ?? "spotly-client",
     recaptchaSecret: process.env.RECAPTCHA_SECRET,
+    recaptchaSecretCrossWeb: process.env.RECAPTCHA_SECRET_CROSS_WEB,
     // reCAPTCHA Enterprise (shared config)
     recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
     recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,

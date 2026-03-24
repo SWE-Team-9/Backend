@@ -18,6 +18,7 @@ export class RecaptchaService {
   constructor(private readonly configService: ConfigService) {
     this.secrets = [
       this.configService.get<string>("security.recaptchaSecret"),
+      this.configService.get<string>("security.recaptchaSecretCrossWeb"),
     ].filter((s): s is string => Boolean(s));
 
     this.enterpriseApiKey = this.configService.get<string>("security.recaptchaEnterpriseApiKey");
