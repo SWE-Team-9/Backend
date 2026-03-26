@@ -49,6 +49,7 @@ export class StorageService {
   private readonly maxCoverBytes: number;
   private readonly s3Client: S3Client | null;
   private readonly s3Bucket: string;
+  private readonly s3Region: string;
   private readonly cdnUrl: string;
 
   constructor(private readonly config: ConfigService) {
@@ -73,11 +74,12 @@ export class StorageService {
       15 * 1024 * 1024,
     );
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
+    this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
     this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
 
     if (this.provider === "s3") {
       this.s3Client = new S3Client({
-        region: this.config.get<string>("storage.s3Region", "us-east-1"),
+        region: this.s3Region,
         credentials: {
           accessKeyId: this.config.get<string>("storage.awsAccessKeyId", ""),
           secretAccessKey: this.config.get<string>(
@@ -142,7 +144,7 @@ export class StorageService {
       }),
     );
 
-    const baseUrl = this.cdnUrl || `https://${this.s3Bucket}.s3.amazonaws.com`;
+    const baseUrl = this.cdnUrl || `https://${this.s3Bucket}.s3.${this.s3Region}.amazonaws.com`;
     return { url: `${baseUrl}/${key}`, key };
   }
 
