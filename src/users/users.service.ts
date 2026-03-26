@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   Injectable,
   Logger,
@@ -73,7 +73,7 @@ export class UsersService {
       return {
         handle: profile.handle,
         display_name: profile.displayName,
-        avatar_url: profile.avatarUrl,
+        avatarUrl: profile.avatarUrl,
         account_type: profile.accountType,
         is_private: true,
       };
@@ -297,8 +297,8 @@ export class UsersService {
       display_name: profile.displayName,
       bio: profile.bio,
       location: profile.location,
-      avatar_url: profile.avatarUrl,
-      cover_photo_url: profile.coverPhotoUrl,
+      avatarUrl: profile.avatarUrl,
+      coverPhotoUrl: profile.coverPhotoUrl,
       account_type: profile.accountType,
       visibility: profile.visibility,
       likes_visible: profile.likesVisible,
