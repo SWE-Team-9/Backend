@@ -132,14 +132,12 @@ export class AuthService {
 
         return newUser;
       });
-    } catch (error: unknown) {
+    } catch (error) {
       if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        (error as { code?: unknown }).code === "P2002"
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
       ) {
-        const target = String((error as { meta?: any }).meta?.target ?? "").toLowerCase();
+        const target = String((error.meta as any)?.target ?? "").toLowerCase();
 
         if (target.includes("email")) {
           throw new ConflictException({
@@ -148,7 +146,6 @@ export class AuthService {
             message: "An account with this email already exists.",
           });
         }
-
       }
 
       throw error;
