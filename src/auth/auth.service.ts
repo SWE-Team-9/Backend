@@ -132,12 +132,14 @@ export class AuthService {
 
         return newUser;
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "P2002"
       ) {
-        const target = String((error.meta as any)?.target ?? "").toLowerCase();
+        const target = String((error as { meta?: any }).meta?.target ?? "").toLowerCase();
 
         if (target.includes("email")) {
           throw new ConflictException({
