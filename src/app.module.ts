@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
+import { TracksModule } from "./tracks/tracks.module";
 import { MailModule } from "./mail/mail.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { StorageModule } from "./common/storage/storage.module";
@@ -43,6 +44,7 @@ import { validateEnvironment } from "./config/env.validation";
     // ── Feature modules ───────────────────────────────────────────────────────
     AuthModule, // Members 1, 2, 3
     UsersModule, // Members 4, 5
+    TracksModule,
   ],
   controllers: [AppController],
   providers: [
