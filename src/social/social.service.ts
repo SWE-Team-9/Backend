@@ -388,10 +388,59 @@ export class SocialService {
     };
   }
 
-  unblockUser(params: UserIdParamDto) {
-    // TODO: Implement unblocking workflow.
-    void params;
-    throw new NotImplementedException("TODO: implement unblockUser");
+  async unblockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "CANNOT_UNBLOCK_SELF",
+        message: "You cannot unblock yourself.",
+      });
+    }
+
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: blockedId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!targetUser || targetUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Target user not found.",
+      });
+    }
+
+    const relation = await this.prisma.userBlock.findUnique({
+      where: {
+        blockerId_blockedId: {
+          blockerId,
+          blockedId,
+        },
+      },
+      select: { blockerId: true },
+    });
+
+    if (!relation) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "BLOCK_RELATION_NOT_FOUND",
+        message: "User is not currently blocked.",
+      });
+    }
+
+    await this.prisma.userBlock.delete({
+      where: {
+        blockerId_blockedId: {
+          blockerId,
+          blockedId,
+        },
+      },
+    });
+
+    return {
+      message: "User unblocked successfully",
+      blockedUserId: blockedId,
+    };
   }
 
   getBlockedUsers(query: PaginationQueryDto) {

@@ -242,9 +242,19 @@ export class SocialController {
     },
   })
   @Delete("block/:userId")
-  unblockUser(@Param() params: UserIdParamDto) {
-    // TODO: Implement unblocking workflow.
-    return this.socialService.unblockUser(params);
+  unblockUser(
+    @CurrentUser("userId") blockerId: string,
+    @Param() params: UserIdParamDto,
+  ) {
+    if (!blockerId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_AUTH_CONTEXT",
+        message: "Authenticated user context is missing.",
+      });
+    }
+
+    return this.socialService.unblockUser(blockerId, params.userId);
   }
 
   @ApiOperation({
