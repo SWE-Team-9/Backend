@@ -255,10 +255,85 @@ export class SocialService {
     };
   }
 
-  getSuggestions(query: SuggestionsQueryDto) {
-    // TODO: Implement suggested users retrieval.
-    void query;
-    throw new NotImplementedException("TODO: implement getSuggestions");
+  async getSuggestions(userId: string, query: SuggestionsQueryDto) {
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!currentUser || currentUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Authenticated user not found.",
+      });
+    }
+
+    const limit = query.limit ?? 10;
+
+    const [followingRows, blocksByMe, blocksAgainstMe, myGenres] =
+      await this.prisma.$transaction([
+        this.prisma.userFollow.findMany({
+          where: { followerId: userId },
+          select: { followingId: true },
+        }),
+        this.prisma.userBlock.findMany({
+          where: { blockerId: userId },
+          select: { blockedId: true },
+        }),
+        this.prisma.userBlock.findMany({
+          where: { blockedId: userId },
+          select: { blockerId: true },
+        }),
+        this.prisma.userFavoriteGenre.findMany({
+          where: { userId },
+          select: { genreId: true },
+        }),
+      ]);
+
+    const excludedUserIds = new Set<string>([userId]);
+    for (const row of followingRows) excludedUserIds.add(row.followingId);
+    for (const row of blocksByMe) excludedUserIds.add(row.blockedId);
+    for (const row of blocksAgainstMe) excludedUserIds.add(row.blockerId);
+
+    const myGenreIds = myGenres.map((g) => g.genreId);
+
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        id: { notIn: Array.from(excludedUserIds) },
+        deletedAt: null,
+      },
+      take: Math.max(limit * 3, limit),
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        profile: {
+          select: {
+            displayName: true,
+            handle: true,
+            avatarUrl: true,
+          },
+        },
+        favoriteGenres: {
+          where:
+            myGenreIds.length > 0 ? { genreId: { in: myGenreIds } } : undefined,
+          select: { genreId: true },
+        },
+      },
+    });
+
+    return {
+      suggestions: candidates.slice(0, limit).map((candidate) => ({
+        id: candidate.id,
+        display_name: candidate.profile?.displayName ?? "",
+        handle: candidate.profile?.handle ?? "",
+        avatar_url: candidate.profile?.avatarUrl ?? null,
+        reason:
+          candidate.favoriteGenres.length > 0
+            ? "Shared genres"
+            : "Suggested for you",
+      })),
+    };
   }
 
   blockUser(params: UserIdParamDto) {

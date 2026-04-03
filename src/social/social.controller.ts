@@ -180,10 +180,19 @@ export class SocialController {
     },
   })
   @Get("suggestions")
-  getSuggestions(@Query() query: SuggestionsQueryDto) {
-    // TODO: Implement suggested users retrieval.
+  getSuggestions(
+    @CurrentUser("userId") userId: string,
+    @Query() query: SuggestionsQueryDto,
+  ) {
+    if (!userId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_AUTH_CONTEXT",
+        message: "Authenticated user context is missing.",
+      });
+    }
 
-    return this.socialService.getSuggestions(query);
+    return this.socialService.getSuggestions(userId, query);
   }
 
   @ApiOperation({
