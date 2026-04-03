@@ -89,10 +89,60 @@ export class SocialService {
     };
   }
 
-  unfollowUser(params: UserIdParamDto) {
-    // TODO: Implement follow relationship removal.
-    void params;
-    throw new NotImplementedException("TODO: implement unfollowUser");
+  async unfollowUser(followerId: string, followingId: string) {
+    if (followerId === followingId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "CANNOT_UNFOLLOW_SELF",
+        message: "You cannot unfollow yourself.",
+      });
+    }
+
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: followingId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!targetUser || targetUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Target user not found.",
+      });
+    }
+
+    const relation = await this.prisma.userFollow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+      select: { followerId: true },
+    });
+
+    if (!relation) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "FOLLOW_RELATION_NOT_FOUND",
+        message: "Follow relationship does not exist.",
+      });
+    }
+
+    await this.prisma.userFollow.delete({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
+
+    return {
+      message: "User unfollowed successfully",
+      targetUserId: followingId,
+      isFollowing: false,
+    };
   }
 
   getFollowers(params: UserIdParamDto, query: PaginationQueryDto) {

@@ -78,10 +78,19 @@ export class SocialController {
     },
   })
   @Delete("follow/:userId")
-  unfollowUser(@Param() params: UserIdParamDto) {
-    // TODO: Implement follow relationship removal.
+  unfollowUser(
+    @CurrentUser("userId") followerId: string,
+    @Param() params: UserIdParamDto,
+  ) {
+    if (!followerId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_AUTH_CONTEXT",
+        message: "Authenticated user context is missing.",
+      });
+    }
 
-    return this.socialService.unfollowUser(params);
+    return this.socialService.unfollowUser(followerId, params.userId);
   }
 
   @ApiOperation({
