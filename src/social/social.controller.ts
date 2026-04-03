@@ -211,10 +211,19 @@ export class SocialController {
     },
   })
   @Post("block/:userId")
-  blockUser(@Param() params: UserIdParamDto) {
-    // TODO: Implement blocking workflow and relationship cleanup.
+  blockUser(
+    @CurrentUser("userId") blockerId: string,
+    @Param() params: UserIdParamDto,
+  ) {
+    if (!blockerId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_AUTH_CONTEXT",
+        message: "Authenticated user context is missing.",
+      });
+    }
 
-    return this.socialService.blockUser(params);
+    return this.socialService.blockUser(blockerId, params.userId);
   }
 
   @ApiOperation({

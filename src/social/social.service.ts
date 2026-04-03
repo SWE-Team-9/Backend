@@ -336,10 +336,56 @@ export class SocialService {
     };
   }
 
-  blockUser(params: UserIdParamDto) {
-    // TODO: Implement blocking workflow and relationship cleanup.
-    void params;
-    throw new NotImplementedException("TODO: implement blockUser");
+  async blockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "CANNOT_BLOCK_SELF",
+        message: "You cannot block yourself.",
+      });
+    }
+
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: blockedId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!targetUser || targetUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Target user not found.",
+      });
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.userBlock.upsert({
+        where: {
+          blockerId_blockedId: {
+            blockerId,
+            blockedId,
+          },
+        },
+        create: {
+          blockerId,
+          blockedId,
+        },
+        update: {},
+      }),
+      this.prisma.userFollow.deleteMany({
+        where: {
+          OR: [
+            { followerId: blockerId, followingId: blockedId },
+            { followerId: blockedId, followingId: blockerId },
+          ],
+        },
+      }),
+    ]);
+
+    return {
+      message: "User blocked successfully",
+      blockedUserId: blockedId,
+    };
   }
 
   unblockUser(params: UserIdParamDto) {
