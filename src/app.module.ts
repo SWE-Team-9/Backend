@@ -10,6 +10,7 @@ import { MailModule } from "./mail/mail.module";
 import { OAuthModule } from "./oauth/oauth.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { StorageModule } from "./common/storage/storage.module";
+import { TracksModule } from "./tracks/tracks.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import configuration from "./config/configuration";
@@ -45,6 +46,7 @@ import { validateEnvironment } from "./config/env.validation";
     AuthModule, // Members 1, 2, 3
     OAuthModule, // OAuth2 provider (third-party API access)
     UsersModule, // Members 4, 5
+    TracksModule, // Module 4 — Audio Upload & Track Management
   ],
   controllers: [AppController],
   providers: [
