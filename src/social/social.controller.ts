@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -17,6 +18,7 @@ import { SocialService } from "./social.service";
 import { UserIdParamDto } from "./dto/user-id-param.dto";
 import { PaginationQueryDto } from "./dto/pagination-query.dto";
 import { SuggestionsQueryDto } from "./dto/suggestions-query.dto";
+import { CurrentUser } from "../common/decorators/current-user.decorator";
 
 @ApiTags("Social Graph")
 @ApiCookieAuth("access_token")
@@ -43,8 +45,19 @@ export class SocialController {
     },
   })
   @Post("follow/:userId")
-  followUser(@Param() params: UserIdParamDto) {
-    return this.socialService.followUser(params);
+  followUser(
+    @CurrentUser("userId") followerId: string,
+    @Param() params: UserIdParamDto,
+  ) {
+    if (!followerId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_AUTH_CONTEXT",
+        message: "Authenticated user context is missing.",
+      });
+    }
+
+    return this.socialService.followUser(followerId, params.userId);
   }
 
   @ApiOperation({
