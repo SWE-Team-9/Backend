@@ -357,19 +357,63 @@ export class AuthService {
   // ═══════════════════════════════════════════════════════════════════════════
   // Endpoints 5 & 6: Google OAuth Login
   // ═══════════════════════════════════════════════════════════════════════════
-  async googleLogin(
-    googleUser: {
-      googleId: string;
-      email: string;
-      displayName: string;
-      avatarUrl: string | null;
-    },
-    ip: string,
-    userAgent: string,
-  ) {
+  private mapAuthUser(user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      display_name: user.profile?.displayName ?? "",
+      handle: user.profile?.handle ?? "",
+      avatar_url: user.profile?.avatarUrl ?? null,
+      account_type: user.profile?.accountType ?? "LISTENER",
+      system_role: user.systemRole,
+      is_verified: user.isVerified,
+    };
+  }
+
+  private assertUserCanLogin(user: any): void {
+    if (user.accountStatus === "SUSPENDED") {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "ACCOUNT_SUSPENDED",
+        message: `Your account is suspended until ${user.suspendedUntil?.toISOString() ?? "further notice"}.`,
+      });
+    }
+
+    if (user.accountStatus === "BANNED") {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "ACCOUNT_BANNED",
+        message: "Your account has been permanently banned.",
+      });
+    }
+  }
+
+  private async resolveGoogleUser(googleUser: {
+    googleId: string;
+    email: string;
+    emailVerified: boolean;
+    displayName: string;
+    avatarUrl: string | null;
+  }) {
     const email = googleUser.email.toLowerCase();
 
-    // Case A: Check if Google identity already exists
+    if (!email) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "GOOGLE_EMAIL_MISSING",
+        message: "Google account did not provide an email address.",
+      });
+    }
+
+    if (!googleUser.emailVerified) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "EMAIL_NOT_VERIFIED",
+        message: "Google account email must be verified before login.",
+      });
+    }
+
+    // Case A: existing Google identity
     const authIdentity = await this.prisma.authIdentity.findFirst({
       where: {
         provider: "GOOGLE",
@@ -378,74 +422,72 @@ export class AuthService {
       include: { user: { include: { profile: true } } },
     });
 
-    let user: any;
-
     if (authIdentity) {
-      // Existing Google user — just log them in
-      user = authIdentity.user;
-    } else {
-      // Case B: Check if a user with this email already exists (registered via email)
-      const existingUser = await this.prisma.user.findUnique({
-        where: { email },
-        include: { profile: true },
-      });
-
-      if (existingUser) {
-        // Link Google identity to existing account
-        await this.prisma.authIdentity.create({
-          data: {
-            userId: existingUser.id,
-            provider: "GOOGLE",
-            providerUserId: googleUser.googleId,
-            providerEmail: email,
-          },
-        });
-        user = existingUser;
-      } else {
-        // Case C: Brand new user — create everything
-        user = await this.prisma.$transaction(async (tx: any) => {
-          const newUser = await tx.user.create({
-            data: {
-              email,
-              isVerified: true, // Google already verified the email
-              dateOfBirth: new Date("2000-01-01"), // Placeholder
-              gender: "PREFER_NOT_TO_SAY",
-            },
-          });
-
-          const handle = await this.buildUniqueHandle(googleUser.displayName, tx);
-          await tx.userProfile.create({
-            data: {
-              userId: newUser.id,
-              handle,
-              displayName: googleUser.displayName,
-              avatarUrl: googleUser.avatarUrl,
-            },
-          });
-
-          await tx.authIdentity.create({
-            data: {
-              userId: newUser.id,
-              provider: "GOOGLE",
-              providerUserId: googleUser.googleId,
-              providerEmail: email,
-            },
-          });
-
-          return {
-            ...newUser,
-            profile: {
-              handle,
-              displayName: googleUser.displayName,
-              avatarUrl: googleUser.avatarUrl,
-              accountType: "LISTENER",
-            },
-          };
-        });
-      }
+      return authIdentity.user;
     }
 
-    // Create tokens and session
+    // Case B: existing user with this email
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+      include: { profile: true },
+    });
+
+    if (existingUser) {
+      await this.prisma.authIdentity.create({
+        data: {
+          userId: existingUser.id,
+          provider: "GOOGLE",
+          providerUserId: googleUser.googleId,
+          providerEmail: email,
+        },
+      });
+
+      return existingUser;
+    }
+
+    // Case C: first login with this email -> create verified user + profile + identity
+    return this.prisma.$transaction(async (tx: any) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          isVerified: true,
+          dateOfBirth: new Date("2000-01-01"),
+          gender: "PREFER_NOT_TO_SAY",
+        },
+      });
+
+      const handle = await this.buildUniqueHandle(googleUser.displayName, tx);
+      await tx.userProfile.create({
+        data: {
+          userId: newUser.id,
+          handle,
+          displayName: googleUser.displayName,
+          avatarUrl: googleUser.avatarUrl,
+        },
+      });
+
+      await tx.authIdentity.create({
+        data: {
+          userId: newUser.id,
+          provider: "GOOGLE",
+          providerUserId: googleUser.googleId,
+          providerEmail: email,
+        },
+      });
+
+      return {
+        ...newUser,
+        profile: {
+          handle,
+          displayName: googleUser.displayName,
+          avatarUrl: googleUser.avatarUrl,
+          accountType: "LISTENER",
+        },
+      };
+    });
+  }
+
+  private async issueLoginTokens(user: any, ip: string, userAgent: string) {
     const accessToken = this.tokenService.signAccessToken(user.id, user.systemRole ?? "USER");
     const { raw: refreshToken, hash: refreshTokenHash } = this.tokenService.createRefreshToken();
 
@@ -456,13 +498,88 @@ export class AuthService {
       userAgent,
     });
 
-    // Update last login time
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+      user: this.mapAuthUser(user),
+    };
+  }
+
+  async googleLogin(
+    googleUser: {
+      googleId: string;
+      email: string;
+      emailVerified: boolean;
+      displayName: string;
+      avatarUrl: string | null;
+    },
+    ip: string,
+    userAgent: string,
+  ) {
+    const user = await this.resolveGoogleUser(googleUser);
+    this.assertUserCanLogin(user);
+    return this.issueLoginTokens(user, ip, userAgent);
+  }
+
+  async createGoogleMobileTicket(
+    googleUser: {
+      googleId: string;
+      email: string;
+      emailVerified: boolean;
+      displayName: string;
+      avatarUrl: string | null;
+    },
+  ) {
+    const user = await this.resolveGoogleUser(googleUser);
+    this.assertUserCanLogin(user);
+
+    const ticket = crypto.randomBytes(32).toString("base64url");
+    const ticketHash = this.tokenService.hashToken(ticket);
+    const expiresAt = new Date(Date.now() + 60_000);
+
+    await (this.prisma as any).mobileOAuthTicket.create({
+      data: {
+        userId: user.id,
+        ticketHash,
+        expiresAt,
+      },
+    });
+
+    return { ticket };
+  }
+
+  async exchangeGoogleMobileTicket(ticket: string, ip: string, userAgent: string) {
+    const ticketHash = this.tokenService.hashToken(ticket);
+
+    const user = await this.prisma.$transaction(async (tx: any) => {
+      const record = await tx.mobileOAuthTicket.findUnique({
+        where: { ticketHash },
+        include: {
+          user: {
+            include: { profile: true },
+          },
+        },
+      });
+
+      if (!record || record.expiresAt < new Date()) {
+        throw new UnauthorizedException({
+          statusCode: 401,
+          error: "INVALID_MOBILE_TICKET",
+          message: "Ticket is invalid or expired.",
+        });
+      }
+
+      await tx.mobileOAuthTicket.delete({ where: { id: record.id } });
+      return record.user;
+    });
+
+    this.assertUserCanLogin(user);
+    return this.issueLoginTokens(user, ip, userAgent);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

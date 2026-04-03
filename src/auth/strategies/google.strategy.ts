@@ -21,10 +21,16 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     profile: Profile,
     done: VerifyCallback,
   ) {
+    const primaryEmail = profile.emails?.[0]?.value ?? "";
+    const emailVerified = Boolean(
+      (profile as any)?._json?.email_verified ?? profile.emails?.[0]?.verified,
+    );
+
     // Pull out the fields we need
     const googleUser = {
       googleId: profile.id,
-      email: profile.emails?.[0]?.value ?? "",
+      email: primaryEmail,
+      emailVerified,
       displayName: profile.displayName ?? "",
       avatarUrl: profile.photos?.[0]?.value ?? null,
     };

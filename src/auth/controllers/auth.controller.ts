@@ -19,6 +19,7 @@ import {
   ApiResponse,
   ApiBody,
   ApiParam,
+  ApiQuery,
   ApiBearerAuth,
   ApiCookieAuth,
   ApiExcludeEndpoint,
@@ -38,6 +39,8 @@ import {
   VerifyEmailDto,
   ResendVerificationDto,
   LoginDto,
+  GoogleAuthQueryDto,
+  GoogleMobileExchangeDto,
   ForgotPasswordDto,
   ResetPasswordDto,
   ChangePasswordDto,
@@ -199,11 +202,17 @@ export class AuthController {
       "Redirects the browser to Google's OAuth consent page. " +
       "This endpoint is not testable via Swagger — open it directly in a browser tab.",
   })
+  @ApiQuery({
+    name: "platform",
+    required: false,
+    enum: ["web", "mobile"],
+    description: "OAuth caller platform. Defaults to web.",
+  })
   @ApiResponse({ status: 302, description: "Redirect to Google OAuth consent page." })
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get("google")
-  googleRedirect() {
+  googleRedirect(@Query() _query: GoogleAuthQueryDto) {
     // Passport redirects to Google — this method body is never reached
   }
 
@@ -219,15 +228,48 @@ export class AuthController {
     const googleUser = req.user as any;
     const ip = req.ip ?? "unknown";
     const userAgent = req.headers["user-agent"] ?? "unknown";
+    const state = String(req.query?.state ?? "web").toLowerCase();
+    const platform = state === "mobile" ? "mobile" : "web";
+
+    if (platform === "mobile") {
+      const { ticket } = await this.authService.createGoogleMobileTicket(googleUser);
+      return res.redirect(`soundclone://auth/callback?ticket=${encodeURIComponent(ticket)}`);
+    }
 
     const result = await this.authService.googleLogin(googleUser, ip, userAgent);
-
-    // Set httpOnly cookies
     this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-    // Redirect to frontend dashboard
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    res.redirect(`${frontendUrl}/auth/callback`);
+    const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:3000";
+    return res.redirect(`${frontendUrl}/discover`);
+  }
+
+  @ApiOperation({
+    summary: "Exchange mobile Google OAuth ticket",
+    description:
+      "Mobile-only endpoint. Exchanges a one-time 60-second Google OAuth ticket for standard auth cookies and user payload.",
+  })
+  @ApiBody({ type: GoogleMobileExchangeDto })
+  @ApiResponse({ status: 200, description: "Ticket exchange successful — auth cookies set." })
+  @ApiResponse({ status: 401, description: "Invalid or expired mobile ticket." })
+  @Public()
+  @ThrottlePolicy(20, 60_000)
+  @Post("google/mobile-exchange")
+  @HttpCode(HttpStatus.OK)
+  async googleMobileExchange(
+    @Body() dto: GoogleMobileExchangeDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const ip = req.ip ?? "unknown";
+    const userAgent = req.headers["user-agent"] ?? "unknown";
+    const result = await this.authService.exchangeGoogleMobileTicket(dto.ticket, ip, userAgent);
+
+    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
+
+    return {
+      message: "Login successful",
+      user: result.user,
+    };
   }
 
   // ─── Endpoint 7: POST /auth/refresh ────────────────────────────────────

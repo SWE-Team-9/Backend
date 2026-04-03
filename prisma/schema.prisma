@@ -307,6 +307,7 @@ model User {
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
   emailChangeRequests      EmailChangeRequest[]
+  mobileOAuthTickets       MobileOAuthTicket[]
   favoriteGenres           UserFavoriteGenre[]
   socialLinks              UserSocialLink[]
   handleHistory            UserHandleHistory[]
@@ -464,6 +465,20 @@ model EmailChangeRequest {
 
   @@index([userId])
   @@map("email_change_requests")
+}
+
+model MobileOAuthTicket {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  ticketHash String   @unique @map("ticket_hash")
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("mobile_oauth_tickets")
 }
 
 

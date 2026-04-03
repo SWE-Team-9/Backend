@@ -167,6 +167,33 @@ export class LoginDto {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Google OAuth: Platform Routing + Mobile Ticket Exchange
+// ══════════════════════════════════════════════════════════════════════════════
+export class GoogleAuthQueryDto {
+  @ApiPropertyOptional({
+    enum: ["web", "mobile"],
+    example: "web",
+    description:
+      "OAuth caller platform. Passed through Passport state to isolate callback behavior.",
+  })
+  @IsOptional()
+  @IsEnum(["web", "mobile"], {
+    message: "platform must be either 'web' or 'mobile'.",
+  })
+  platform?: "web" | "mobile";
+}
+
+export class GoogleMobileExchangeDto {
+  @ApiProperty({
+    example: "l3f8mQv4V8nT4J5Q2vVx7Q7V7D0z...",
+    description: "One-time mobile OAuth ticket from /auth/google/callback redirect.",
+  })
+  @IsString()
+  @IsNotEmpty({ message: "ticket is required." })
+  ticket!: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Endpoint 10: Forgot Password
 // ══════════════════════════════════════════════════════════════════════════════
 export class ForgotPasswordDto {
