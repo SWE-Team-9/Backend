@@ -145,18 +145,114 @@ export class SocialService {
     };
   }
 
-  getFollowers(params: UserIdParamDto, query: PaginationQueryDto) {
-    // TODO: Implement paginated followers list retrieval.
-    void params;
-    void query;
-    throw new NotImplementedException("TODO: implement getFollowers");
+  async getFollowers(userId: string, query: PaginationQueryDto) {
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!targetUser || targetUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Target user not found.",
+      });
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.userFollow.count({ where: { followingId: userId } }),
+      this.prisma.userFollow.findMany({
+        where: { followingId: userId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          follower: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  handle: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      followers: rows.map((row) => ({
+        id: row.follower.id,
+        display_name: row.follower.profile?.displayName ?? "",
+        handle: row.follower.profile?.handle ?? "",
+        avatar_url: row.follower.profile?.avatarUrl ?? null,
+      })),
+    };
   }
 
-  getFollowing(params: UserIdParamDto, query: PaginationQueryDto) {
-    // TODO: Implement paginated following list retrieval.
-    void params;
-    void query;
-    throw new NotImplementedException("TODO: implement getFollowing");
+  async getFollowing(userId: string, query: PaginationQueryDto) {
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!targetUser || targetUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Target user not found.",
+      });
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.userFollow.count({ where: { followerId: userId } }),
+      this.prisma.userFollow.findMany({
+        where: { followerId: userId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          following: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  handle: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      following: rows.map((row) => ({
+        id: row.following.id,
+        display_name: row.following.profile?.displayName ?? "",
+        handle: row.following.profile?.handle ?? "",
+        avatar_url: row.following.profile?.avatarUrl ?? null,
+      })),
+    };
   }
 
   getSuggestions(query: SuggestionsQueryDto) {

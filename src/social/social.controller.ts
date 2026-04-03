@@ -122,8 +122,7 @@ export class SocialController {
     @Param() params: UserIdParamDto,
     @Query() query: PaginationQueryDto,
   ) {
-    // TODO: Implement paginated followers list retrieval.
-    return this.socialService.getFollowers(params, query);
+    return this.socialService.getFollowers(params.userId, query);
   }
 
   @ApiOperation({
@@ -155,7 +154,7 @@ export class SocialController {
     @Param() params: UserIdParamDto,
     @Query() query: PaginationQueryDto,
   ) {
-    return this.socialService.getFollowing(params, query);
+    return this.socialService.getFollowing(params.userId, query);
   }
 
   @ApiOperation({
