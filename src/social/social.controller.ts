@@ -282,8 +282,18 @@ export class SocialController {
     },
   })
   @Get("blocked-users")
-  getBlockedUsers(@Query() query: PaginationQueryDto) {
-    // TODO: Implement paginated blocked users retrieval.
-    return this.socialService.getBlockedUsers(query);
+  getBlockedUsers(
+    @CurrentUser("userId") userId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    if (!userId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "INVALID_AUTH_CONTEXT",
+        message: "Authenticated user context is missing.",
+      });
+    }
+
+    return this.socialService.getBlockedUsers(userId, query);
   }
 }

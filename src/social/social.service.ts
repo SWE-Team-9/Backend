@@ -443,9 +443,59 @@ export class SocialService {
     };
   }
 
-  getBlockedUsers(query: PaginationQueryDto) {
-    // TODO: Implement paginated blocked users retrieval.
-    void query;
-    throw new NotImplementedException("TODO: implement getBlockedUsers");
+  async getBlockedUsers(userId: string, query: PaginationQueryDto) {
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!currentUser || currentUser.deletedAt) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: "USER_NOT_FOUND",
+        message: "Authenticated user not found.",
+      });
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.userBlock.count({ where: { blockerId: userId } }),
+      this.prisma.userBlock.findMany({
+        where: { blockerId: userId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          blocked: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  handle: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      blockedUsers: rows.map((row) => ({
+        id: row.blocked.id,
+        display_name: row.blocked.profile?.displayName ?? "",
+        handle: row.blocked.profile?.handle ?? "",
+        avatar_url: row.blocked.profile?.avatarUrl ?? null,
+        blockedAt: row.createdAt,
+      })),
+    };
   }
 }
