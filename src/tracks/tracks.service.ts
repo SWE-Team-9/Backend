@@ -132,6 +132,12 @@ const TRACK_DETAIL_SELECT = {
       status: true,
     },
   },
+  _count: {
+    select: {
+      likes: true,
+      reposts: true,
+    },
+  },
 } as const;
 
 /** Lightweight fields for list views */
@@ -159,6 +165,12 @@ const TRACK_LIST_SELECT = {
   },
   primaryGenre: {
     select: { name: true },
+  },
+  _count: {
+    select: {
+      likes: true,
+      reposts: true,
+    },
   },
 } as const;
 
@@ -781,6 +793,8 @@ export class TracksService {
           size: f.fileSizeBytes ? Number(f.fileSizeBytes) : null,
           status: f.status,
         })) ?? [],
+      likesCount: track._count?.likes ?? 0,
+      repostsCount: track._count?.reposts ?? 0,
     };
   }
 
@@ -803,6 +817,8 @@ export class TracksService {
         handle: track.uploader?.profile?.handle,
         avatarUrl: track.uploader?.profile?.avatarUrl,
       },
+      likesCount: track._count?.likes ?? 0,
+      repostsCount: track._count?.reposts ?? 0,
     };
   }
 }

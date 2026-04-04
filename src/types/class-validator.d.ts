@@ -53,6 +53,7 @@ declare module "class-validator" {
   ): PropertyDecorator;
   export function IsInt(options?: object): PropertyDecorator;
   export function Min(min: number, options?: object): PropertyDecorator;
+  export function Max(max: number, options?: object): PropertyDecorator;
   export function IsDateString(
     options?: object,
     validationOptions?: object,

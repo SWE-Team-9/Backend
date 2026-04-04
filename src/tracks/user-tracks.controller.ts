@@ -90,6 +90,8 @@ export class UserTracksController {
               handle: 'amrdiab',
               avatarUrl: 'https://example.com/avatars/amrdiab.jpg',
             },
+            likesCount: 12,
+            repostsCount: 3,
           },
         ],
       },

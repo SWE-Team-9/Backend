@@ -175,6 +175,8 @@ export class TracksController {
         visibility: 'PRIVATE',
         status: 'FINISHED',
         waveformData: [0.1, 0.3, 0.5, 0.7, 0.4],
+        likesCount: 0,
+        repostsCount: 0,
         message: 'Access granted via secret token',
       },
     },
@@ -332,6 +334,8 @@ export class TracksController {
             status: 'READY',
           },
         ],
+        likesCount: 12,
+        repostsCount: 3,
       },
     },
   })
