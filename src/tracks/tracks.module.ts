@@ -1,13 +1,16 @@
 import { Module } from "@nestjs/common";
 
 import { PrismaModule } from "../prisma/prisma.module";
-import { EngagementController } from "./engagement.controller";
-import { EngagementService } from "./engagement.service";
+import { InteractionsController } from "./interactions.controller";
+import { InteractionsGateway } from "./interactions.gateway";
+import { InteractionsService } from "./interactions.service";
+import { TracksController } from "./tracks.controller";
+import { TracksService } from "./tracks.service";
 
 @Module({
   imports: [PrismaModule],
-  controllers: [EngagementController],
-  providers: [EngagementService],
-  exports: [EngagementService],
+  controllers: [InteractionsController, TracksController],
+  providers: [InteractionsService, InteractionsGateway, TracksService],
+  exports: [InteractionsService, TracksService],
 })
 export class TracksModule {}
