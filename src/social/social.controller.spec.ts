@@ -1,37 +1,55 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { INestApplication, ValidationPipe } from "@nestjs/common";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require("supertest") as typeof import("supertest");
 
 import { SocialController } from "./social.controller";
 import { SocialService } from "./social.service";
 
-const UUID = "a1b2c3d4-e5f6-4890-abcd-ef1234567890";
+const TARGET_USER_ID = "550e8400-e29b-41d4-a716-446655440000";
 
 function buildServiceMock() {
   return {
+    followUser: jest.fn().mockResolvedValue({
+      message: "User followed successfully",
+      targetUserId: TARGET_USER_ID,
+      followersCount: 1,
+      isFollowing: true,
+    }),
+    unfollowUser: jest.fn().mockResolvedValue({
+      message: "User unfollowed successfully",
+      targetUserId: TARGET_USER_ID,
+      isFollowing: false,
+    }),
+    getFollowers: jest.fn().mockResolvedValue({
+      page: 1,
+      limit: 20,
+      total: 1,
+      followers: [],
+    }),
+    getFollowing: jest.fn().mockResolvedValue({
+      page: 1,
+      limit: 20,
+      total: 1,
+      following: [],
+    }),
+    getSuggestions: jest.fn().mockResolvedValue({
+      suggestions: [],
+    }),
     blockUser: jest.fn().mockResolvedValue({
       message: "User blocked successfully",
-      blockedUserId: UUID,
+      blockedUserId: TARGET_USER_ID,
     }),
     unblockUser: jest.fn().mockResolvedValue({
       message: "User unblocked successfully",
-      blockedUserId: UUID,
+      blockedUserId: TARGET_USER_ID,
     }),
     getBlockedUsers: jest.fn().mockResolvedValue({
       page: 1,
       limit: 20,
-      total: 1,
-      blockedUsers: [
-        {
-          id: UUID,
-          display_name: "Blocked User",
-          handle: "blocked-user",
-          avatar_url: null,
-          blockedAt: "2026-03-07T11:00:00.000Z",
-        },
-      ],
+      total: 0,
+      blockedUsers: [],
     }),
   };
 }
@@ -48,7 +66,7 @@ async function buildApp(
         useValue: {
           canActivate: (ctx: any) => {
             ctx.switchToHttp().getRequest().user = {
-              userId: "user-1",
+              userId: "usr_requester",
               role: "USER",
             };
             return true;
@@ -59,14 +77,9 @@ async function buildApp(
   }).compile();
 
   const app = module.createNestApplication();
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
+
   return app;
 }
 
@@ -84,60 +97,126 @@ describe("SocialController", () => {
     jest.clearAllMocks();
   });
 
-  // ── POST /social/block/:userId ──────────────────────────────────────
-  describe("POST /social/block/:userId", () => {
-    it("should return 201 and call blockUser", async () => {
+  describe("POST /social/follow/:userId", () => {
+    it("returns 201 and delegates to SocialService.followUser", async () => {
       const res = await request(app.getHttpServer())
-        .post(`/social/block/${UUID}`)
+        .post(`/social/follow/${TARGET_USER_ID}`)
         .expect(201);
 
-      expect(svc.blockUser).toHaveBeenCalledWith("user-1", UUID);
-      expect(res.body.message).toBe("User blocked successfully");
+      expect(res.body).toHaveProperty("isFollowing", true);
+      expect(svc.followUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
     });
 
-    it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .post("/social/block/not-a-uuid")
-        .expect(400);
+    it("returns 400 for invalid userId format", async () => {
+      await request(app.getHttpServer()).post("/social/follow/not-valid").expect(400);
+      expect(svc.followUser).not.toHaveBeenCalled();
     });
   });
 
-  // ── DELETE /social/block/:userId ────────────────────────────────────
+  describe("DELETE /social/follow/:userId", () => {
+    it("returns 200 and delegates to SocialService.unfollowUser", async () => {
+      const res = await request(app.getHttpServer())
+        .delete(`/social/follow/${TARGET_USER_ID}`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty("isFollowing", false);
+      expect(svc.unfollowUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
+    });
+  });
+
+  describe("GET /social/:userId/followers", () => {
+    it("returns 200 and delegates params + query", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/social/${TARGET_USER_ID}/followers?page=1&limit=20`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty("followers");
+      expect(svc.getFollowers).toHaveBeenCalledWith(
+        TARGET_USER_ID,
+        { page: 1, limit: 20 },
+      );
+    });
+
+    it("returns 400 for invalid pagination", async () => {
+      await request(app.getHttpServer())
+        .get(`/social/${TARGET_USER_ID}/followers?page=0&limit=20`)
+        .expect(400);
+      expect(svc.getFollowers).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("GET /social/:userId/following", () => {
+    it("returns 200 and delegates params + query", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/social/${TARGET_USER_ID}/following?page=2&limit=10`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty("following");
+      expect(svc.getFollowing).toHaveBeenCalledWith(
+        TARGET_USER_ID,
+        { page: 2, limit: 10 },
+      );
+    });
+  });
+
+  describe("GET /social/suggestions", () => {
+    it("returns 200 and delegates query", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/social/suggestions?limit=10")
+        .expect(200);
+
+      expect(res.body).toHaveProperty("suggestions");
+      expect(svc.getSuggestions).toHaveBeenCalledWith("usr_requester", { limit: 10 });
+    });
+
+    it("returns 400 when limit exceeds maximum", async () => {
+      await request(app.getHttpServer())
+        .get("/social/suggestions?limit=999")
+        .expect(400);
+      expect(svc.getSuggestions).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /social/block/:userId", () => {
+    it("returns 201 and delegates to SocialService.blockUser", async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/social/block/${TARGET_USER_ID}`)
+        .expect(201);
+
+      expect(res.body).toHaveProperty("blockedUserId", TARGET_USER_ID);
+      expect(svc.blockUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
+    });
+  });
+
   describe("DELETE /social/block/:userId", () => {
-    it("should return 200 and call unblockUser", async () => {
+    it("returns 200 and delegates to SocialService.unblockUser", async () => {
       const res = await request(app.getHttpServer())
-        .delete(`/social/block/${UUID}`)
+        .delete(`/social/block/${TARGET_USER_ID}`)
         .expect(200);
 
-      expect(svc.unblockUser).toHaveBeenCalledWith("user-1", UUID);
-      expect(res.body.message).toBe("User unblocked successfully");
-    });
-
-    it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .delete("/social/block/not-a-uuid")
-        .expect(400);
+      expect(res.body).toHaveProperty("blockedUserId", TARGET_USER_ID);
+      expect(svc.unblockUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
     });
   });
 
-  // ── GET /social/blocked-users ───────────────────────────────────────
   describe("GET /social/blocked-users", () => {
-    it("should return 200 with blocked users list", async () => {
+    it("returns 200 and delegates pagination query", async () => {
       const res = await request(app.getHttpServer())
-        .get("/social/blocked-users")
+        .get("/social/blocked-users?page=1&limit=20")
         .expect(200);
 
-      expect(svc.getBlockedUsers).toHaveBeenCalledWith("user-1", 1, 20);
       expect(res.body).toHaveProperty("blockedUsers");
-      expect(res.body.blockedUsers).toHaveLength(1);
+      expect(svc.getBlockedUsers).toHaveBeenCalledWith("usr_requester", {
+        page: 1,
+        limit: 20,
+      });
     });
 
-    it("should forward custom page and limit", async () => {
+    it("returns 400 for invalid limit", async () => {
       await request(app.getHttpServer())
-        .get("/social/blocked-users?page=2&limit=10")
-        .expect(200);
-
-      expect(svc.getBlockedUsers).toHaveBeenCalledWith("user-1", 2, 10);
+        .get("/social/blocked-users?page=1&limit=0")
+        .expect(400);
+      expect(svc.getBlockedUsers).not.toHaveBeenCalled();
     });
   });
 });

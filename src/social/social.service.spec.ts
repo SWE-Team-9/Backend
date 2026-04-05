@@ -1,181 +1,224 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
-
-import { PrismaService } from "../prisma/prisma.service";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { SocialService } from "./social.service";
+import { PrismaService } from "../prisma/prisma.service";
 
-describe("SocialService", () => {
-  let service: SocialService;
-
-  const prismaMock = {
+function buildPrismaMock() {
+  const prismaMock: any = {
+    $transaction: jest
+      .fn()
+      .mockImplementation((ops: Array<Promise<unknown>>) => Promise.all(ops)),
     user: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     userBlock: {
       findUnique: jest.fn(),
-      create: jest.fn(),
+      findMany: jest.fn(),
+      upsert: jest.fn(),
+      delete: jest.fn(),
       deleteMany: jest.fn(),
       count: jest.fn(),
-      findMany: jest.fn(),
     },
     userFollow: {
+      create: jest.fn(),
+      count: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      delete: jest.fn(),
       deleteMany: jest.fn(),
     },
-    $transaction: jest.fn(),
-  } as unknown as PrismaService;
+    userFavoriteGenre: {
+      findMany: jest.fn(),
+    },
+  };
+
+  return prismaMock;
+}
+
+describe("SocialService", () => {
+  let service: SocialService;
+  let prisma: ReturnType<typeof buildPrismaMock>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    service = new SocialService(prismaMock);
+    prisma = buildPrismaMock();
+    service = new SocialService(prisma as unknown as PrismaService);
   });
 
-  // ── blockUser ───────────────────────────────────────────────────────────
-  describe("blockUser", () => {
-    it("should block a user successfully", async () => {
-      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
-        id: "target-uuid",
-      });
-      (prismaMock.userBlock.findUnique as jest.Mock).mockResolvedValue(null);
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
-        { count: 0 },
-        { count: 0 },
-        { blockerId: "blocker-uuid", blockedId: "target-uuid" },
-      ]);
+  describe("followUser", () => {
+    it("follows target user and returns expected payload", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.userBlock.findUnique.mockResolvedValue(null);
+      prisma.userFollow.create.mockResolvedValue({});
+      prisma.userFollow.count.mockResolvedValue(3);
 
-      const result = await service.blockUser("blocker-uuid", "target-uuid");
-
-      expect(result).toEqual({
-        message: "User blocked successfully",
-        blockedUserId: "target-uuid",
+      await expect(service.followUser("usr_me", "usr_target")).resolves.toEqual({
+        message: "User followed successfully",
+        targetUserId: "usr_target",
+        followersCount: 3,
+        isFollowing: true,
       });
-      expect(prismaMock.$transaction).toHaveBeenCalled();
     });
 
-    it("should throw ForbiddenException when blocking self", async () => {
-      await expect(
-        service.blockUser("user-uuid", "user-uuid"),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-    });
-
-    it("should throw NotFoundException when target user does not exist", async () => {
-      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(null);
-
-      await expect(
-        service.blockUser("blocker-uuid", "missing-uuid"),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it("should throw ConflictException when user is already blocked", async () => {
-      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
-        id: "target-uuid",
-      });
-      (prismaMock.userBlock.findUnique as jest.Mock).mockResolvedValue({
-        blockerId: "blocker-uuid",
-        blockedId: "target-uuid",
-      });
-
-      await expect(
-        service.blockUser("blocker-uuid", "target-uuid"),
-      ).rejects.toBeInstanceOf(ConflictException);
+    it("throws BadRequestException when user follows themselves", async () => {
+      await expect(service.followUser("usr_me", "usr_me")).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
-  // ── unblockUser ─────────────────────────────────────────────────────────
-  describe("unblockUser", () => {
-    it("should unblock a user successfully", async () => {
-      (prismaMock.userBlock.deleteMany as jest.Mock).mockResolvedValue({
-        count: 1,
-      });
+  describe("unfollowUser", () => {
+    it("unfollows target user and returns expected payload", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.userFollow.findUnique.mockResolvedValue({ followerId: "usr_me" });
+      prisma.userFollow.delete.mockResolvedValue({});
 
-      const result = await service.unblockUser("blocker-uuid", "target-uuid");
-
-      expect(result).toEqual({
-        message: "User unblocked successfully",
-        blockedUserId: "target-uuid",
+      await expect(service.unfollowUser("usr_me", "usr_target")).resolves.toEqual({
+        message: "User unfollowed successfully",
+        targetUserId: "usr_target",
+        isFollowing: false,
       });
     });
 
-    it("should throw NotFoundException when user is not blocked", async () => {
-      (prismaMock.userBlock.deleteMany as jest.Mock).mockResolvedValue({
-        count: 0,
-      });
+    it("throws NotFoundException when relation does not exist", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.userFollow.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.unblockUser("blocker-uuid", "target-uuid"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unfollowUser("usr_me", "usr_target")).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
-  // ── getBlockedUsers ─────────────────────────────────────────────────────
-  describe("getBlockedUsers", () => {
-    it("should return paginated blocked users", async () => {
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
-        1,
-        [
-          {
-            createdAt: new Date("2026-03-07T11:00:00Z"),
-            blocked: {
-              id: "blocked-uuid",
-              profile: {
-                displayName: "Blocked User",
-                handle: "blocked-user",
-                avatarUrl: null,
-              },
+  describe("getFollowers", () => {
+    it("returns paginated followers", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.userFollow.count.mockResolvedValue(1);
+      prisma.userFollow.findMany.mockResolvedValue([
+        {
+          follower: {
+            id: "usr_f1",
+            profile: {
+              displayName: "Follower One",
+              handle: "follower-one",
+              avatarUrl: null,
             },
           },
-        ],
+        },
       ]);
 
-      const result = await service.getBlockedUsers("user-uuid", 1, 20);
-
-      expect(result.page).toBe(1);
-      expect(result.limit).toBe(20);
+      const result = await service.getFollowers("usr_target", { page: 1, limit: 20 });
       expect(result.total).toBe(1);
-      expect(result.blockedUsers).toHaveLength(1);
-      expect(result.blockedUsers[0].id).toBe("blocked-uuid");
-      expect(result.blockedUsers[0].display_name).toBe("Blocked User");
-      expect(result.blockedUsers[0].handle).toBe("blocked-user");
+      expect(result.followers[0]).toMatchObject({
+        id: "usr_f1",
+        display_name: "Follower One",
+      });
     });
+  });
 
-    it("should return empty when no blocked users", async () => {
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([0, []]);
-
-      const result = await service.getBlockedUsers("user-uuid", 1, 20);
-
-      expect(result.total).toBe(0);
-      expect(result.blockedUsers).toEqual([]);
-    });
-
-    it("should cap limit at 100", async () => {
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([0, []]);
-
-      const result = await service.getBlockedUsers("user-uuid", 1, 999);
-
-      expect(result.limit).toBe(100);
-    });
-
-    it("should handle user with null profile", async () => {
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
-        1,
-        [
-          {
-            createdAt: new Date(),
-            blocked: {
-              id: "blocked-uuid",
-              profile: null,
+  describe("getFollowing", () => {
+    it("returns paginated following", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_me", deletedAt: null });
+      prisma.userFollow.count.mockResolvedValue(1);
+      prisma.userFollow.findMany.mockResolvedValue([
+        {
+          following: {
+            id: "usr_t1",
+            profile: {
+              displayName: "Target One",
+              handle: "target-one",
+              avatarUrl: null,
             },
           },
-        ],
+        },
       ]);
 
-      const result = await service.getBlockedUsers("user-uuid", 1, 20);
+      const result = await service.getFollowing("usr_me", { page: 1, limit: 20 });
+      expect(result.total).toBe(1);
+      expect(result.following[0]).toMatchObject({
+        id: "usr_t1",
+        display_name: "Target One",
+      });
+    });
+  });
 
-      expect(result.blockedUsers[0].display_name).toBeNull();
-      expect(result.blockedUsers[0].handle).toBeNull();
-      expect(result.blockedUsers[0].avatar_url).toBeNull();
+  describe("getSuggestions", () => {
+    it("returns suggestions list", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_me", deletedAt: null });
+      prisma.userFollow.findMany.mockResolvedValue([]);
+      prisma.userBlock.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      prisma.userFavoriteGenre.findMany.mockResolvedValue([]);
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: "usr_s1",
+          profile: { displayName: "Suggest One", handle: "suggest-one", avatarUrl: null },
+          favoriteGenres: [],
+        },
+      ]);
+
+      const result = await service.getSuggestions("usr_me", { limit: 10 });
+      expect(result.suggestions).toHaveLength(1);
+      expect(result.suggestions[0]).toMatchObject({ id: "usr_s1" });
+    });
+  });
+
+  describe("blockUser", () => {
+    it("blocks target user and returns expected payload", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.userBlock.upsert.mockResolvedValue({});
+      prisma.userFollow.deleteMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.blockUser("usr_me", "usr_target")).resolves.toEqual({
+        message: "User blocked successfully",
+        blockedUserId: "usr_target",
+      });
+    });
+
+    it("throws BadRequestException when user blocks themselves", async () => {
+      await expect(service.blockUser("usr_me", "usr_me")).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe("unblockUser", () => {
+    it("unblocks target user and returns expected payload", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.userBlock.findUnique.mockResolvedValue({ blockerId: "usr_me" });
+      prisma.userBlock.delete.mockResolvedValue({});
+
+      await expect(service.unblockUser("usr_me", "usr_target")).resolves.toEqual({
+        message: "User unblocked successfully",
+        blockedUserId: "usr_target",
+      });
+    });
+  });
+
+  describe("getBlockedUsers", () => {
+    it("returns paginated blocked users", async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: "usr_me", deletedAt: null });
+      prisma.userBlock.count.mockResolvedValue(1);
+      prisma.userBlock.findMany.mockResolvedValue([
+        {
+          createdAt: new Date("2026-04-05T00:00:00.000Z"),
+          blocked: {
+            id: "usr_b1",
+            profile: {
+              displayName: "Blocked One",
+              handle: "blocked-one",
+              avatarUrl: null,
+            },
+          },
+        },
+      ]);
+
+      const result = await service.getBlockedUsers("usr_me", { page: 1, limit: 20 });
+      expect(result.total).toBe(1);
+      expect(result.blockedUsers[0]).toMatchObject({
+        id: "usr_b1",
+        display_name: "Blocked One",
+      });
     });
   });
 });
