@@ -337,6 +337,25 @@ export class InteractionsController {
     return this.interactionsService.getTrackComments(trackId);
   }
 
+  @Delete("comments/:commentId")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Delete a comment" })
+  @ApiParam({ name: "commentId", description: "Comment ID" })
+  @ApiOkResponse({
+    description: "Comment deleted.",
+    schema: {
+      example: { message: "Comment deleted successfully" },
+    },
+  })
+  @HttpCode(HttpStatus.OK)
+  deleteComment(
+    @CurrentUser("userId") userId: string,
+    @Param("commentId", new ParseUUIDPipe({ version: "4" }))
+    commentId: string,
+  ) {
+    return this.interactionsService.deleteComment(userId, commentId);
+  }
+
   @Get("tracks/:id/status")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get interaction status for current user on a track" })
