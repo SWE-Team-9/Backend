@@ -7,9 +7,6 @@ import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
 import { SocialModule } from "./social/social.module";
-import { TracksModule } from "./tracks/tracks.module";
-import { PlayerModule } from "./player/player.module";
-import { InteractionsModule } from "./interactions/interactions.module";
 import { MailModule } from "./mail/mail.module";
 import { OAuthModule } from "./oauth/oauth.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -50,9 +47,6 @@ import { validateEnvironment } from "./config/env.validation";
     OAuthModule, // OAuth2 provider (third-party API access)
     UsersModule, // Members 4, 5
     SocialModule, // Module 3: Followers & Social Graph
-    TracksModule, // Module 4: Audio Upload & Track Management
-    PlayerModule, // Module 5: Playback & Streaming Engine
-    InteractionsModule, // Module 6: Engagement & Social Interactions
   ],
   controllers: [AppController],
   providers: [
