@@ -336,6 +336,8 @@ model User {
   offlineDownloads         OfflineDownload[]
   authSessions             Session[]                 @relation("authSessions")
   UserSession              UserSession[]
+  playbackProgress         PlaybackProgress[]
+  playerSession            PlayerSession?
 
   @@index([email])
   @@index([accountStatus])
@@ -608,6 +610,8 @@ model Track {
   moderationActions ModerationAction[]
   offlineDownloads  OfflineDownload[]
   dailyStats        TrackDailyStat[]
+  playbackProgress  PlaybackProgress[]
+  playerSessions    PlayerSession[]      @relation("PlayerSessionTrack")
 
   @@index([uploaderId])
   @@index([slug])
@@ -1177,6 +1181,40 @@ model DailyPlatformMetric {
   activeSubscribers Int      @default(0) @map("active_subscribers")
 
   @@map("daily_platform_metrics")
+}
+
+// =============================================================================
+// Playback & Streaming
+// =============================================================================
+
+model PlaybackProgress {
+  userId          String   @map("user_id") @db.Uuid
+  trackId         String   @map("track_id") @db.Uuid
+  positionSeconds Int      @map("position_seconds")
+  durationSeconds Int      @map("duration_seconds")
+  isCompleted     Boolean  @default(false) @map("is_completed")
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, trackId])
+  @@map("playback_progress")
+}
+
+model PlayerSession {
+  userId          String   @id @map("user_id") @db.Uuid
+  currentTrackId  String?  @map("current_track_id") @db.Uuid
+  positionSeconds Int      @default(0) @map("position_seconds")
+  isPlaying       Boolean  @default(false) @map("is_playing")
+  volume          Float    @default(0.8)
+  queueTrackIds   String[] @map("queue_track_ids") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentTrack Track? @relation("PlayerSessionTrack", fields: [currentTrackId], references: [id], onDelete: SetNull)
+
+  @@map("player_sessions")
 }
 
 model Session {
