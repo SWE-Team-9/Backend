@@ -76,6 +76,9 @@ function buildServiceMock() {
       timestampAt: 42,
       user: { userId: "user-1", displayName: "Demo", avatarUrl: null },
     }),
+    deleteComment: jest.fn().mockResolvedValue({
+      message: "Comment deleted successfully",
+    }),
     getTrackComments: jest.fn().mockResolvedValue([]),
     getInteractionStatus: jest
       .fn()
@@ -306,6 +309,24 @@ describe("InteractionsController", () => {
 
       expect(svc.getTrackComments).toHaveBeenCalledWith(UUID);
       expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
+
+  // ── DELETE /interactions/comments/:commentId ────────────────────────────
+  describe("DELETE /interactions/comments/:commentId", () => {
+    it("should return 200 and call deleteComment", async () => {
+      const res = await request(app.getHttpServer())
+        .delete(`/interactions/comments/${UUID}`)
+        .expect(200);
+
+      expect(svc.deleteComment).toHaveBeenCalledWith("user-1", UUID);
+      expect(res.body.message).toBe("Comment deleted successfully");
+    });
+
+    it("should return 400 for invalid UUID", async () => {
+      await request(app.getHttpServer())
+        .delete("/interactions/comments/not-a-uuid")
+        .expect(400);
     });
   });
 

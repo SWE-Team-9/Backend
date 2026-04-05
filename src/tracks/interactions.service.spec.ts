@@ -34,6 +34,8 @@ describe("InteractionsService", () => {
     comment: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+      delete: jest.fn(),
     },
     $transaction: jest.fn(),
   } as unknown as PrismaService;
@@ -559,6 +561,44 @@ describe("InteractionsService", () => {
       await expect(
         service.getTrackComments("missing"),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // ── deleteComment ──────────────────────────────────────────────────────
+  describe("deleteComment", () => {
+    it("should delete a comment successfully", async () => {
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: "comment-uuid",
+        userId: "listener-uuid",
+      });
+      (prismaMock.comment.delete as jest.Mock).mockResolvedValue({});
+
+      const result = await service.deleteComment("listener-uuid", "comment-uuid");
+
+      expect(result).toEqual({ message: "Comment deleted successfully" });
+      expect(prismaMock.comment.delete).toHaveBeenCalledWith({
+        where: { id: "comment-uuid" },
+      });
+    });
+
+    it("should throw NotFoundException when comment does not exist", async () => {
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.deleteComment("listener-uuid", "missing-comment"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("should throw ForbiddenException when deleting another user's comment", async () => {
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: "comment-uuid",
+        userId: "other-user-uuid",
+      });
+
+      await expect(
+        service.deleteComment("listener-uuid", "comment-uuid"),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prismaMock.comment.delete).not.toHaveBeenCalled();
     });
   });
 

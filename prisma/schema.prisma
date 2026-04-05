@@ -716,6 +716,7 @@ model Comment {
   trackId      String   @map("track_id") @db.Uuid
   content      String   @db.Text
   timestampAt  Int      @map("timestamp_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   track             Track              @relation(fields: [trackId], references: [id], onDelete: Cascade)

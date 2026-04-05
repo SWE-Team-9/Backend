@@ -496,6 +496,34 @@ export class InteractionsService {
     };
   }
 
+  async deleteComment(
+    userId: string,
+    commentId: string,
+  ): Promise<{ message: string }> {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { id: true, userId: true },
+    });
+
+    if (!comment) {
+      throw new NotFoundException({
+        code: "COMMENT_NOT_FOUND",
+        message: "Comment not found.",
+      });
+    }
+
+    if (comment.userId !== userId) {
+      throw new ForbiddenException({
+        code: "COMMENT_NOT_OWNED",
+        message: "You can only delete your own comments.",
+      });
+    }
+
+    await this.prisma.comment.delete({ where: { id: commentId } });
+
+    return { message: "Comment deleted successfully" };
+  }
+
   async getTrackComments(trackId: string): Promise<CommentResponse[]> {
     await this.ensureTrackExists(trackId);
 
