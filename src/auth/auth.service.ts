@@ -146,6 +146,7 @@ export class AuthService {
             message: "An account with this email already exists.",
           });
         }
+
       }
 
       throw error;
