@@ -71,6 +71,8 @@ export class UsersService {
     const isOwner = requesterId === profile.userId;
     if (profile.visibility === "PRIVATE" && !isOwner) {
       return {
+        id: profile.userId, //Menna
+        user_id: profile.userId,//Menna
         handle: profile.handle,
         display_name: profile.displayName,
         avatarUrl: profile.avatarUrl,
@@ -78,8 +80,8 @@ export class UsersService {
         is_private: true,
       };
     }
-
-    const [genres, socialLinks, trackCount] = await Promise.all([
+//Menna
+    const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
       this.prisma.userFavoriteGenre.findMany({
         where: { userId: profile.userId },
         include: { genre: true },
@@ -92,10 +94,23 @@ export class UsersService {
         ? this.prisma.track.count({
             where: { uploaderId: profile.userId, deletedAt: null },
           })
-        : Promise.resolve(0),
+        : Promise.resolve(0), //Menna
+      this.prisma.userFollow.count({
+        where: { followingId: profile.userId },
+      }),
+      this.prisma.userFollow.count({
+        where: { followerId: profile.userId },
+      }),
     ]);
-
-    return this.formatFullProfile(profile, genres, socialLinks, trackCount);
+//Menna
+    return this.formatFullProfile(
+      profile,
+      genres,
+      socialLinks,
+      trackCount,
+      followersCount,
+      followingCount,
+    );
   }
 
   async getMyProfile(userId: string) {
@@ -107,8 +122,8 @@ export class UsersService {
     if (!profile) {
       throw new NotFoundException("Profile not found.");
     }
-
-    const [genres, socialLinks, trackCount] = await Promise.all([
+//Menna
+    const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
       this.prisma.userFavoriteGenre.findMany({
         where: { userId },
         include: { genre: true },
@@ -122,9 +137,23 @@ export class UsersService {
             where: { uploaderId: userId, deletedAt: null },
           })
         : Promise.resolve(0),
+        // Menna
+      this.prisma.userFollow.count({
+        where: { followingId: userId },
+      }),
+      this.prisma.userFollow.count({
+        where: { followerId: userId },
+      }),
     ]);
 
-    return this.formatFullProfile(profile, genres, socialLinks, trackCount);
+    return this.formatFullProfile(
+      profile,
+      genres,
+      socialLinks,
+      trackCount,
+      followersCount,
+      followingCount,
+    );
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -291,8 +320,14 @@ export class UsersService {
     genres: any[],
     socialLinks: any[],
     trackCount: number,
+    //Menna
+    followersCount: number,
+    followingCount: number,
   ) {
     return {
+      //Menna
+      id: profile.userId,
+      user_id: profile.userId,
       handle: profile.handle,
       display_name: profile.displayName,
       bio: profile.bio,
@@ -316,6 +351,9 @@ export class UsersService {
         url: sl.url,
         sort_order: index,
       })),
+      //Menna
+      followers_count: followersCount,
+      following_count: followingCount,
       track_count: trackCount,
     };
   }
