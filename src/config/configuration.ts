@@ -4,7 +4,6 @@ export default () => ({
     port: Number(process.env.PORT ?? 3000),
     clientUrl: process.env.CLIENT_URL ?? "http://localhost:5173",
     apiUrl: process.env.API_URL ?? "http://localhost:3000/api/v1",
-    transcodingApiKey: process.env.TRANSCODING_API_KEY ?? "",
   },
   security: {
     jwtSecret: process.env.JWT_SECRET,
