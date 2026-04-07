@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -62,7 +63,10 @@ const UPLOAD_OPTIONS = {
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only MP3 and WAV audio files are allowed.'), false);
+      cb(
+        new BadRequestException('Only MP3 and WAV audio files are allowed.') as unknown as Error,
+        false,
+      );
     }
   },
 };

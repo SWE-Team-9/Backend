@@ -132,7 +132,7 @@ describe('TracksController', () => {
           contentType: 'image/png',
         })
         .field('title', 'Bad File')
-        .expect(500); // multer filter throws Error → 500 by default
+        .expect(400); // multer filter throws BadRequestException → 400
     });
   });
 

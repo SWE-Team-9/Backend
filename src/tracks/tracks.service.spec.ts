@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 import { TracksService } from './tracks.service';
+import { TranscodingService } from './transcoding.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TrackVisibility, TrackStatus, FileRole, FileStatus } from '@prisma/client';
 
@@ -182,16 +183,19 @@ describe('TracksService', () => {
   let service: TracksService;
   let prisma: ReturnType<typeof buildPrismaMock>;
   let config: ReturnType<typeof buildConfigMock>;
+  let transcodingService: { processTrack: jest.Mock };
 
   beforeEach(async () => {
     prisma = buildPrismaMock();
     config = buildConfigMock();
+    transcodingService = { processTrack: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TracksService,
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: config },
+        { provide: TranscodingService, useValue: transcodingService },
       ],
     }).compile();
 
@@ -583,6 +587,9 @@ describe('TracksService', () => {
         uploaderId: USER_ID,
         publishedAt: null,
       });
+      prisma.track.findUnique.mockResolvedValue({
+        status: TrackStatus.FINISHED,
+      });
       prisma.trackTag.deleteMany.mockResolvedValue({ count: 0 });
       prisma.tag.upsert.mockImplementation(({ where }: any) =>
         Promise.resolve({ id: 1, name: where.slug, slug: where.slug }),
@@ -617,6 +624,15 @@ describe('TracksService', () => {
       await expect(
         service.updateTrack('nonexistent', USER_ID, { title: 'X' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject edits while track is PROCESSING', async () => {
+      prisma.track.findUnique.mockResolvedValue({
+        status: TrackStatus.PROCESSING,
+      });
+      await expect(
+        service.updateTrack(TRACK_ID, USER_ID, { title: 'Too Early' }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should resolve a new genre when updating', async () => {
@@ -1179,6 +1195,46 @@ describe('TracksService', () => {
       const wavCall = calls.find((c: any) => c[0].data.format === 'wav');
       expect(mp3Call[0].data.fileRole).toBe(FileRole.STREAM);
       expect(wavCall[0].data.fileRole).toBe(FileRole.ORIGINAL);
+    });
+
+    it('should store waveformData and durationMs on FINISHED', async () => {
+      prisma.track.findUnique.mockResolvedValue({
+        id: TRACK_ID,
+        status: TrackStatus.PROCESSING,
+      });
+      prisma.track.update.mockResolvedValue({});
+      prisma.trackFile.create.mockResolvedValue({});
+
+      await service.handleTranscodingCallback(API_KEY, {
+        trackId: TRACK_ID,
+        status: 'FINISHED',
+        fileUrls: { mp3: 'url1' },
+        waveformData: [0.1, 0.5, 0.9],
+        durationMs: 210000,
+      });
+
+      const updateCall = prisma.track.update.mock.calls[0][0];
+      expect(updateCall.data.waveformData).toEqual([0.1, 0.5, 0.9]);
+      expect(updateCall.data.durationMs).toBe(210000);
+    });
+
+    it('should NOT store waveformData on FAILED', async () => {
+      prisma.track.findUnique.mockResolvedValue({
+        id: TRACK_ID,
+        status: TrackStatus.PROCESSING,
+      });
+      prisma.track.update.mockResolvedValue({});
+
+      await service.handleTranscodingCallback(API_KEY, {
+        trackId: TRACK_ID,
+        status: 'FAILED',
+        waveformData: [0.1, 0.5],
+        durationMs: 100000,
+      });
+
+      const updateCall = prisma.track.update.mock.calls[0][0];
+      expect(updateCall.data.waveformData).toBeUndefined();
+      expect(updateCall.data.durationMs).toBeUndefined();
     });
   });
 

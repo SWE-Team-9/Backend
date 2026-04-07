@@ -21,6 +21,7 @@ import { nanoid } from 'nanoid';
 import { CreateTrackDto } from './dto/create-track.dto';
 import { UpdateTrackDto } from './dto/update-track.dto';
 import { TranscodingCallbackDto } from './dto/transcoding-callback.dto';
+import { TranscodingService } from './transcoding.service';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -193,6 +194,7 @@ export class TracksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly transcodingService: TranscodingService,
   ) {
     this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
     this.localUploadDir = this.config.get<string>('storage.localUploadDir', './uploads');
@@ -310,6 +312,14 @@ export class TracksService {
       return newTrack;
     });
 
+    // Fire transcoding in the background — never await so the upload response
+    // returns immediately with status=PROCESSING.
+    this.transcodingService
+      .processTrack(track.id, storageKey)
+      .catch((err) =>
+        this.logger.error(`Background processing for track ${track.id} failed: ${err}`),
+      );
+
     return this.formatTrackResponse(track, null);
   }
 
@@ -365,6 +375,17 @@ export class TracksService {
 
   async updateTrack(trackId: string, userId: string, dto: UpdateTrackDto) {
     const track = await this.findOwnedTrack(trackId, userId);
+
+    // Block edits while the track is still being processed
+    const fullTrack = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { status: true },
+    });
+    if (fullTrack?.status === TrackStatus.PROCESSING) {
+      throw new ConflictException(
+        'Cannot edit track while it is still processing.',
+      );
+    }
 
     // Resolve genre if changing
     let genreId: number | null | undefined = undefined;
@@ -587,9 +608,15 @@ export class TracksService {
       dto.status === 'FINISHED' ? TrackStatus.FINISHED : TrackStatus.FAILED;
 
     await this.prisma.$transaction(async (tx) => {
+      const trackUpdateData: any = { status: newStatus };
+      if (newStatus === TrackStatus.FINISHED) {
+        if (dto.waveformData) trackUpdateData.waveformData = dto.waveformData;
+        if (dto.durationMs) trackUpdateData.durationMs = Math.round(dto.durationMs);
+      }
+
       await tx.track.update({
         where: { id: dto.trackId },
-        data: { status: newStatus },
+        data: trackUpdateData,
       });
 
       // Store generated file references if FINISHED

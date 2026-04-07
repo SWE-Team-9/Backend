@@ -9,6 +9,12 @@ import { GlobalHttpExceptionFilter } from "./common/filters/global-http-exceptio
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
+    // Disable NestJS's built-in body parsers so we can register our own with
+    // custom size limits (see express.json / express.urlencoded below).
+    // This also prevents a double-parser conflict: NestJS's default json
+    // parser would consume the request stream before multer's FileInterceptor
+    // can process multipart/form-data uploads.
+    bodyParser: false,
     // Suppress NestJS startup logs in production to avoid leaking internals
     logger:
       process.env.NODE_ENV === "production"
@@ -115,8 +121,10 @@ async function bootstrap() {
   });
 
   // ── Request body size limit — OWASP A05 / DoS prevention ────────────────────
-  // Reject large JSON bodies before they reach any controller.
-  // Multer (file uploads) has its own per-route size limits.
+  // Since we disabled NestJS's default body parser (bodyParser: false above),
+  // these are now the ONLY JSON/urlencoded parsers on the Express stack.
+  // Reject large payloads before they reach any controller.
+  // Multer (file uploads) has its own per-route size limits via FileInterceptor.
   app.use(require("express").json({ limit: "64kb" }));
   app.use(require("express").urlencoded({ extended: true, limit: "64kb" }));
 
