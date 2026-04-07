@@ -2,6 +2,9 @@ FROM node:20
 
 WORKDIR /app
 
+# install system dependencies (added for audio processing)
+RUN apt-get update && apt-get install -y ffmpeg
+
 # copy dependencies
 COPY package*.json ./
 
