@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { TrackStatus } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -47,9 +48,22 @@ describe("PlayerService", () => {
     durationMs: 240000,
   };
 
+  const configMock = {
+    get: jest.fn((key: string, fallback?: any) => {
+      const map: Record<string, any> = {
+        'storage.provider': 's3',
+        'storage.localUploadUrl': 'http://localhost:3000/uploads',
+        'storage.s3Bucket': 'test-bucket',
+        'storage.s3Region': 'eu-north-1',
+        'storage.cdnUrl': '',
+      };
+      return map[key] ?? fallback;
+    }),
+  } as unknown as ConfigService;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PlayerService(prismaMock);
+    service = new PlayerService(prismaMock, configMock);
   });
 
   // ── getPlaybackSource ─────────────────────────────────────────────────
@@ -63,7 +77,9 @@ describe("PlayerService", () => {
       const result = await service.getPlaybackSource("user-uuid", "track-uuid");
 
       expect(result.trackId).toBe("track-uuid");
-      expect(result.streamUrl).toBe("audio/trk_123.mp3");
+      expect(result.streamUrl).toBe(
+        "https://test-bucket.s3.eu-north-1.amazonaws.com/audio/trk_123.mp3",
+      );
       expect(result.accessState).toBe("PLAYABLE");
       expect(result.expiresAt).toBeDefined();
     });

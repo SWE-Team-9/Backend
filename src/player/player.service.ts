@@ -4,13 +4,40 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { TrackStatus, TrackVisibility } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class PlayerService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly storageProvider: "local" | "s3";
+  private readonly localUploadUrl: string;
+  private readonly s3Bucket: string;
+  private readonly s3Region: string;
+  private readonly cdnUrl: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {
+    this.storageProvider = this.config.get<"local" | "s3">("storage.provider", "local");
+    this.localUploadUrl = this.config.get<string>("storage.localUploadUrl", "http://localhost:3000/uploads");
+    this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
+    this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
+    this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
+  }
+
+  /** Convert a storage key like `tracks/abc.mp3` into a full URL. */
+  private buildFileUrl(storageKey: string): string {
+    if (this.storageProvider === "s3") {
+      if (this.cdnUrl) {
+        return `${this.cdnUrl.replace(/\/+$/, "")}/${storageKey}`;
+      }
+      return `https://${this.s3Bucket}.s3.${this.s3Region}.amazonaws.com/${storageKey}`;
+    }
+    return `${this.localUploadUrl.replace(/\/+$/, "")}/${storageKey}`;
+  }
 
   // 1. GET /player/tracks/:trackId/source
   async getPlaybackSource(userId: string | null, trackId: string) {
@@ -45,9 +72,17 @@ export class PlayerService {
       select: { storageKey: true },
     });
 
+    // Fall back to the ORIGINAL upload when transcoding hasn't produced a STREAM file yet
+    const file =
+      streamFile ??
+      (await this.prisma.trackFile.findFirst({
+        where: { trackId, fileRole: "ORIGINAL", isCurrent: true },
+        select: { storageKey: true },
+      }));
+
     return {
       trackId,
-      streamUrl: streamFile?.storageKey ?? null,
+      streamUrl: file ? this.buildFileUrl(file.storageKey) : null,
       accessState: "PLAYABLE",
       expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     };
