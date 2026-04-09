@@ -23,7 +23,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 // Profile DTOs
 // =============================================================================
 
-const HANDLE_REGEX = /^[a-z0-9_]{3,30}$/;
+const HANDLE_REGEX = /^[a-z0-9][a-z0-9_-]{1,28}[a-z0-9]$/;
 
 export const ALLOWED_GENRES = [
   "electronic",
@@ -150,12 +150,12 @@ export class UpdateProfileDto {
 // =============================================================================
 
 export class CheckHandleQueryDto {
-  @ApiProperty({ example: 'yahia_dev', description: 'Handle to check (3–30 chars, lowercase letters, numbers, underscores).' })
+  @ApiProperty({ example: 'yahia_dev', description: 'Handle to check (3–30 chars, lowercase letters, numbers, underscores, hyphens).' })
   @IsString()
   @IsNotEmpty()
   @Matches(HANDLE_REGEX, {
     message:
-      "handle must be 3–30 characters and contain only lowercase letters, numbers, and underscores.",
+      "handle must be 3–30 characters and contain only lowercase letters, numbers, underscores, and hyphens.",
   })
   handle!: string;
 }
