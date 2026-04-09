@@ -335,6 +335,124 @@ export class InteractionsService {
     };
   }
 
+  async getLikedTracks(
+    userId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<MeTrackListResponse> {
+    const normalizedPage = this.normalizePage(page);
+    const normalizedLimit = this.normalizeLimit(limit);
+    const skip = (normalizedPage - 1) * normalizedLimit;
+
+    const where = {
+      userId,
+      track: { status: TrackStatus.FINISHED },
+    };
+
+    const [total, likes] = await this.prisma.$transaction([
+      this.prisma.like.count({ where }),
+      this.prisma.like.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: normalizedLimit,
+        select: {
+          createdAt: true,
+          track: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              coverArtUrl: true,
+              publishedAt: true,
+              _count: {
+                select: {
+                  likes: true,
+                  reposts: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: likes.map((like) => ({
+        interactedAt: like.createdAt,
+        track: {
+          id: like.track.id,
+          title: like.track.title,
+          slug: like.track.slug,
+          coverArtUrl: like.track.coverArtUrl,
+          publishedAt: like.track.publishedAt,
+          likesCount: like.track._count.likes,
+          repostsCount: like.track._count.reposts,
+        },
+      })),
+      pagination: this.buildPagination(total, normalizedPage, normalizedLimit),
+    };
+  }
+
+  async getRepostedTracks(
+    userId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<MeTrackListResponse> {
+    const normalizedPage = this.normalizePage(page);
+    const normalizedLimit = this.normalizeLimit(limit);
+    const skip = (normalizedPage - 1) * normalizedLimit;
+
+    const where = {
+      userId,
+      track: { status: TrackStatus.FINISHED },
+    };
+
+    const [total, reposts] = await this.prisma.$transaction([
+      this.prisma.repost.count({ where }),
+      this.prisma.repost.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: normalizedLimit,
+        select: {
+          createdAt: true,
+          track: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              coverArtUrl: true,
+              publishedAt: true,
+              _count: {
+                select: {
+                  likes: true,
+                  reposts: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: reposts.map((repost) => ({
+        interactedAt: repost.createdAt,
+        track: {
+          id: repost.track.id,
+          title: repost.track.title,
+          slug: repost.track.slug,
+          coverArtUrl: repost.track.coverArtUrl,
+          publishedAt: repost.track.publishedAt,
+          likesCount: repost.track._count.likes,
+          repostsCount: repost.track._count.reposts,
+        },
+      })),
+      pagination: this.buildPagination(total, normalizedPage, normalizedLimit),
+    };
+  }
+
   async getTrackLikers(
     trackId: string,
     page = 1,

@@ -175,6 +175,98 @@ export class InteractionsController {
     );
   }
 
+  @Get("users/:userId/likes")
+  @Public()
+  @ApiOperation({ summary: "Get liked tracks of a user" })
+  @ApiParam({ name: "userId", description: "User ID" })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
+  @ApiOkResponse({
+    description: "Liked tracks fetched.",
+    schema: {
+      example: {
+        items: [
+          {
+            interactedAt: "2026-04-04T12:00:00.000Z",
+            track: {
+              id: "uuid",
+              title: "Track title",
+              slug: "track-title",
+              coverArtUrl: null,
+              publishedAt: "2026-04-01T12:00:00.000Z",
+              likesCount: 3,
+              repostsCount: 1,
+            },
+          },
+        ],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      },
+    },
+  })
+  getUserLikes(
+    @Param("userId", new ParseUUIDPipe({ version: "4" })) userId: string,
+    @Query() pagination: PaginationQueryDto,
+  ) {
+    return this.interactionsService.getLikedTracks(
+      userId,
+      pagination.page,
+      pagination.limit,
+    );
+  }
+
+  @Get("users/:userId/reposts")
+  @Public()
+  @ApiOperation({ summary: "Get reposted tracks of a user" })
+  @ApiParam({ name: "userId", description: "User ID" })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
+  @ApiOkResponse({
+    description: "Reposted tracks fetched.",
+    schema: {
+      example: {
+        items: [
+          {
+            interactedAt: "2026-04-04T12:00:00.000Z",
+            track: {
+              id: "uuid",
+              title: "Track title",
+              slug: "track-title",
+              coverArtUrl: null,
+              publishedAt: "2026-04-01T12:00:00.000Z",
+              likesCount: 3,
+              repostsCount: 1,
+            },
+          },
+        ],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      },
+    },
+  })
+  getUserReposts(
+    @Param("userId", new ParseUUIDPipe({ version: "4" })) userId: string,
+    @Query() pagination: PaginationQueryDto,
+  ) {
+    return this.interactionsService.getRepostedTracks(
+      userId,
+      pagination.page,
+      pagination.limit,
+    );
+  }
+
   @Get("tracks/:id/likers")
   @Public()
   @ApiOperation({ summary: "Get users who liked a track" })
