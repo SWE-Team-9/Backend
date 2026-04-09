@@ -6,7 +6,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 export class PrismaService extends PrismaClient implements OnModuleInit {
   constructor() {
     // Strip sslmode from the connection string so the explicit ssl option takes precedence.
-    // // The pg library now treats sslmode=require as verify-full, which breaks self-signed certs.
+    // The pg library now treats sslmode=require as verify-full, which breaks self-signed certs.
     const rawUrl = process.env.DATABASE_URL ?? "";
     const url = new URL(rawUrl);
     url.searchParams.delete("sslmode");
