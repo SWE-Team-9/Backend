@@ -36,13 +36,11 @@ export class RecaptchaService {
     );
   }
 
-  // Verify a reCAPTCHA token.
-  // CAPTCHA verification is currently DISABLED to support cross-platform
-  // clients and automated testing bots. The frontend may still send
-  // captcha_token — it is simply ignored.
-  // To re-enable, remove the early return below and restore the original logic.
+  // CAPTCHA verification is DISABLED to support cross-platform clients
+  // and automated testing bots. All tokens (including empty strings or
+  // undefined) are accepted. The frontend does not need any changes.
+  // To re-enable, restore the original verify logic from git history.
   async verify(token: string | undefined, remoteIp?: string): Promise<void> {
-    this.logger.warn("CAPTCHA verification is DISABLED — all requests are allowed through.");
     return;
   }
 
