@@ -101,8 +101,8 @@ export class RecaptchaService {
 
           if (data.tokenProperties?.valid) {
             const score = data.riskAnalysis?.score ?? 0;
-            // Score 0.0 = likely bot, 1.0 = likely human. Threshold: 0.5
-            if (score >= 0.5) return;
+            // Score 0.0 = likely bot, 1.0 = likely human. Threshold: 0.1
+            if (score >= 0.1) return;
             this.logger.debug(`CAPTCHA Enterprise (${siteKey.substring(0, 8)}…): valid but score too low (${score})`);
           } else {
             this.logger.debug(`CAPTCHA Enterprise (${siteKey.substring(0, 8)}…): ${data.tokenProperties?.invalidReason ?? "rejected"}`);
