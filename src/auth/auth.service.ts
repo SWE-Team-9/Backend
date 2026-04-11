@@ -257,8 +257,8 @@ export class AuthService {
   // Endpoint 4: Login
   // ═══════════════════════════════════════════════════════════════════════════
   async login(dto: LoginDto, ip: string, userAgent: string) {
-    // Verify CAPTCHA before credential checks to reduce credential-stuffing risk.
-    await this.recaptchaService.verify(dto.captcha_token, ip);
+    // CAPTCHA check disabled for login.
+    // await this.recaptchaService.verify(dto.captcha_token, ip);
 
     // Find user by email
     const user = await this.prisma.user.findUnique({
