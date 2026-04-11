@@ -63,8 +63,8 @@ export class AuthService {
   // Endpoint 1: Register
   // ═══════════════════════════════════════════════════════════════════════════
   async register(dto: RegisterDto, ip?: string) {
-    // Verify CAPTCHA
-    await this.recaptchaService.verify(dto.captcha_token, ip);
+    // CAPTCHA disabled — cross-platform and testing bots need to register without it.
+    // await this.recaptchaService.verify(dto.captcha_token, ip);
 
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -257,8 +257,8 @@ export class AuthService {
   // Endpoint 4: Login
   // ═══════════════════════════════════════════════════════════════════════════
   async login(dto: LoginDto, ip: string, userAgent: string) {
-    // Verify CAPTCHA before credential checks to reduce credential-stuffing risk.
-    await this.recaptchaService.verify(dto.captcha_token, ip);
+    // CAPTCHA disabled — cross-platform and testing bots need to login without it.
+    // await this.recaptchaService.verify(dto.captcha_token, ip);
 
     // Find user by email
     const user = await this.prisma.user.findUnique({
