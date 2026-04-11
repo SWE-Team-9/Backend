@@ -5,10 +5,14 @@ import {
   IsArray,
   IsDateString,
   ArrayMaxSize,
+  Allow,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTrackDto {
+  /** Populated by FileInterceptor – allow it so forbidNonWhitelisted doesn't reject multipart uploads. */
+  @Allow()
+  audioFile?: any;
   @ApiProperty({ description: 'Track title', example: 'Ya Ana', maxLength: 100 })
   @IsString()
   @MaxLength(100)
