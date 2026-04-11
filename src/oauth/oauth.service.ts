@@ -69,17 +69,30 @@ export class OAuthService {
     clientId: string,
     clientSecret: string,
   ): Promise<any> {
-    const client = await this.db.apiClient.findUnique({
-      where: { clientId },
-    });
+    const client = await this.getActiveClient(clientId);
 
-    if (!client || !client.isActive) {
+    if (!clientSecret) {
       throw new UnauthorizedException('Invalid client credentials');
     }
 
     // Constant-time comparison of secrets
     const secretHash = this.hashToken(clientSecret);
     if (!this.timingSafeCompare(secretHash, client.clientSecretHash)) {
+      throw new UnauthorizedException('Invalid client credentials');
+    }
+
+    return client;
+  }
+
+  /**
+   * Resolve an active OAuth client by client_id.
+   */
+  private async getActiveClient(clientId: string): Promise<any> {
+    const client = await this.db.apiClient.findUnique({
+      where: { clientId },
+    });
+
+    if (!client || !client.isActive) {
       throw new UnauthorizedException('Invalid client credentials');
     }
 
@@ -181,13 +194,21 @@ export class OAuthService {
    */
   async exchangeAuthorizationCode(
     clientId: string,
-    clientSecret: string,
+    clientSecret: string | undefined,
     code: string,
     redirectUri: string,
     codeVerifier?: string,
   ): Promise<{ access_token: string; token_type: 'Bearer'; refresh_token: string; expires_in: number; scope: string }> {
-    // 1. Validate client credentials
-    const client = await this.validateClientCredentials(clientId, clientSecret);
+    // 1. Validate client authentication.
+    // Public clients are allowed only when PKCE is present.
+    const isPublicPkceRequest = !clientSecret && !!codeVerifier;
+    if (!clientSecret && !isPublicPkceRequest) {
+      throw new UnauthorizedException('Invalid client credentials');
+    }
+
+    const client = isPublicPkceRequest
+      ? await this.getActiveClient(clientId)
+      : await this.validateClientCredentials(clientId, clientSecret as string);
 
     // 2. Find authorization code
     const codeHash = this.hashToken(code);
@@ -210,6 +231,11 @@ export class OAuthService {
 
     if (authCode.redirectUri !== redirectUri) {
       throw new BadRequestException('invalid_grant'); // redirect_uri mismatch
+    }
+
+    // Public clients must use PKCE-protected codes.
+    if (isPublicPkceRequest && !authCode.codeChallenge) {
+      throw new BadRequestException('invalid_request');
     }
 
     // 3. Validate PKCE if it was used

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { createHash } from 'crypto';
 
 // Genre slugs must stay in sync with ALLOWED_GENRES in src/users/dto/profile.dto.ts
 const GENRES: { slug: string; name: string }[] = [
@@ -47,6 +48,57 @@ async function main() {
     }
 
     console.log(`Seeded ${GENRES.length} genres.`);
+
+    const nativeClientId = 'soundclone-native-app';
+    const nativeClientSecret =
+      process.env.OAUTH_NATIVE_CLIENT_SECRET ?? 'soundclone-native-dev-secret-change-me';
+    const nativeClientSecretHash = createHash('sha256')
+      .update(nativeClientSecret)
+      .digest('hex');
+
+    // OAuth native client seed (idempotent). Keeps existing secret hash on conflict.
+    await prisma.$executeRaw`
+      INSERT INTO "api_clients" (
+        "id",
+        "client_id",
+        "client_secret_hash",
+        "name",
+        "description",
+        "redirect_uris",
+        "allowed_scopes",
+        "is_active",
+        "rate_limit",
+        "rate_limit_window",
+        "created_at",
+        "updated_at"
+      )
+      VALUES (
+        gen_random_uuid(),
+        ${nativeClientId},
+        ${nativeClientSecretHash},
+        'SoundClone Native App',
+        'Public native client for Android and Windows PKCE OAuth flows',
+        ARRAY['soundclone://oauth/callback', 'http://127.0.0.1:8080/oauth/callback']::TEXT[],
+        ARRAY['openid', 'profile', 'email', 'offline_access']::TEXT[],
+        true,
+        1000,
+        3600,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT ("client_id") DO UPDATE
+      SET
+        "name" = EXCLUDED."name",
+        "description" = EXCLUDED."description",
+        "redirect_uris" = EXCLUDED."redirect_uris",
+        "allowed_scopes" = EXCLUDED."allowed_scopes",
+        "is_active" = EXCLUDED."is_active",
+        "rate_limit" = EXCLUDED."rate_limit",
+        "rate_limit_window" = EXCLUDED."rate_limit_window",
+        "updated_at" = NOW();
+    `;
+
+    console.log('Ensured OAuth client seed: soundclone-native-app');
   } finally {
     await prisma.$disconnect();
   }

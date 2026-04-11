@@ -28,12 +28,13 @@ export class TokenDto {
   client_id!: string;
 
   /**
-   * REQUIRED. Client secret for authentication.
+    * OPTIONAL for public clients using PKCE authorization code flow.
+    * REQUIRED for confidential clients and refresh token grant.
    */
+    @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(512)
-  client_secret!: string;
+    client_secret?: string;
 
   /**
    * REQUIRED for grant_type=authorization_code.

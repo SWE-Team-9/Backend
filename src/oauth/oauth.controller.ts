@@ -268,6 +268,10 @@ export class OAuthController {
         throw new BadRequestException('invalid_request');
       }
 
+      if (!body.client_secret) {
+        throw new BadRequestException('invalid_client');
+      }
+
       return await this.oauthService.refreshAccessToken(
         body.client_id,
         body.client_secret,
