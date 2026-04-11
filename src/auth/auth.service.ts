@@ -60,7 +60,7 @@ export class AuthService {
   // ═══════════════════════════════════════════════════════════════════════════
   // Endpoint 1: Register
   // ═══════════════════════════════════════════════════════════════════════════
-  async register(dto: RegisterDto, ip?: string) {
+  async register(dto: RegisterDto) {
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },

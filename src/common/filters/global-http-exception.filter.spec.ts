@@ -215,12 +215,12 @@ describe("GlobalHttpExceptionFilter", () => {
       const host = buildHost();
       filter.catch(
         new HttpException(
-          { code: "CAPTCHA_FAILED", message: "CAPTCHA verification failed." },
+          { code: "AUTH_CHECK_FAILED", message: "Security verification failed." },
           HttpStatus.UNAUTHORIZED,
         ),
         host,
       );
-      expect(getJsonPayload(host)!.error).toBe("CAPTCHA_FAILED");
+      expect(getJsonPayload(host)!.error).toBe("AUTH_CHECK_FAILED");
     });
 
     it("should fall back to the error field if code is absent", () => {
@@ -271,13 +271,13 @@ describe("GlobalHttpExceptionFilter", () => {
       const host = buildHost();
       filter.catch(
         new HttpException(
-          { message: ["captchaToken must be a string"] },
+          { message: ["securityToken must be a string"] },
           HttpStatus.BAD_REQUEST,
         ),
         host,
       );
       expect(getJsonPayload(host)!.message).toBe(
-        "captchaToken must be a string",
+        "securityToken must be a string",
       );
     });
 

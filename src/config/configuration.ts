@@ -13,14 +13,6 @@ export default () => ({
     jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY ?? "7d",
     jwtIssuer: process.env.JWT_ISSUER ?? "spotly-api",
     jwtAudience: process.env.JWT_AUDIENCE ?? "spotly-client",
-    recaptchaSecret: process.env.RECAPTCHA_SECRET,
-    recaptchaSecretCrossWeb: process.env.RECAPTCHA_SECRET_CROSS_WEB,
-    // reCAPTCHA Enterprise (shared config)
-    recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
-    recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,
-    // Per-platform Enterprise site keys
-    recaptchaEnterpriseAndroidSiteKey: process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
-    recaptchaEnterpriseWebSiteKey: process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
     authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? "false") === "true",
   },
   database: {

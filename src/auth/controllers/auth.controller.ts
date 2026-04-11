@@ -71,9 +71,8 @@ export class AuthController {
   @Public()
   @ThrottlePolicy(5, 60_000)
   @Post("register")
-  async register(@Body() dto: RegisterDto, @Req() req: Request) {
-    const ip = req.ip;
-    return this.authService.register(dto, ip);
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
   // ─── Endpoint 1.1: GET /auth/check-email ───────────────────────────────
