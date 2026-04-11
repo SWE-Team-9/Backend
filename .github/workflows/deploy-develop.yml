@@ -46,8 +46,8 @@ jobs:
             cd /home/ec2-user/dev
             
             # Pull the new backend image and restart ONLY the backend container
-            docker compose pull
-            docker compose up -d
+            docker-compose pull
+            docker-compose up -d
             
             # Clean up old Docker images
             docker system prune -a -f
