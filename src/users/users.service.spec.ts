@@ -57,6 +57,9 @@ function buildPrismaMock() {
     track: {
       count: jest.fn().mockResolvedValue(0),
     },
+    userFollow: {
+      count: jest.fn().mockResolvedValue(0),
+    },
     userHandleHistory: {
       findFirst: jest.fn().mockResolvedValue(null),
     },

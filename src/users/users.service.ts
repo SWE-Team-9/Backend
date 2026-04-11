@@ -71,11 +71,9 @@ export class UsersService {
     const isOwner = requesterId === profile.userId;
     if (profile.visibility === "PRIVATE" && !isOwner) {
       return {
-        id: profile.userId, //Menna
-        user_id: profile.userId,//Menna
         handle: profile.handle,
         display_name: profile.displayName,
-        avatarUrl: profile.avatarUrl,
+        avatar_url: profile.avatarUrl,
         account_type: profile.accountType,
         is_private: true,
       };

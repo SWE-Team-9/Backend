@@ -98,18 +98,18 @@ export function sanitizeHandle(raw: string): string {
  *
  * Rules:
  *  • 3–30 characters total
- *  • Only lowercase letters, numbers, underscores, and hyphens
- *  • Must START with a letter or number  (no leading underscore/hyphen)
- *  • Must END   with a letter or number  (no trailing underscore/hyphen)
+ *  • Only lowercase letters, numbers, and underscores
+ *  • Must START with a letter or number  (no leading underscore)
+ *  • Must END   with a letter or number  (no trailing underscore)
  *
- * Pattern breakdown:  ^[a-z0-9] [a-z0-9_-]{1,28} [a-z0-9]$
- *   First char  : [a-z0-9]         — no underscore/hyphen at position 0
- *   Middle chars: [a-z0-9_-]{1,28} — underscores and hyphens fine in the middle
- *   Last char   : [a-z0-9]         — no underscore/hyphen at the end
+ *  Pattern breakdown:  ^[a-z0-9] [a-z0-9_]{1,28} [a-z0-9]$
+ *   First char  : [a-z0-9]        — no underscore at position 0
+ *   Middle chars: [a-z0-9_]{1,28} — underscores fine in the middle
+ *   Last char   : [a-z0-9]        — no underscore at the end
  *   Total range : 1 + 1..28 + 1 = 3..30 characters
  */
 export function isValidHandle(handle: string): boolean {
-  return /^[a-z0-9][a-z0-9_-]{1,28}[a-z0-9]$/.test(handle);
+  return /^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$/.test(handle);
 }
 
 // ─── URL Validation (OWASP A10 — SSRF prevention) ────────────────────────────

@@ -144,7 +144,7 @@ export class StorageService {
       }),
     );
 
-    const baseUrl = this.cdnUrl || `https://${this.s3Bucket}.s3.${this.s3Region}.amazonaws.com`;
+    const baseUrl = this.cdnUrl || `https://${this.s3Bucket}.s3.amazonaws.com`;
     return { url: `${baseUrl}/${key}`, key };
   }
 
