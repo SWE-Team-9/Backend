@@ -61,8 +61,7 @@ export class AuthController {
     summary: "Register a new account",
     description:
       "Creates a new user account. A verification email is sent to the provided address. " +
-      "The account cannot be used until the email is verified. " +
-      "Requires a reCAPTCHA v3 token in production.",
+      "The account cannot be used until the email is verified.",
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 201, description: "Account created — verification email sent.", schema: { example: { message: "Registration successful. Please check your email to verify your account." } } })
@@ -139,8 +138,7 @@ export class AuthController {
     description:
       "Authenticates the user and sets httpOnly cookies: `access_token` (15 min) and `refresh_token` " +
       "(7 days, or 30 days with remember_me). " +
-      "The email must be verified before login is allowed. " +
-      "Requires a reCAPTCHA token when CAPTCHA verification is enabled.",
+      "The email must be verified before login is allowed.",
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({

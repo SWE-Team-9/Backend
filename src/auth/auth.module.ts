@@ -9,7 +9,6 @@ import { AuthService } from "./auth.service";
 import { TokenService } from "./services/token.service";
 import { CookieService } from "./services/cookie.service";
 import { SessionService } from "./services/session.service";
-import { RecaptchaService } from "./services/recaptcha.service";
 
 import { JwtCookieStrategy } from "./strategies/jwt-cookie.strategy";
 import { GoogleStrategy } from "./strategies/google.strategy";
@@ -39,7 +38,6 @@ import { AuthController } from "./controllers/auth.controller";
     TokenService,
     CookieService,
     SessionService,
-    RecaptchaService,
     JwtCookieStrategy,
     GoogleStrategy,
   ],

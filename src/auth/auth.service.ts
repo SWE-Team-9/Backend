@@ -17,7 +17,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
 import { TokenService } from "./services/token.service";
 import { SessionService } from "./services/session.service";
-import { RecaptchaService } from "./services/recaptcha.service";
 
 import {
   RegisterDto,
@@ -41,7 +40,6 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
     private readonly sessionService: SessionService,
-    private readonly recaptchaService: RecaptchaService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -63,9 +61,6 @@ export class AuthService {
   // Endpoint 1: Register
   // ═══════════════════════════════════════════════════════════════════════════
   async register(dto: RegisterDto, ip?: string) {
-    // Verify CAPTCHA
-    await this.recaptchaService.verify(dto.captcha_token, ip);
-
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -257,9 +252,6 @@ export class AuthService {
   // Endpoint 4: Login
   // ═══════════════════════════════════════════════════════════════════════════
   async login(dto: LoginDto, ip: string, userAgent: string) {
-    // CAPTCHA check disabled for login.
-    // await this.recaptchaService.verify(dto.captcha_token, ip);
-
     // Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },

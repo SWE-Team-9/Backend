@@ -100,11 +100,6 @@ export class RegisterDto {
   @ApiProperty({ enum: Gender, example: Gender.PREFER_NOT_TO_SAY, description: "Gender selection" })
   @IsEnum(Gender, { message: "Gender must be one of: MALE, FEMALE, PREFER_NOT_TO_SAY." })
   gender!: Gender;
-
-  @ApiPropertyOptional({ example: "03AGdBq...", description: "Google reCAPTCHA v3 token (required in production)" })
-  @IsOptional()
-  @IsString()
-  captcha_token?: string;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -156,14 +151,6 @@ export class LoginDto {
   @IsOptional()
   @IsBoolean()
   remember_me?: boolean;
-
-  @ApiPropertyOptional({
-    example: "03AGdBq...",
-    description: "Google reCAPTCHA token (required when CAPTCHA is enabled on the backend)",
-  })
-  @IsOptional()
-  @IsString()
-  captcha_token?: string;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
