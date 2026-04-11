@@ -5,17 +5,10 @@ import {
   IsArray,
   IsDateString,
   ArrayMaxSize,
-  Allow,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Exclude } from 'class-transformer';
 
 export class CreateTrackDto {
-  // Multer extracts the file but the field may still appear in req.body;
-  // Allow + Exclude prevent forbidNonWhitelisted from rejecting it.
-  @Allow()
-  @Exclude()
-  audioFile?: any;
   @ApiProperty({ description: 'Track title', example: 'Ya Ana', maxLength: 100 })
   @IsString()
   @MaxLength(100)
