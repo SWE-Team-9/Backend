@@ -13,6 +13,7 @@ export default () => ({
     jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY ?? "7d",
     jwtIssuer: process.env.JWT_ISSUER ?? "spotly-api",
     jwtAudience: process.env.JWT_AUDIENCE ?? "spotly-client",
+    captchaEnabled: (process.env.CAPTCHA_ENABLED ?? "false") === "true",
     recaptchaSecret: process.env.RECAPTCHA_SECRET,
     recaptchaSecretCrossWeb: process.env.RECAPTCHA_SECRET_CROSS_WEB,
     // reCAPTCHA Enterprise (shared config)

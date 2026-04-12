@@ -15,7 +15,10 @@ export class RecaptchaService {
   // Site keys per platform — add more here as new platforms join
   private readonly enterpriseSiteKeys: string[];
 
+  private readonly captchaEnabled: boolean;
+
   constructor(private readonly configService: ConfigService) {
+    this.captchaEnabled = this.configService.get<boolean>("security.captchaEnabled") ?? false;
     this.secrets = [
       this.configService.get<string>("security.recaptchaSecret"),
       this.configService.get<string>("security.recaptchaSecretCrossWeb"),
@@ -40,7 +43,13 @@ export class RecaptchaService {
   // Tries standard secret keys first, then Enterprise API.
   // Token passes if any method succeeds.
   async verify(token: string | undefined, remoteIp?: string): Promise<void> {
-    // Skip verification in development if nothing is configured
+    // Skip verification unless explicitly enabled via CAPTCHA_ENABLED=true
+    if (!this.captchaEnabled) {
+      this.logger.warn("CAPTCHA verification is disabled (CAPTCHA_ENABLED != true).");
+      return;
+    }
+
+    // Skip verification if nothing is configured
     if (!this.hasAnyConfig) {
       this.logger.warn("No RECAPTCHA config found — skipping CAPTCHA verification.");
       return;
