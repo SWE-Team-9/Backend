@@ -134,6 +134,22 @@ describe("InteractionsService", () => {
       );
       expect(prismaMock.like.create).not.toHaveBeenCalled();
     });
+
+    it("should reflect incremented global likes count in engagement lists", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.like.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.like.create as jest.Mock).mockResolvedValue({
+        userId: "listener-uuid",
+        trackId: "track-uuid",
+      });
+      (prismaMock.$transaction as jest.Mock).mockResolvedValue([1, []]);
+
+      await service.likeTrack("listener-uuid", "track-uuid");
+      const result = await service.getTrackLikers("track-uuid", 1, 20);
+
+      expect(result.pagination.total).toBe(1);
+      expect(result.pagination.totalPages).toBe(1);
+    });
   });
 
   describe("getInteractionStatus", () => {
@@ -321,6 +337,22 @@ describe("InteractionsService", () => {
         service.repostTrack("listener-uuid", "missing"),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it("should reflect incremented global reposts count in engagement lists", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.repost.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.repost.create as jest.Mock).mockResolvedValue({
+        userId: "listener-uuid",
+        trackId: "track-uuid",
+      });
+      (prismaMock.$transaction as jest.Mock).mockResolvedValue([1, []]);
+
+      await service.repostTrack("listener-uuid", "track-uuid");
+      const result = await service.getTrackReposters("track-uuid", 1, 20);
+
+      expect(result.pagination.total).toBe(1);
+      expect(result.pagination.totalPages).toBe(1);
+    });
   });
 
   // ── unrepostTrack ────────────────────────────────────────────────────────
@@ -479,6 +511,41 @@ describe("InteractionsService", () => {
       expect(result.items[0].user.displayName).toBeNull();
       expect(result.items[0].user.avatarUrl).toBeNull();
     });
+
+    it("should fetch likers with pagination", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
+        25,
+        [
+          {
+            createdAt: new Date("2026-04-03"),
+            user: {
+              id: "liker-11",
+              profile: { displayName: "Liker Eleven", avatarUrl: null },
+            },
+          },
+        ],
+      ]);
+
+      const result = await service.getTrackLikers("track-uuid", 2, 10);
+
+      expect(prismaMock.like.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { trackId: "track-uuid" },
+          orderBy: { createdAt: "desc" },
+          skip: 10,
+          take: 10,
+        }),
+      );
+      expect(result.pagination).toEqual({
+        page: 2,
+        limit: 10,
+        total: 25,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: true,
+      });
+    });
   });
 
   // ── getTrackReposters ────────────────────────────────────────────────────
@@ -511,6 +578,41 @@ describe("InteractionsService", () => {
       await expect(
         service.getTrackReposters("missing", 1, 20),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("should fetch reposters with pagination", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
+        21,
+        [
+          {
+            createdAt: new Date("2026-04-05"),
+            user: {
+              id: "reposter-11",
+              profile: { displayName: "Reposter Eleven", avatarUrl: null },
+            },
+          },
+        ],
+      ]);
+
+      const result = await service.getTrackReposters("track-uuid", 2, 10);
+
+      expect(prismaMock.repost.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { trackId: "track-uuid" },
+          orderBy: { createdAt: "desc" },
+          skip: 10,
+          take: 10,
+        }),
+      );
+      expect(result.pagination).toEqual({
+        page: 2,
+        limit: 10,
+        total: 21,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: true,
+      });
     });
   });
 
