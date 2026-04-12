@@ -16,6 +16,8 @@ import {
   Req,
   UploadedFile,
   UseInterceptors,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
@@ -30,7 +32,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-
+//
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
@@ -137,6 +139,7 @@ export class TracksController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ThrottlePolicy(5, 60_000)
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true, transformOptions: { enableImplicitConversion: true } }))
   @UseInterceptors(FileInterceptor('audioFile', UPLOAD_OPTIONS))
   async uploadTrack(
     @CurrentUser('userId') userId: string,
