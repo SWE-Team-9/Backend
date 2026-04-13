@@ -232,7 +232,7 @@ export class AuthController {
     if (nativeRedirectUri) {
       try {
         const redirectUrl = new URL(nativeRedirectUri);
-        redirectUrl.searchParams.set("token", result.accessToken);
+        redirectUrl.searchParams.set("code", result.accessToken);
         return res.redirect(redirectUrl.toString());
       } catch {
         // Fall through to the frontend redirect if the stored URI is invalid.
@@ -250,13 +250,9 @@ export class AuthController {
     }
 
     try {
-      const payload = JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as {
-        nativeRedirectUri?: string;
-      };
+      const nativeRedirectUri = Buffer.from(state, "base64url").toString("utf8").trim();
 
-      return typeof payload.nativeRedirectUri === "string" && payload.nativeRedirectUri.trim()
-        ? payload.nativeRedirectUri
-        : null;
+      return nativeRedirectUri.length > 0 ? nativeRedirectUri : null;
     } catch {
       return null;
     }

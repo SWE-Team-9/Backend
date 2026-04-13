@@ -15,10 +15,7 @@ export class GoogleAuthGuard extends AuthGuard("google") {
 			return {};
 		}
 
-		const state = Buffer.from(
-			JSON.stringify({ nativeRedirectUri: redirectUri }),
-			"utf8",
-		).toString("base64url");
+		const state = Buffer.from(redirectUri, "utf8").toString("base64url");
 
 		return { state };
 	}
