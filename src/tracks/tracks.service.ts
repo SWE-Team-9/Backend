@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage/storage.service';
+
 import {
   TrackVisibility,
   TrackStatus,
@@ -195,6 +196,7 @@ export class TracksService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly transcodingService: TranscodingService,
+    private readonly storageService: StorageService,
   ) {
     this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
     this.localUploadDir = this.config.get<string>('storage.localUploadDir', './uploads');
@@ -442,6 +444,41 @@ export class TracksService {
     });
 
     return this.formatDetailResponse(updated);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // UPDATE COVER ART
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async updateCoverArt(trackId: string, userId: string, file: Express.Multer.File) {
+    const track = await this.prisma.track.findFirst({
+      where: { id: trackId, deletedAt: null },
+      select: { id: true, uploaderId: true, coverArtUrl: true },
+    });
+
+    if (!track) {
+      throw new NotFoundException('Track not found.');
+    }
+    if (track.uploaderId !== userId) {
+      throw new ForbiddenException('You do not have permission to modify this track.');
+    }
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Image file is required.');
+    }
+
+    const result = await this.storageService.upload(file.buffer, {
+      userId,
+      type: 'cover',
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+    });
+
+    const updated = await this.prisma.track.update({
+      where: { id: trackId },
+      data: { coverArtUrl: result.url },
+    });
+
+    return { coverArtUrl: updated.coverArtUrl };
   }
 
   // ──────────────────────────────────────────────────────────────────────────

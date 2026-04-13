@@ -531,6 +531,38 @@ export class TracksController {
     return this.tracksService.updateTrack(trackId, userId, dto);
   }
 
+  // ─── Endpoint: PUT /tracks/:trackId/cover — Upload cover art ──────────
+  @ApiOperation({
+    summary: 'Upload or replace track cover art (owner only)',
+    description:
+      'Accepts a multipart/form-data request with a single "file" field. ' +
+      'Supported formats: JPEG, PNG, WebP. Max size: 15 MB. ' +
+      'Only the track owner can upload cover art.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'trackId', description: 'Track UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary', description: 'Cover image (JPEG/PNG/WebP, max 15 MB)' } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Cover art updated.', schema: { example: { coverArtUrl: 'https://cdn.example.com/cover/uuid.jpg' } } })
+  @ApiResponse({ status: 400, description: 'Invalid file type or size.' })
+  @ApiResponse({ status: 403, description: 'Not the track owner.' })
+  @ApiResponse({ status: 404, description: 'Track not found.' })
+  @Put(':trackId/cover')
+  @ThrottlePolicy(10, 60_000)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadCoverArt(
+    @Param('trackId', ParseUUIDPipe) trackId: string,
+    @CurrentUser('userId') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.tracksService.updateCoverArt(trackId, userId, file);
+  }
+
   // ─── Endpoint 5: DELETE /tracks/:trackId — Soft-delete track ──────────
   @ApiOperation({
     summary: 'Delete a track (owner or admin)',

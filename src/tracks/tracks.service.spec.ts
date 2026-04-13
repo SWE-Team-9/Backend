@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { TracksService } from './tracks.service';
 import { TranscodingService } from './transcoding.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../common/storage/storage.service';
 import { TrackVisibility, TrackStatus, FileRole, FileStatus } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +197,7 @@ describe('TracksService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: config },
         { provide: TranscodingService, useValue: transcodingService },
+        { provide: StorageService, useValue: { upload: jest.fn().mockResolvedValue({ url: 'https://cdn.example.com/cover/test.jpg', key: 'cover/test.jpg' }), delete: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 
