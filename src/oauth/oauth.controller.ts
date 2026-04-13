@@ -386,10 +386,60 @@ This prevents attackers from enumerating valid tokens.
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Google Native OAuth Callback (Google redirects here after user consent)
+  // ---------------------------------------------------------------------------
+
+  @ApiOperation({
+    summary: 'Google OAuth callback for native apps',
+    description:
+      'Google redirects the user here after authentication. The backend exchanges ' +
+      'the Google code for user info, generates an internal authorization code, ' +
+      'and redirects to the native app custom scheme URI.',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to the native app with an internal authorization code.',
+  })
+  @ApiResponse({ status: 400, description: 'Missing or invalid code/state.' })
+  @Get('google/callback')
+  @Public()
+  async googleNativeCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    if (error) {
+      throw new BadRequestException(`Google OAuth error: ${error}`);
+    }
+    if (!code || !state) {
+      throw new BadRequestException('Missing code or state from Google.');
+    }
+
+    const ip = req.ip ?? 'unknown';
+    const userAgent = String(req.headers['user-agent'] ?? 'unknown');
+
+    const result = await this.oauthService.processGoogleNativeCallback(
+      code,
+      state,
+      ip,
+      userAgent,
+    );
+
+    return res.redirect(result.redirectUrl);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Native OAuth: App exchanges internal code for cookies
+  // ---------------------------------------------------------------------------
+
   @ApiOperation({
     summary: 'Native OAuth callback exchange and cookie bridge',
     description:
-      'Exchanges Google authorization code with PKCE, issues local auth tokens, sets httpOnly cookies, and returns user profile data.',
+      'App sends the internal authorization code + PKCE code_verifier. ' +
+      'Backend validates PKCE, sets httpOnly auth cookies, and returns user profile.',
   })
   @ApiResponse({
     status: 200,
@@ -397,7 +447,7 @@ This prevents attackers from enumerating valid tokens.
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid callback payload or Google token exchange failed.',
+    description: 'Invalid/expired code or PKCE verification failed.',
   })
   @Post('callback')
   @Public()

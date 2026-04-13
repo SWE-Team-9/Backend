@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
@@ -13,9 +13,11 @@ import { CallbackDto } from './dto/callback.dto';
  * 
  * Implements authorization code flow with optional PKCE support for public clients.
  * Generates opaque access/refresh tokens (not JWTs) for third-party API access.
+ * Also handles the native Google OAuth PKCE flow for mobile/desktop apps.
  */
 @Injectable()
 export class OAuthService {
+  private readonly logger = new Logger(OAuthService.name);
   private readonly allowedNativeRedirectUris = new Set([
     'soundclone://oauth/callback',
     'http://127.0.0.1:8080/oauth/callback',
@@ -23,6 +25,16 @@ export class OAuthService {
   private readonly AUTHORIZATION_CODE_TTL_SECONDS = 60; // 1 minute
   private readonly ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
   private readonly REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+
+  // In-memory store for pending native OAuth codes.
+  // Maps internal code → { tokens, user, codeChallenge, expiresAt }
+  private readonly pendingNativeCodes = new Map<string, {
+    accessToken: string;
+    refreshToken: string;
+    user: any;
+    codeChallenge: string;
+    expiresAt: number;
+  }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -47,64 +59,103 @@ export class OAuthService {
   buildGoogleAuthorizeUrl(query: AuthorizeDto): string {
     const googleClientId =
       this.config.get<string>('google.clientId') || 'fallback_google_client_id';
-    const googleCallbackUrl = this.config.get<string>('google.callbackUrl');
-    const redirectUri = this.resolveAllowedNativeRedirectUri(
-      query.redirect_uri,
-      googleCallbackUrl || 'http://localhost:3000/api/v1/auth/google/callback',
-    );
-    const scope = query.scope?.trim() || 'openid email profile';
+
+    // Use the backend's own HTTPS callback URL for Google — NOT the native URI.
+    // Google only accepts redirect URIs registered in Google Cloud Console.
+    // The native redirect URI is stored in the state param and used later.
+    const backendCallbackUrl = this.getNativeOAuthCallbackUrl();
+
+    // Encode everything the backend callback will need into Google's state param:
+    // - nativeRedirectUri: where to redirect the app after Google auth
+    // - codeChallenge/Method: for PKCE validation when the app exchanges the code
+    // - originalState: the app's anti-CSRF state to return unchanged
+    const statePayload = Buffer.from(JSON.stringify({
+      nativeRedirectUri: query.redirect_uri,
+      codeChallenge: query.code_challenge,
+      codeChallengeMethod: query.code_challenge_method || 'S256',
+      originalState: query.state,
+    })).toString('base64url');
 
     const params = new URLSearchParams();
     params.set('client_id', googleClientId);
-    params.set('redirect_uri', redirectUri);
+    params.set('redirect_uri', backendCallbackUrl);
     params.set('response_type', 'code');
-    params.set('scope', scope);
-    params.set('state', query.state);
+    params.set('scope', 'openid email profile');
+    params.set('state', statePayload);
     params.set('access_type', 'offline');
     params.set('include_granted_scopes', 'true');
     params.set('prompt', 'consent');
 
-    if (query.code_challenge) {
-      params.set('code_challenge', query.code_challenge);
-      params.set(
-        'code_challenge_method',
-        query.code_challenge_method ?? 'S256',
-      );
-    }
-
+    // Note: PKCE code_challenge is NOT sent to Google — it's between the app and our backend.
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
-  async handleCallback(dto: CallbackDto, ip: string, userAgent: string) {
-    const googleClientId =
-      this.config.get<string>('google.clientId') || 'fallback_google_client_id';
-    const googleClientSecret =
-      this.config.get<string>('google.clientSecret') || 'fallback_google_client_secret';
-    const redirectUri = this.resolveAllowedNativeRedirectUri(
-      dto.redirect_uri,
-      'http://localhost:3000/api/v1/auth/google/callback',
-    );
+  /**
+   * Derives the OAuth native callback URL from the existing API URL config.
+   * This URL must be registered in Google Cloud Console as an authorized redirect URI.
+   */
+  private getNativeOAuthCallbackUrl(): string {
+    const apiUrl = this.config.get<string>('app.apiUrl');
+    if (apiUrl) {
+      return `${apiUrl}/oauth/google/callback`;
+    }
+    // Fallback based on the existing google callback URL
+    const googleCallbackUrl = this.config.get<string>('google.callbackUrl');
+    if (googleCallbackUrl) {
+      return googleCallbackUrl.replace('/auth/google/callback', '/oauth/google/callback');
+    }
+    return 'https://iqa3.tech/api/v1/oauth/google/callback';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Native OAuth: Google redirects here → exchange code → redirect to app
+  // ---------------------------------------------------------------------------
+
+  async processGoogleNativeCallback(
+    googleCode: string,
+    encodedState: string,
+    ip: string,
+    userAgent: string,
+  ): Promise<{ redirectUrl: string }> {
+    // Decode the state we packed in buildGoogleAuthorizeUrl
+    let state: {
+      nativeRedirectUri: string;
+      codeChallenge: string;
+      codeChallengeMethod: string;
+      originalState: string;
+    };
+    try {
+      state = JSON.parse(Buffer.from(encodedState, 'base64url').toString('utf8'));
+    } catch {
+      throw new BadRequestException('Invalid state parameter.');
+    }
+
+    if (!this.allowedNativeRedirectUris.has(state.nativeRedirectUri)) {
+      throw new BadRequestException('invalid_redirect_uri');
+    }
+
+    // Exchange Google's authorization code for tokens
+    const googleClientId = this.config.get<string>('google.clientId') || '';
+    const googleClientSecret = this.config.get<string>('google.clientSecret') || '';
+    const backendCallbackUrl = this.getNativeOAuthCallbackUrl();
 
     const tokenParams = new URLSearchParams();
     tokenParams.set('grant_type', 'authorization_code');
     tokenParams.set('client_id', googleClientId);
     tokenParams.set('client_secret', googleClientSecret);
-    tokenParams.set('code', dto.code);
-    tokenParams.set('code_verifier', dto.code_verifier);
-    tokenParams.set('redirect_uri', redirectUri);
+    tokenParams.set('code', googleCode);
+    tokenParams.set('redirect_uri', backendCallbackUrl);
 
-    let idToken: string | undefined;
+    let idToken: string;
     try {
       const response = await axios.post(
         'https://oauth2.googleapis.com/token',
         tokenParams.toString(),
-        {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          timeout: 10_000,
-        },
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10_000 },
       );
       idToken = response.data?.id_token;
-    } catch {
+    } catch (err) {
+      this.logger.error('Google token exchange failed', err);
       throw new BadRequestException('Failed to exchange authorization code with Google.');
     }
 
@@ -119,9 +170,10 @@ export class OAuthService {
     const avatarUrl = payload.picture ? String(payload.picture) : null;
 
     if (!email || !googleId) {
-      throw new BadRequestException('Google id_token payload is missing required fields.');
+      throw new BadRequestException('Google id_token is missing required fields.');
     }
 
+    // Create local session via the existing auth flow
     const tokens = await this.authService.googleLogin(
       { googleId, email, displayName, avatarUrl },
       ip,
@@ -133,7 +185,13 @@ export class OAuthService {
       include: { profile: true },
     });
 
-    return {
+    // Generate a short-lived internal code for the app to exchange
+    const internalCode = randomBytes(32).toString('base64url');
+
+    // Purge any expired codes before adding a new one
+    this.purgeExpiredCodes();
+
+    this.pendingNativeCodes.set(internalCode, {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: user
@@ -145,12 +203,59 @@ export class OAuthService {
             avatar_url: user.profile?.avatarUrl ?? avatarUrl,
             is_verified: user.isVerified,
           }
-        : {
-            email,
-            display_name: displayName,
-            avatar_url: avatarUrl,
-          },
+        : { email, display_name: displayName, avatar_url: avatarUrl },
+      codeChallenge: state.codeChallenge,
+      expiresAt: Date.now() + this.AUTHORIZATION_CODE_TTL_SECONDS * 1000,
+    });
+
+    // Redirect the browser (native WebView) to the app's custom scheme
+    const redirectUrl = new URL(state.nativeRedirectUri);
+    redirectUrl.searchParams.set('code', internalCode);
+    redirectUrl.searchParams.set('state', state.originalState);
+
+    return { redirectUrl: redirectUrl.toString() };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Native OAuth: App exchanges internal code for cookies
+  // ---------------------------------------------------------------------------
+
+  async handleCallback(dto: CallbackDto, _ip: string, _userAgent: string) {
+    // Look up the pending internal code
+    const pending = this.pendingNativeCodes.get(dto.code);
+
+    if (!pending || pending.expiresAt < Date.now()) {
+      this.pendingNativeCodes.delete(dto.code);
+      throw new BadRequestException('Authorization code is invalid or expired.');
+    }
+
+    // Validate PKCE: SHA256(code_verifier) must match stored code_challenge
+    const challengeFromVerifier = createHash('sha256')
+      .update(dto.code_verifier)
+      .digest('base64url');
+
+    if (!this.timingSafeCompare(challengeFromVerifier, pending.codeChallenge)) {
+      this.pendingNativeCodes.delete(dto.code);
+      throw new BadRequestException('invalid_pkce');
+    }
+
+    // Consume code (single use)
+    this.pendingNativeCodes.delete(dto.code);
+
+    return {
+      accessToken: pending.accessToken,
+      refreshToken: pending.refreshToken,
+      user: pending.user,
     };
+  }
+
+  private purgeExpiredCodes(): void {
+    const now = Date.now();
+    for (const [code, data] of this.pendingNativeCodes) {
+      if (data.expiresAt < now) {
+        this.pendingNativeCodes.delete(code);
+      }
+    }
   }
 
   private decodeIdTokenPayload(idToken: string): Record<string, any> {
