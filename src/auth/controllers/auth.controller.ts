@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  BadRequestException,
   UnauthorizedException,
 } from "@nestjs/common";
 import {
@@ -203,7 +204,7 @@ export class AuthController {
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get("google")
-  googleRedirect() {
+  googleRedirect(@Query("redirect_uri") _redirectUri?: string) {
     // Passport redirects to Google — this method body is never reached
   }
 
@@ -225,9 +226,40 @@ export class AuthController {
     // Set httpOnly cookies
     this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-    // Redirect to frontend dashboard
+    const stateValue = typeof req.query?.state === "string" ? req.query.state : "";
+    const nativeRedirectUri = this.decodeGoogleState(stateValue);
+
+    if (nativeRedirectUri) {
+      try {
+        const redirectUrl = new URL(nativeRedirectUri);
+        redirectUrl.searchParams.set("token", result.accessToken);
+        return res.redirect(redirectUrl.toString());
+      } catch {
+        // Fall through to the frontend redirect if the stored URI is invalid.
+      }
+    }
+
+    // Fallback to the web frontend when no native redirect URI was provided.
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     res.redirect(`${frontendUrl}/auth/callback`);
+  }
+
+  private decodeGoogleState(state: string): string | null {
+    if (!state) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as {
+        nativeRedirectUri?: string;
+      };
+
+      return typeof payload.nativeRedirectUri === "string" && payload.nativeRedirectUri.trim()
+        ? payload.nativeRedirectUri
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   // ─── Endpoint 7: POST /auth/refresh ────────────────────────────────────
