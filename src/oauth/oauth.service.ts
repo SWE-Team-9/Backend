@@ -1,8 +1,12 @@
 import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
+import { CallbackDto } from './dto/callback.dto';
 
 /**
  * OAuth2 Provider Service (RFC 6749, RFC 7009, RFC 7636 PKCE)
@@ -12,6 +16,10 @@ import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
  */
 @Injectable()
 export class OAuthService {
+  private readonly allowedNativeRedirectUris = new Set([
+    'soundclone://oauth/callback',
+    'http://127.0.0.1:8080/oauth/callback',
+  ]);
   private readonly AUTHORIZATION_CODE_TTL_SECONDS = 60; // 1 minute
   private readonly ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
   private readonly REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
@@ -19,10 +27,160 @@ export class OAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly config: ConfigService,
+    private readonly authService: AuthService,
   ) {}
 
   private get db(): any {
     return this.prisma as any;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Native PKCE Authorization Redirect
+  // ---------------------------------------------------------------------------
+
+  isNativeClient(clientId: string): boolean {
+    const normalized = (clientId ?? '').trim().toLowerCase();
+    return normalized === 'soundclone-native-app';
+  }
+
+  buildGoogleAuthorizeUrl(query: AuthorizeDto): string {
+    const googleClientId =
+      this.config.get<string>('google.clientId') || 'fallback_google_client_id';
+    const googleCallbackUrl = this.config.get<string>('google.callbackUrl');
+    const redirectUri = this.resolveAllowedNativeRedirectUri(
+      query.redirect_uri,
+      googleCallbackUrl || 'http://localhost:3000/api/v1/auth/google/callback',
+    );
+    const scope = query.scope?.trim() || 'openid email profile';
+
+    const params = new URLSearchParams();
+    params.set('client_id', googleClientId);
+    params.set('redirect_uri', redirectUri);
+    params.set('response_type', 'code');
+    params.set('scope', scope);
+    params.set('state', query.state);
+    params.set('access_type', 'offline');
+    params.set('include_granted_scopes', 'true');
+    params.set('prompt', 'consent');
+
+    if (query.code_challenge) {
+      params.set('code_challenge', query.code_challenge);
+      params.set(
+        'code_challenge_method',
+        query.code_challenge_method ?? 'S256',
+      );
+    }
+
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  async handleCallback(dto: CallbackDto, ip: string, userAgent: string) {
+    const googleClientId =
+      this.config.get<string>('google.clientId') || 'fallback_google_client_id';
+    const googleClientSecret =
+      this.config.get<string>('google.clientSecret') || 'fallback_google_client_secret';
+    const redirectUri = this.resolveAllowedNativeRedirectUri(
+      dto.redirect_uri,
+      'http://localhost:3000/api/v1/auth/google/callback',
+    );
+
+    const tokenParams = new URLSearchParams();
+    tokenParams.set('grant_type', 'authorization_code');
+    tokenParams.set('client_id', googleClientId);
+    tokenParams.set('client_secret', googleClientSecret);
+    tokenParams.set('code', dto.code);
+    tokenParams.set('code_verifier', dto.code_verifier);
+    tokenParams.set('redirect_uri', redirectUri);
+
+    let idToken: string | undefined;
+    try {
+      const response = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        tokenParams.toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 10_000,
+        },
+      );
+      idToken = response.data?.id_token;
+    } catch {
+      throw new BadRequestException('Failed to exchange authorization code with Google.');
+    }
+
+    if (!idToken) {
+      throw new BadRequestException('Google token response did not include id_token.');
+    }
+
+    const payload = this.decodeIdTokenPayload(idToken);
+    const email = String(payload.email || '').toLowerCase();
+    const displayName = String(payload.name || 'Google User');
+    const googleId = String(payload.sub || '');
+    const avatarUrl = payload.picture ? String(payload.picture) : null;
+
+    if (!email || !googleId) {
+      throw new BadRequestException('Google id_token payload is missing required fields.');
+    }
+
+    const tokens = await this.authService.googleLogin(
+      { googleId, email, displayName, avatarUrl },
+      ip,
+      userAgent,
+    );
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { profile: true },
+    });
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: user
+        ? {
+            id: user.id,
+            email: user.email,
+            display_name: user.profile?.displayName ?? displayName,
+            handle: user.profile?.handle ?? '',
+            avatar_url: user.profile?.avatarUrl ?? avatarUrl,
+            is_verified: user.isVerified,
+          }
+        : {
+            email,
+            display_name: displayName,
+            avatar_url: avatarUrl,
+          },
+    };
+  }
+
+  private decodeIdTokenPayload(idToken: string): Record<string, any> {
+    const parts = idToken.split('.');
+    if (parts.length < 2) {
+      throw new BadRequestException('Invalid id_token format.');
+    }
+
+    try {
+      const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
+      return JSON.parse(payload);
+    } catch {
+      throw new BadRequestException('Unable to decode id_token payload.');
+    }
+  }
+
+  private resolveAllowedNativeRedirectUri(
+    redirectUri: string | undefined,
+    fallback: string,
+  ): string {
+    const normalized = (redirectUri ?? '').trim();
+    if (normalized && this.allowedNativeRedirectUris.has(normalized)) {
+      return normalized;
+    }
+
+    if (normalized) {
+      throw new BadRequestException('invalid_redirect_uri');
+    }
+
+    return fallback;
   }
 
   // ---------------------------------------------------------------------------

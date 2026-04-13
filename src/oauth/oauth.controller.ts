@@ -1,10 +1,25 @@
-import { Controller, Get, Post, Body, Query, Redirect, BadRequestException, HttpCode } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Redirect,
+  BadRequestException,
+  HttpCode,
+  UnauthorizedException,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { OAuthService } from './oauth.service';
 import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
+import { CallbackDto } from './dto/callback.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
+import { Request, Response } from 'express';
+import { CookieService } from '../auth/services/cookie.service';
 
 /**
  * OAuth2 Provider Controller (RFC 6749, RFC 7009, RFC 7636)
@@ -28,7 +43,10 @@ import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
 @ApiTags('OAuth2 Provider')
 @Controller('oauth')
 export class OAuthController {
-  constructor(private readonly oauthService: OAuthService) {}
+  constructor(
+    private readonly oauthService: OAuthService,
+    private readonly cookieService: CookieService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Endpoint 18: Authorization Endpoint (User Consent)
@@ -118,18 +136,36 @@ export class OAuthController {
     description: 'PKCE: Must be "S256"',
   })
   @Get('authorize')
+  @Public()
   @Redirect()
   async authorize(
     @Query() query: AuthorizeDto,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('userId') userId?: string,
   ) {
     if (query.response_type !== 'code') {
       throw new BadRequestException('unsupported_response_type');
     }
 
+    // Native PKCE clients initiate auth without an existing app session.
+    if (this.oauthService.isNativeClient(query.client_id)) {
+      if (!query.code_challenge || query.code_challenge_method !== 'S256') {
+        throw new BadRequestException('code_challenge and S256 are required for native clients.');
+      }
+
+      return {
+        url: this.oauthService.buildGoogleAuthorizeUrl(query),
+      };
+    }
+
     // Validate code_challenge_method if code_challenge is present
     if (query.code_challenge && query.code_challenge_method !== 'S256') {
       throw new BadRequestException('unsupported_code_challenge_method');
+    }
+
+    if (!userId) {
+      throw new UnauthorizedException(
+        'Authentication is required to access this resource',
+      );
     }
 
     // Generate authorization code
@@ -348,5 +384,43 @@ This prevents attackers from enumerating valid tokens.
       body.client_secret,
       body.token,
     );
+  }
+
+  @ApiOperation({
+    summary: 'Native OAuth callback exchange and cookie bridge',
+    description:
+      'Exchanges Google authorization code with PKCE, issues local auth tokens, sets httpOnly cookies, and returns user profile data.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OAuth callback successful. Cookies set and user returned.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid callback payload or Google token exchange failed.',
+  })
+  @Post('callback')
+  @Public()
+  @HttpCode(200)
+  async callback(
+    @Body() dto: CallbackDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const ip = req.ip ?? 'unknown';
+    const userAgent = String(req.headers['user-agent'] ?? 'unknown');
+
+    const result = await this.oauthService.handleCallback(dto, ip, userAgent);
+
+    this.cookieService.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
+
+    return {
+      message: 'OAuth login successful',
+      user: result.user,
+    };
   }
 }

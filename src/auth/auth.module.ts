@@ -43,6 +43,6 @@ import { AuthController } from "./controllers/auth.controller";
     JwtCookieStrategy,
     GoogleStrategy,
   ],
-  exports: [AuthService],
+  exports: [AuthService, CookieService],
 })
 export class AuthModule {}
