@@ -1,17 +1,27 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { Strategy, VerifyCallback, Profile } from "passport-google-oauth20";
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
-  constructor(configService: ConfigService) {
+  constructor(private readonly configService: ConfigService) {
     super({
       clientID: configService.get<string>("google.clientId"),
       clientSecret: configService.get<string>("google.clientSecret"),
-      callbackURL: "https://iqa3.tech/api/v1/auth/google/callback",
+      callbackURL: GoogleStrategy.getGoogleCallbackUrl(configService),
       scope: ["email", "profile"],
     });
+  }
+
+  private static getGoogleCallbackUrl(configService: ConfigService): string {
+    const callbackUrl = configService.get<string>("GOOGLE_CALLBACK_URL");
+
+    if (!callbackUrl) {
+      throw new InternalServerErrorException("GOOGLE_CALLBACK_URL is not configured.");
+    }
+
+    return callbackUrl;
   }
 
   // Called after Google sends back user info

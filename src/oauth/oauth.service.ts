@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
@@ -91,20 +97,19 @@ export class OAuthService {
   }
 
   /**
-   * Derives the OAuth native callback URL from the existing API URL config.
+   * Uses GOOGLE_CALLBACK_URL and maps it to the OAuth callback route.
    * This URL must be registered in Google Cloud Console as an authorized redirect URI.
    */
   private getNativeOAuthCallbackUrl(): string {
-    const apiUrl = this.config.get<string>('app.apiUrl');
-    if (apiUrl) {
-      return `${apiUrl}/oauth/google/callback`;
+    const googleCallbackUrl =
+      this.config.get<string>('GOOGLE_CALLBACK_URL') ??
+      this.config.get<string>('google.callbackUrl');
+
+    if (!googleCallbackUrl) {
+      throw new InternalServerErrorException('GOOGLE_CALLBACK_URL is not configured.');
     }
-    // Fallback based on the existing google callback URL
-    const googleCallbackUrl = this.config.get<string>('google.callbackUrl');
-    if (googleCallbackUrl) {
-      return googleCallbackUrl.replace('/auth/google/callback', '/oauth/google/callback');
-    }
-    return 'https://iqa3.tech/api/v1/oauth/google/callback';
+
+    return googleCallbackUrl.replace('/auth/google/callback', '/oauth/google/callback');
   }
 
   // ---------------------------------------------------------------------------

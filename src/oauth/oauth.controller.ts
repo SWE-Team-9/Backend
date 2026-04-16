@@ -11,7 +11,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { OAuthService } from './oauth.service';
 import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
 import { CallbackDto } from './dto/callback.dto';
@@ -281,6 +281,7 @@ export class OAuthController {
   // Rate limit: 20 attempts per minute per IP.
   // This stops attackers from brute-forcing client secrets.
   @Post('token')
+  @ApiConsumes('application/json', 'application/x-www-form-urlencoded')
   @Public()
   @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
