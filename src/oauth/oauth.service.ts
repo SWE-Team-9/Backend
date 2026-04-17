@@ -38,6 +38,7 @@ export class OAuthService {
     accessToken: string;
     refreshToken: string;
     user: any;
+    scope: string;
     codeChallenge: string;
     expiresAt: number;
   }>();
@@ -209,6 +210,7 @@ export class OAuthService {
             is_verified: user.isVerified,
           }
         : { email, display_name: displayName, avatar_url: avatarUrl },
+      scope: 'read write',
       codeChallenge: state.codeChallenge,
       expiresAt: Date.now() + this.AUTHORIZATION_CODE_TTL_SECONDS * 1000,
     });
@@ -466,10 +468,62 @@ export class OAuthService {
     code: string,
     redirectUri: string,
     codeVerifier?: string,
-  ): Promise<{ access_token: string; token_type: 'Bearer'; refresh_token: string; expires_in: number; scope: string }> {
+  ): Promise<{
+    access_token: string;
+    token_type: 'Bearer';
+    refresh_token: string;
+    expires_in: number;
+    scope: string;
+    user?: any;
+  }> {
+    if (!clientId || !clientId.trim() || !code || !code.trim() || !redirectUri || !redirectUri.trim()) {
+      throw new BadRequestException('invalid_request');
+    }
+
+    this.purgeExpiredCodes();
+
+    const isNativeClient = this.isNativeClient(clientId);
+    const pendingNativeCode = this.pendingNativeCodes.get(code);
+
+    // Native app flow: consume in-memory authorization code minted by processGoogleNativeCallback.
+    if (pendingNativeCode) {
+      if (!isNativeClient) {
+        throw new UnauthorizedException('Invalid client credentials');
+      }
+
+      if (pendingNativeCode.expiresAt < Date.now()) {
+        this.pendingNativeCodes.delete(code);
+        throw new BadRequestException('invalid_grant');
+      }
+
+      if (!codeVerifier || !codeVerifier.trim()) {
+        throw new BadRequestException('invalid_request');
+      }
+
+      const calculatedChallenge = createHash('sha256')
+        .update(codeVerifier)
+        .digest('base64url');
+
+      if (!pendingNativeCode.codeChallenge || !this.timingSafeCompare(calculatedChallenge, pendingNativeCode.codeChallenge)) {
+        this.pendingNativeCodes.delete(code);
+        throw new BadRequestException('invalid_pkce');
+      }
+
+      this.pendingNativeCodes.delete(code);
+
+      return {
+        access_token: pendingNativeCode.accessToken,
+        token_type: 'Bearer' as const,
+        refresh_token: pendingNativeCode.refreshToken,
+        expires_in: this.ACCESS_TOKEN_TTL_SECONDS,
+        scope: pendingNativeCode.scope || 'read write',
+        user: pendingNativeCode.user,
+      };
+    }
+
     // 1. Validate client authentication.
     // Public clients are allowed only when PKCE is present.
-    const isPublicPkceRequest = !clientSecret && !!codeVerifier;
+    const isPublicPkceRequest = !clientSecret && !!codeVerifier && !isNativeClient;
     if (!clientSecret && !isPublicPkceRequest) {
       throw new UnauthorizedException('Invalid client credentials');
     }
@@ -485,7 +539,7 @@ export class OAuthService {
       include: { user: true },
     });
 
-    if (!authCode || authCode.clientId !== client.id) {
+    if (!authCode || !client || authCode.clientId !== client.id) {
       throw new BadRequestException('invalid_grant');
     }
 
