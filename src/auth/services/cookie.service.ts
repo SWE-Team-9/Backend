@@ -67,7 +67,7 @@ export class CookieService {
       httpOnly: true,
       secure: this.isSecure,
       sameSite,
-      path: "/api/v1/auth/refresh",
+      path: "/api/v1",
       maxAge: SEVEN_DAYS,
     });
   }
@@ -87,6 +87,15 @@ export class CookieService {
       secure: this.isSecure,
       sameSite: "lax",
       path: "/",
+      maxAge: 0,
+    });
+
+    // Native OAuth refresh cookie is scoped to /api/v1.
+    res.cookie(REFRESH_COOKIE, "", {
+      httpOnly: true,
+      secure: this.isSecure,
+      sameSite: "lax",
+      path: "/api/v1",
       maxAge: 0,
     });
   }
