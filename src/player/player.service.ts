@@ -320,6 +320,8 @@ export class PlayerService {
         isPlaying: true,
         volume: true,
         queueTrackIds: true,
+        shuffle: true,
+        repeatMode: true,
         currentTrack: {
           select: { id: true, title: true },
         },
@@ -333,6 +335,8 @@ export class PlayerService {
         isPlaying: false,
         volume: 0.8,
         queue: [],
+        shuffle: false,
+        repeatMode: "OFF",
       };
     }
 
@@ -357,6 +361,8 @@ export class PlayerService {
       isPlaying: session.isPlaying,
       volume: session.volume,
       queue,
+      shuffle: session.shuffle,
+      repeatMode: session.repeatMode,
     };
   }
 
@@ -369,6 +375,8 @@ export class PlayerService {
       isPlaying?: boolean;
       volume?: number;
       queueTrackIds?: string[];
+      shuffle?: boolean;
+      repeatMode?: string;
     },
   ) {
     await this.prisma.playerSession.upsert({
@@ -385,6 +393,8 @@ export class PlayerService {
         ...(body.queueTrackIds !== undefined && {
           queueTrackIds: body.queueTrackIds,
         }),
+        ...(body.shuffle !== undefined && { shuffle: body.shuffle }),
+        ...(body.repeatMode !== undefined && { repeatMode: body.repeatMode as any }),
       },
       create: {
         userId,
@@ -393,6 +403,8 @@ export class PlayerService {
         isPlaying: body.isPlaying ?? false,
         volume: body.volume ?? 0.8,
         queueTrackIds: body.queueTrackIds ?? [],
+        shuffle: body.shuffle ?? false,
+        repeatMode: (body.repeatMode as any) ?? "OFF",
       },
     });
 

@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -9,6 +10,12 @@ import {
   Max,
   Min,
 } from "class-validator";
+
+export enum RepeatMode {
+  OFF = "OFF",
+  ONE = "ONE",
+  ALL = "ALL",
+}
 
 export class UpdateSessionDto {
   @IsOptional()
@@ -36,4 +43,12 @@ export class UpdateSessionDto {
   @IsArray()
   @IsUUID("4", { each: true })
   queueTrackIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  shuffle?: boolean;
+
+  @IsOptional()
+  @IsEnum(RepeatMode)
+  repeatMode?: RepeatMode;
 }
