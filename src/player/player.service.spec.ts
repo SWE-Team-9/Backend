@@ -420,6 +420,8 @@ describe("PlayerService", () => {
         isPlaying: false,
         volume: 0.8,
         queue: [],
+        shuffle: false,
+        repeatMode: "OFF",
       });
     });
 
@@ -430,6 +432,8 @@ describe("PlayerService", () => {
         isPlaying: true,
         volume: 0.8,
         queueTrackIds: ["track-2", "track-3"],
+        shuffle: false,
+        repeatMode: "OFF",
         currentTrack: { id: "track-1", title: "Layali" },
       });
       (prismaMock.track.findMany as jest.Mock).mockResolvedValue([
@@ -455,6 +459,8 @@ describe("PlayerService", () => {
         isPlaying: false,
         volume: 0.5,
         queueTrackIds: [],
+        shuffle: false,
+        repeatMode: "OFF",
         currentTrack: null,
       });
 
