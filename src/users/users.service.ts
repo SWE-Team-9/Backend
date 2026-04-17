@@ -192,6 +192,14 @@ export class UsersService {
     return this.prisma.userProfile.update({ where: { userId }, data });
   }
 
+  async deleteAccount(userId: string) {
+    // Hard-delete the user row. All related data (tracks, likes, follows,
+    // playlists, play events, sessions, etc.) is removed automatically via
+    // the onDelete: Cascade constraints defined in schema.prisma.
+    await this.prisma.user.delete({ where: { id: userId } });
+    return { message: 'Account deleted successfully.' };
+  }
+
   async checkHandleAvailability(handle: string) {
     const existing = await this.prisma.userProfile.findUnique({
       where: { handle },

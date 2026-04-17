@@ -1,7 +1,10 @@
 ﻿import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -139,6 +142,19 @@ Rate Limited: Default (100 req/min).`,
     @Body() dto: UpdateExternalLinksDto,
   ) {
     return this.usersService.updateExternalLinks(userId, dto);
+  }
+
+  // DELETE /profiles/me
+  @Delete('me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete my account',
+    description: 'Permanently deletes the authenticated user account and all associated data (tracks, likes, followers, history, sessions, etc.). This action is irreversible.',
+  })
+  @ApiResponse({ status: 200, description: 'Account deleted successfully.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  deleteAccount(@CurrentUser('userId') userId: string) {
+    return this.usersService.deleteAccount(userId);
   }
 
   // POST /profiles/me/:type (avatar | cover)
