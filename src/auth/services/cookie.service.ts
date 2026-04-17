@@ -46,6 +46,30 @@ export class CookieService {
     });
   }
 
+  // Set cookies for native OAuth callback/token exchange flows.
+  // Uses cross-site cookie settings required by mobile WebView cookie jars.
+  setNativeOAuthCookies(
+    res: Response,
+    accessToken: string,
+    refreshToken: string,
+  ): void {
+    res.cookie(ACCESS_COOKIE, accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: FIFTEEN_MINUTES,
+    });
+
+    res.cookie(REFRESH_COOKIE, refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/api/v1/auth/refresh",
+      maxAge: SEVEN_DAYS,
+    });
+  }
+
   // Clear both auth cookies (used on logout)
   clearAuthCookies(res: Response): void {
     res.cookie(ACCESS_COOKIE, "", {

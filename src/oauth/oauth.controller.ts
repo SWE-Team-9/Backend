@@ -285,22 +285,31 @@ export class OAuthController {
   @Public()
   @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
-  async token(@Body() body: TokenDto) {
+  async token(@Body() body: TokenDto, @Res({ passthrough: true }) res: Response) {
+    let tokens:
+      | {
+          access_token: string;
+          token_type: 'Bearer';
+          refresh_token: string;
+          expires_in: number;
+          scope: string;
+          user?: any;
+        }
+      | undefined;
+
     if (body.grant_type === 'authorization_code') {
       if (!body.code || !body.redirect_uri) {
         throw new BadRequestException('invalid_request');
       }
 
-      return await this.oauthService.exchangeAuthorizationCode(
+      tokens = await this.oauthService.exchangeAuthorizationCode(
         body.client_id,
         body.client_secret,
         body.code,
         body.redirect_uri,
         body.code_verifier,
       );
-    }
-
-    if (body.grant_type === 'refresh_token') {
+    } else if (body.grant_type === 'refresh_token') {
       if (!body.refresh_token) {
         throw new BadRequestException('invalid_request');
       }
@@ -309,14 +318,24 @@ export class OAuthController {
         throw new BadRequestException('invalid_client');
       }
 
-      return await this.oauthService.refreshAccessToken(
+      tokens = await this.oauthService.refreshAccessToken(
         body.client_id,
         body.client_secret,
         body.refresh_token,
       );
+    } else {
+      throw new BadRequestException('unsupported_grant_type');
     }
 
-    throw new BadRequestException('unsupported_grant_type');
+    if (this.oauthService.isNativeClient(body.client_id)) {
+      this.cookieService.setNativeOAuthCookies(
+        res,
+        tokens.access_token,
+        tokens.refresh_token,
+      );
+    }
+
+    return tokens;
   }
 
   // ---------------------------------------------------------------------------
