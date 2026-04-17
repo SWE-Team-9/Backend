@@ -327,13 +327,11 @@ export class OAuthController {
       throw new BadRequestException('unsupported_grant_type');
     }
 
-    if (this.oauthService.isNativeClient(body.client_id)) {
-      this.cookieService.setNativeOAuthCookies(
-        res,
-        tokens.access_token,
-        tokens.refresh_token,
-      );
-    }
+    this.cookieService.setNativeOAuthCookies(
+      res,
+      tokens.access_token,
+      tokens.refresh_token,
+    );
 
     return tokens;
   }

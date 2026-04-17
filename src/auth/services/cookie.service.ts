@@ -53,18 +53,20 @@ export class CookieService {
     accessToken: string,
     refreshToken: string,
   ): void {
+    const sameSite = this.isSecure ? "none" : "lax";
+
     res.cookie(ACCESS_COOKIE, accessToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: this.isSecure,
+      sameSite,
       path: "/",
       maxAge: FIFTEEN_MINUTES,
     });
 
     res.cookie(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: this.isSecure,
+      sameSite,
       path: "/api/v1/auth/refresh",
       maxAge: SEVEN_DAYS,
     });
