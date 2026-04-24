@@ -12,6 +12,9 @@ import { PlayerModule } from "./player/player.module";
 import { MailModule } from "./mail/mail.module";
 import { OAuthModule } from "./oauth/oauth.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { ReportsModule } from "./reports/reports.module";
+import { FeedModule } from "./feed/feed.module";
+import { DiscoveryModule } from "./discovery/discovery.module";
 import { StorageModule } from "./common/storage/storage.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
@@ -51,6 +54,9 @@ import { validateEnvironment } from "./config/env.validation";
     TracksModule, // Module 4 — Audio Upload & Track Management
     SocialModule, // Module 3 — Social Graph (Blocking & Moderation)
     PlayerModule, // Module 5 — Playback & Streaming Engine
+    ReportsModule, // Module 11 — Reports & Appeals
+    FeedModule, // Module 8 — Feed
+    DiscoveryModule, // Module 8 — Search & Discovery
   ],
   controllers: [AppController],
   providers: [

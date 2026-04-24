@@ -5,7 +5,7 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "fullTextSearchPostgres"]
 }
 
 datasource db {
@@ -227,19 +227,31 @@ enum DeliveryStatus {
 
 // ── Moderation ────────────────────────────────────────────────────────────────
 
+enum ReportTargetType {
+  TRACK
+  USER
+  PLAYLIST
+}
+
+enum ReportReason {
+  COPYRIGHT
+  INAPPROPRIATE
+  SPAM
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
 enum ReportCategory {
   COPYRIGHT
   INAPPROPRIATE
   SPAM
   HARASSMENT
   OTHER
-}
-
-enum ReportStatus {
-  PENDING
-  IN_REVIEW
-  RESOLVED
-  REJECTED
 }
 
 enum ModerationActionType {
@@ -346,11 +358,29 @@ model User {
   apiAccessTokens          ApiAccessToken[]
   playbackProgress         PlaybackProgress[]
   playerSession            PlayerSession?
+  reportsSubmitted         Report[]                  @relation("ReportReporter")
+  reportsResolved          Report[]                  @relation("ReportResolver")
+  appealsSubmitted         Appeal[]                  @relation("AppealUser")
+  appealsResolved          Appeal[]                  @relation("AppealResolver")
+  searchIndex              UserSearchIndexable?
 
   @@index([email])
   @@index([accountStatus])
   @@index([deletedAt])
   @@map("users")
+}
+
+model UserSearchIndexable {
+  userId       String   @id @map("user_id") @db.Uuid
+  username     String   @db.Citext
+  displayName  String   @map("display_name")
+  searchVector String   @map("search_vector") @db.Text
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([searchVector(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("user_search_indexable")
 }
 
 model UserProfile {
@@ -370,6 +400,7 @@ model UserProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([handle])
+  @@index([handle(ops: raw("gin_trgm_ops")), displayName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("user_profiles")
 }
 
@@ -477,19 +508,19 @@ model EmailChangeRequest {
 }
 
 model ApiClient {
-  id              String           @id @default(uuid()) @db.Uuid
-  clientId        String           @unique @map("client_id")
-  clientSecretHash String          @map("client_secret_hash")
-  name            String           @db.VarChar(255)
-  description     String?
-  homepageUrl     String?          @map("homepage_url")
-  redirectUris    String[]         @map("redirect_uris")
-  allowedScopes   String[]         @default(["read"]) @map("allowed_scopes")
-  isActive        Boolean          @default(true) @map("is_active")
-  rateLimit       Int              @default(1000) @map("rate_limit")
-  rateLimitWindow Int              @default(3600) @map("rate_limit_window")
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  id               String   @id @default(uuid()) @db.Uuid
+  clientId         String   @unique @map("client_id")
+  clientSecretHash String   @map("client_secret_hash")
+  name             String   @db.VarChar(255)
+  description      String?
+  homepageUrl      String?  @map("homepage_url")
+  redirectUris     String[] @map("redirect_uris")
+  allowedScopes    String[] @default(["read"]) @map("allowed_scopes")
+  isActive         Boolean  @default(true) @map("is_active")
+  rateLimit        Int      @default(1000) @map("rate_limit")
+  rateLimitWindow  Int      @default(3600) @map("rate_limit_window")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   authCodes    ApiAuthCode[]
   accessTokens ApiAccessToken[]
@@ -499,17 +530,17 @@ model ApiClient {
 }
 
 model ApiAuthCode {
-  id                 String    @id @default(uuid()) @db.Uuid
-  clientId           String    @map("client_id") @db.Uuid
-  userId             String    @map("user_id") @db.Uuid
-  codeHash           String    @unique @map("code_hash")
-  scope              String    @db.VarChar(255)
-  codeChallenge      String?   @map("code_challenge")
-  codeChallengeMethod String?  @map("code_challenge_method") @db.VarChar(50)
-  redirectUri        String    @map("redirect_uri") @db.VarChar(2048)
-  expiresAt          DateTime  @map("expires_at") @db.Timestamptz
-  consumedAt         DateTime? @map("consumed_at") @db.Timestamptz
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id                  String    @id @default(uuid()) @db.Uuid
+  clientId            String    @map("client_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  codeHash            String    @unique @map("code_hash")
+  scope               String    @db.VarChar(255)
+  codeChallenge       String?   @map("code_challenge")
+  codeChallengeMethod String?   @map("code_challenge_method") @db.VarChar(50)
+  redirectUri         String    @map("redirect_uri") @db.VarChar(2048)
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz
+  consumedAt          DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   client ApiClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -541,8 +572,6 @@ model ApiAccessToken {
   @@index([accessTokenHash])
   @@map("api_access_tokens")
 }
-
-
 
 // =============================================================================
 // User Social & Identity
@@ -685,13 +714,14 @@ model Track {
   offlineDownloads  OfflineDownload[]
   dailyStats        TrackDailyStat[]
   playbackProgress  PlaybackProgress[]
-  playerSessions    PlayerSession[]      @relation("PlayerSessionTrack")
+  playerSessions    PlayerSession[]         @relation("PlayerSessionTrack")
 
   @@index([uploaderId])
   @@index([slug])
   @@index([status])
   @@index([visibility, moderationState])
   @@index([deletedAt])
+  @@index([title(ops: raw("gin_trgm_ops")), description(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("tracks")
 }
 
@@ -789,12 +819,12 @@ model Repost {
 }
 
 model Comment {
-  id           String   @id @default(uuid()) @db.Uuid
-  userId       String   @map("user_id") @db.Uuid
-  trackId      String   @map("track_id") @db.Uuid
-  content      String   @db.Text
-  timestampAt  Int      @map("timestamp_at")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  trackId     String   @map("track_id") @db.Uuid
+  content     String   @db.Text
+  timestampAt Int      @map("timestamp_at")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   track             Track              @relation(fields: [trackId], references: [id], onDelete: Cascade)
@@ -868,6 +898,7 @@ model Playlist {
   @@index([slug])
   @@index([visibility, moderationState])
   @@index([deletedAt])
+  @@index([title(ops: raw("gin_trgm_ops")), description(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("playlists")
 }
 
@@ -1306,4 +1337,54 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+// =============================================================================
+// Reporting & Appeals (Module 8 & 11)
+// =============================================================================
+
+model Report {
+  id          String           @id @default(uuid()) @db.Uuid
+  reporterId  String           @map("reporter_id") @db.Uuid
+  targetType  ReportTargetType @map("target_type")
+  targetId    String           @map("target_id") @db.Uuid
+  reason      ReportReason
+  description String?          @db.Text
+  status      ReportStatus     @default(PENDING)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt  DateTime?        @map("resolved_at") @db.Timestamptz
+  resolvedBy  String?          @map("resolved_by") @db.Uuid
+
+  reporter        User     @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  appeals         Appeal[]
+  adminResolution User?    @relation("ReportResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@index([reporterId])
+  @@index([targetId])
+  @@index([status])
+  @@index([targetType])
+  @@index([createdAt])
+  @@map("reports")
+}
+
+model Appeal {
+  id              String       @id @default(uuid()) @db.Uuid
+  reportId        String       @map("report_id") @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  message         String       @db.Text
+  status          ReportStatus @default(PENDING)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt      DateTime?    @map("resolved_at") @db.Timestamptz
+  resolutionNotes String?      @map("resolution_notes") @db.Text
+  resolvedBy      String?      @map("resolved_by") @db.Uuid
+
+  user            User   @relation("AppealUser", fields: [userId], references: [id], onDelete: Cascade)
+  reportObject    Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  adminResolution User?  @relation("AppealResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@index([reportId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("appeals")
 }
