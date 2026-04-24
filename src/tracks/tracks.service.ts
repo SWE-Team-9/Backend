@@ -235,6 +235,7 @@ export class TracksService {
     userId: string,
     dto: CreateTrackDto,
     file: Express.Multer.File,
+    coverArtFile?: Express.Multer.File,
   ) {
     // --- validate the file ---
     if (!file || !file.buffer) {
@@ -268,11 +269,23 @@ export class TracksService {
       genreId = genre.id;
     }
 
-    // --- upload to storage ---
+    // --- upload audio to storage ---
     const mimeType = AUDIO_MIME_TYPES.has(file.mimetype) ? file.mimetype : 'audio/mpeg';
     const ext = mimeType.includes('wav') ? 'wav' : 'mp3';
     const storageKey = `tracks/${randomUUID()}.${ext}`;
     await this.uploadAudioFile(file.buffer, storageKey, mimeType);
+
+    // --- upload cover art if provided ---
+    let coverArtUrl: string | null = null;
+    if (coverArtFile && coverArtFile.buffer) {
+      const coverResult = await this.storageService.upload(coverArtFile.buffer, {
+        userId,
+        type: 'cover',
+        mimeType: coverArtFile.mimetype,
+        originalName: coverArtFile.originalname,
+      });
+      coverArtUrl = coverResult.url;
+    }
 
     // --- create DB records in a transaction ---
     const slug = slugify(dto.title);
@@ -290,6 +303,7 @@ export class TracksService {
           status: TrackStatus.PROCESSING,
           secretToken,
           primaryGenreId: genreId,
+          ...(coverArtUrl ? { coverArtUrl } : {}),
         },
       });
 
@@ -444,41 +458,6 @@ export class TracksService {
     });
 
     return this.formatDetailResponse(updated);
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // UPDATE COVER ART
-  // ──────────────────────────────────────────────────────────────────────────
-
-  async updateCoverArt(trackId: string, userId: string, file: Express.Multer.File) {
-    const track = await this.prisma.track.findFirst({
-      where: { id: trackId, deletedAt: null },
-      select: { id: true, uploaderId: true, coverArtUrl: true },
-    });
-
-    if (!track) {
-      throw new NotFoundException('Track not found.');
-    }
-    if (track.uploaderId !== userId) {
-      throw new ForbiddenException('You do not have permission to modify this track.');
-    }
-    if (!file || !file.buffer) {
-      throw new BadRequestException('Image file is required.');
-    }
-
-    const result = await this.storageService.upload(file.buffer, {
-      userId,
-      type: 'cover',
-      mimeType: file.mimetype,
-      originalName: file.originalname,
-    });
-
-    const updated = await this.prisma.track.update({
-      where: { id: trackId },
-      data: { coverArtUrl: result.url },
-    });
-
-    return { coverArtUrl: updated.coverArtUrl };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -817,6 +796,7 @@ export class TracksService {
       artistId: track.uploaderId,
       status: track.status,
       visibility: track.visibility,
+      coverArtUrl: track.coverArtUrl ?? null,
       waveformData: waveformData,
     };
   }

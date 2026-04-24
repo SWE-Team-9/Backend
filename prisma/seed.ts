@@ -33,6 +33,9 @@ const GENRES: { slug: string; name: string }[] = [
   { slug: 'world', name: 'World' },
   { slug: 'gospel', name: 'Gospel' },
   { slug: 'spoken-word', name: 'Spoken Word' },
+  { slug: 'quran', name: 'Quran' },
+  { slug: 'sha3by', name: 'Sha3by' },
+  { slug: 'islamic', name: 'Islamic' },
 ];
 
 async function main() {
