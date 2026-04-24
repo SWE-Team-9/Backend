@@ -56,6 +56,9 @@ export const ALLOWED_GENRES = [
   "world",
   "gospel",
   "spoken-word",
+  "quran",
+  "sha3by",
+  "islamic",
 ] as const;
 
 export type GenreSlug = (typeof ALLOWED_GENRES)[number];

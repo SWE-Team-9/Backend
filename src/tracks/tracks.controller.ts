@@ -14,12 +14,12 @@ import {
   Put,
   Query,
   Req,
-  UploadedFile,
+  UploadedFiles,
   UseInterceptors,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
@@ -49,6 +49,9 @@ import {
 // The multer config: keep file in memory buffer (no disk temp files).
 // Max 250 MB. Only accept audio MIME types.
 // ──────────────────────────────────────────────────────────────────────────────
+const AUDIO_MIMES = ['audio/mpeg', 'audio/wav', 'audio/wave', 'audio/x-wav'];
+const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
 const UPLOAD_OPTIONS = {
   limits: { fileSize: 250 * 1024 * 1024 },
   fileFilter: (
@@ -56,19 +59,26 @@ const UPLOAD_OPTIONS = {
     file: Express.Multer.File,
     cb: (error: Error | null, acceptFile: boolean) => void,
   ) => {
-    const allowedMimes = [
-      'audio/mpeg',
-      'audio/wav',
-      'audio/wave',
-      'audio/x-wav',
-    ];
-    if (allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
+    if (file.fieldname === 'audioFile') {
+      if (AUDIO_MIMES.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(
+          new BadRequestException('Only MP3 and WAV audio files are allowed.') as unknown as Error,
+          false,
+        );
+      }
+    } else if (file.fieldname === 'coverArt') {
+      if (IMAGE_MIMES.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(
+          new BadRequestException('Only JPEG, PNG, and WebP images are allowed for cover art.') as unknown as Error,
+          false,
+        );
+      }
     } else {
-      cb(
-        new BadRequestException('Only MP3 and WAV audio files are allowed.') as unknown as Error,
-        false,
-      );
+      cb(null, false);
     }
   },
 };
@@ -97,6 +107,7 @@ export class TracksController {
       required: ['audioFile', 'title'],
       properties: {
         audioFile: { type: 'string', format: 'binary', description: 'MP3 or WAV file (max 250 MB)' },
+        coverArt: { type: 'string', format: 'binary', description: 'Optional cover art image (JPEG, PNG, or WebP, max 15 MB)' },
         title: { type: 'string', maxLength: 100, example: 'Ya Ana' },
         genre: { type: 'string', example: 'Pop', description: 'Must match an existing genre name' },
         tags: { type: 'array', items: { type: 'string' }, example: ['pop', 'arabic'], description: 'Max 10 tags, 30 chars each' },
@@ -140,13 +151,18 @@ export class TracksController {
   @HttpCode(HttpStatus.ACCEPTED)
   @ThrottlePolicy(5, 60_000)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true, transformOptions: { enableImplicitConversion: true } }))
-  @UseInterceptors(FileInterceptor('audioFile', UPLOAD_OPTIONS))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'audioFile', maxCount: 1 },
+    { name: 'coverArt', maxCount: 1 },
+  ], UPLOAD_OPTIONS))
   async uploadTrack(
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateTrackDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() files: { audioFile?: Express.Multer.File[]; coverArt?: Express.Multer.File[] },
   ) {
-    return this.tracksService.uploadTrack(userId, dto, file);
+    const audioFile = files?.audioFile?.[0] as Express.Multer.File;
+    const coverArt = files?.coverArt?.[0];
+    return this.tracksService.uploadTrack(userId, dto, audioFile, coverArt);
   }
 
   // ─── Endpoint 10: GET /tracks/secret/:secretToken — Resolve private track ─
@@ -529,38 +545,6 @@ export class TracksController {
     @Body() dto: UpdateTrackDto,
   ) {
     return this.tracksService.updateTrack(trackId, userId, dto);
-  }
-
-  // ─── Endpoint: PUT /tracks/:trackId/cover — Upload cover art ──────────
-  @ApiOperation({
-    summary: 'Upload or replace track cover art (owner only)',
-    description:
-      'Accepts a multipart/form-data request with a single "file" field. ' +
-      'Supported formats: JPEG, PNG, WebP. Max size: 15 MB. ' +
-      'Only the track owner can upload cover art.',
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiParam({ name: 'trackId', description: 'Track UUID' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['file'],
-      properties: { file: { type: 'string', format: 'binary', description: 'Cover image (JPEG/PNG/WebP, max 15 MB)' } },
-    },
-  })
-  @ApiResponse({ status: 200, description: 'Cover art updated.', schema: { example: { coverArtUrl: 'https://cdn.example.com/cover/uuid.jpg' } } })
-  @ApiResponse({ status: 400, description: 'Invalid file type or size.' })
-  @ApiResponse({ status: 403, description: 'Not the track owner.' })
-  @ApiResponse({ status: 404, description: 'Track not found.' })
-  @Put(':trackId/cover')
-  @ThrottlePolicy(10, 60_000)
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadCoverArt(
-    @Param('trackId', ParseUUIDPipe) trackId: string,
-    @CurrentUser('userId') userId: string,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    return this.tracksService.updateCoverArt(trackId, userId, file);
   }
 
   // ─── Endpoint 5: DELETE /tracks/:trackId — Soft-delete track ──────────
