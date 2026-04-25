@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 
@@ -18,6 +19,9 @@ import { FeedModule } from "./feed/feed.module";
 import { DiscoveryModule } from "./discovery/discovery.module";
 import { PlaylistsModule } from "./playlists/playlists.module";
 import { StorageModule } from "./common/storage/storage.module";
+import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
+import { StripeModule } from "./stripe/stripe.module";
+import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import configuration from "./config/configuration";
@@ -53,6 +57,7 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
     StorageModule, // @Global — StorageService available everywhere (Member 5)
     MailModule, // shared — MailService used by AuthModule
     EventEmitterModule.forRoot(), // global event bus for decoupled notifications
+    ScheduleModule.forRoot(), // enables cron jobs (e.g. trial auto-renew)
 
     // ── Feature modules ───────────────────────────────────────────────────────
     AuthModule, // Members 1, 2, 3
@@ -68,6 +73,10 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
     NotificationsModule, // Module 10 — Notifications + WebSocket
     AdminModule, // Module 11 — Admin: User Enforcement + Content Moderation + Stats
     PlaylistsModule, // Module 7 — Sets & Playlists
+    SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
+    StripeModule,        // Global Stripe SDK wrapper
+    PaymentMethodsModule, // Payment method management routes
+    EntitlementsModule,  // GET /entitlements/me
   ],
   controllers: [AppController],
   providers: [
