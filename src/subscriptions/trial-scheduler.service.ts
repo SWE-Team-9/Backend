@@ -25,12 +25,17 @@ function mockId(prefix: string): string {
 @Injectable()
 export class TrialSchedulerService {
   private readonly logger = new Logger(TrialSchedulerService.name);
+  private readonly paymentFeaturesEnabled: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly subscriptionsService: SubscriptionsService,
-  ) {}
+  ) {
+    this.paymentFeaturesEnabled =
+      (process.env.ENABLE_PAYMENT_FEATURES ??
+        (process.env.NODE_ENV === 'test' ? 'true' : 'false')) === 'true';
+  }
 
   /**
    * Runs once daily at 09:00 UTC.
@@ -40,6 +45,10 @@ export class TrialSchedulerService {
    */
   @Cron('0 9 * * *')
   async sendTrialEndingWarnings(): Promise<void> {
+    if (!this.paymentFeaturesEnabled) {
+      return;
+    }
+
     const now = new Date();
     const windowStart = new Date(now.getTime() + 47 * 60 * 60 * 1000);
     const windowEnd = new Date(now.getTime() + 49 * 60 * 60 * 1000);
@@ -115,6 +124,10 @@ export class TrialSchedulerService {
    */
   @Cron('0 * * * *')
   async autoRenewExpiredTrials(): Promise<void> {
+    if (!this.paymentFeaturesEnabled) {
+      return;
+    }
+
     const now = new Date();
     const newPeriodEnd = addOneMonth(now); // +1 calendar month
 
@@ -195,6 +208,10 @@ export class TrialSchedulerService {
    */
   @Cron('0 * * * *')
   async autoRenewActiveSubscriptions(): Promise<void> {
+    if (!this.paymentFeaturesEnabled) {
+      return;
+    }
+
     const now = new Date();
     const newPeriodEnd = addOneMonth(now);
 
@@ -276,6 +293,10 @@ export class TrialSchedulerService {
    */
   @Cron('0 * * * *')
   async cancelExpiredGracePeriodSubscriptions(): Promise<void> {
+    if (!this.paymentFeaturesEnabled) {
+      return;
+    }
+
     const now = new Date();
 
     const expiredGrace = await this.prisma.userSubscription.findMany({
