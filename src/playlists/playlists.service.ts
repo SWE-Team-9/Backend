@@ -417,12 +417,55 @@ export class PlaylistsService {
     };
   }
 
-  reorderTracks(_userId: string, playlistId: string, dto: ReorderPlaylistTracksDto) {
-    return {
-      message: 'Reorder playlist tracks placeholder',
-      playlistId,
-      orderedTrackIds: dto.orderedTrackIds,
-    };
+  async reorderTracks(userId: string, playlistId: string, dto: ReorderPlaylistTracksDto) {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: { id: playlistId, deletedAt: null },
+      select: { id: true, ownerId: true },
+    });
+ 
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+ 
+    // 2. Only the owner may reorder
+    if (playlist.ownerId !== userId) {
+      throw new ForbiddenException('You can only reorder your own playlists.');
+    }
+ 
+    // 3. Load all existing track entries for this playlist
+    const existing = await this.prisma.playlistTrack.findMany({
+      where: { playlistId: playlist.id },
+      select: { trackId: true },
+    });
+ 
+    const existingIds = new Set(existing.map((r) => r.trackId));
+ 
+    // 4. Reject any IDs not in this playlist
+    const unknownIds = dto.orderedTrackIds.filter((id) => !existingIds.has(id));
+    if (unknownIds.length > 0) {
+      throw new NotFoundException(
+        `Track IDs not found in this playlist: ${unknownIds.join(', ')}`,
+      );
+    }
+ 
+    // 5. Require full coverage — every track must be represented
+    if (dto.orderedTrackIds.length !== existingIds.size) {
+      throw new BadRequestException(
+        `orderedTrackIds must include all ${existingIds.size} tracks currently in the playlist.`,
+      );
+    }
+ 
+    // 6. Atomic position update — single transaction, one UPDATE per track
+    await this.prisma.$transaction(
+      dto.orderedTrackIds.map((trackId, index) =>
+        this.prisma.playlistTrack.update({
+          where: { playlistId_trackId: { playlistId: playlist.id, trackId } },
+          data: { position: index },
+        }),
+      ),
+    );
+ 
+    return { message: 'Playlist reordered successfully' };
   }
 
   getMyPlaylists(_userId: string, query: PlaylistPaginationQueryDto) {
