@@ -78,15 +78,16 @@ export class StorageService {
     this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
 
     if (this.provider === "s3") {
+      const accessKeyId = this.config.get<string>("storage.awsAccessKeyId", "");
+      const secretAccessKey = this.config.get<string>(
+        "storage.awsSecretAccessKey",
+        "",
+      );
       this.s3Client = new S3Client({
         region: this.s3Region,
-        credentials: {
-          accessKeyId: this.config.get<string>("storage.awsAccessKeyId", ""),
-          secretAccessKey: this.config.get<string>(
-            "storage.awsSecretAccessKey",
-            "",
-          ),
-        },
+        ...(accessKeyId && secretAccessKey
+          ? { credentials: { accessKeyId, secretAccessKey } }
+          : {}),
       });
     } else {
       this.s3Client = null;
