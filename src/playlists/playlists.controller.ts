@@ -158,6 +158,36 @@ export class PlaylistsController {
 
   @Patch(':playlistId/reorder')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Reorder playlist tracks',
+    description: 'Reorders tracks inside a playlist. Owner only.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiBody({
+    type: ReorderPlaylistTracksDto,
+    schema: {
+      example: {
+        orderedTrackIds: ['trk_8', 'trk_3', 'trk_10', 'trk_2'],
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playlist reordered successfully.',
+    schema: {
+      example: {
+        message: 'Playlist reordered successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Validation error or invalid reorder payload.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Only playlist owner can reorder tracks.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found or some track IDs are invalid.' })
   reorderTracks(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
