@@ -187,6 +187,19 @@ export class PlaylistsController {
   @Delete(':playlistId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Delete playlist',
+    description: 'Permanently deletes a playlist. Owner only.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiResponse({ status: 204, description: 'Playlist deleted successfully.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Only playlist owner can delete this playlist.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
   remove(@CurrentUser('userId') userId: string, @Param() params: DeletePlaylistParamsDto) {
     this.playlistsService.remove(userId, params.playlistId);
   }
