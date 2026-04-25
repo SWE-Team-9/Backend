@@ -23,6 +23,7 @@ import {
   GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
   PlaylistPaginationQueryDto,
+  RemoveTrackFromPlaylistParamsDto,
   ReorderPlaylistTracksDto,
   UpdatePlaylistDto,
 } from './dto';
@@ -121,12 +122,12 @@ export class PlaylistsController {
   }
 
   @Delete(':playlistId/tracks/:trackId')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   removeTrack(
     @CurrentUser('userId') userId: string,
-    @Param('playlistId') playlistId: string,
-    @Param('trackId') trackId: string,
+    @Param() params: RemoveTrackFromPlaylistParamsDto,
   ) {
-    return this.playlistsService.removeTrack(userId, playlistId, trackId);
+    return this.playlistsService.removeTrack(userId, params.playlistId, params.trackId);
   }
 
   @Patch(':playlistId/reorder')
