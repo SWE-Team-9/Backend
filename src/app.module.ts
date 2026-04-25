@@ -15,6 +15,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { ReportsModule } from "./reports/reports.module";
 import { FeedModule } from "./feed/feed.module";
 import { DiscoveryModule } from "./discovery/discovery.module";
+import { PlaylistsModule } from "./playlists/playlists.module";
 import { StorageModule } from "./common/storage/storage.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
@@ -57,6 +58,7 @@ import { validateEnvironment } from "./config/env.validation";
     ReportsModule, // Module 11 — Reports & Appeals
     FeedModule, // Module 8 — Feed
     DiscoveryModule, // Module 8 — Search & Discovery
+    PlaylistsModule, // Module 7 — Sets & Playlists
   ],
   controllers: [AppController],
   providers: [
