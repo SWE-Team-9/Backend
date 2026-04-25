@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, INestApplication, ValidationPipe } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -16,9 +16,9 @@ function buildServiceMock() {
       secretToken: null,
     }),
     getMyPlaylists: jest.fn().mockResolvedValue({
-      message: 'Get my playlists placeholder',
       page: 1,
       limit: 20,
+      total: 1,
       playlists: [],
     }),
     resolveSecret: jest.fn().mockResolvedValue({
@@ -102,7 +102,7 @@ describe('PlaylistsController', () => {
       const payload = {
         title: 'Late Night Drive',
         visibility: 'PUBLIC',
-        trackId: 'trk_123',
+        trackIds: ['trk_123', 'trk_456'],
       };
 
       const res = await request(app.getHttpServer())
@@ -118,6 +118,17 @@ describe('PlaylistsController', () => {
       await request(app.getHttpServer())
         .post('/playlists')
         .send({ title: 'Only title' })
+        .expect(400);
+    });
+
+    it('returns 400 when trackIds is empty', async () => {
+      service.create.mockRejectedValueOnce(
+        new BadRequestException('Playlist must start with at least one track.'),
+      );
+
+      await request(app.getHttpServer())
+        .post('/playlists')
+        .send({ title: 'Late Night Drive', visibility: 'PUBLIC', trackIds: [] })
         .expect(400);
     });
   });

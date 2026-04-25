@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PlaylistVisibility } from '@prisma/client';
 
@@ -41,11 +41,12 @@ export class CreatePlaylistDto {
   visibility!: PlaylistVisibility;
 
   @ApiProperty({
-    description: 'Initial track id to add when creating the playlist',
-    example: 'trk_123',
+    description: 'Initial list of track IDs to add when creating the playlist',
+    example: ['trk_123', 'trk_456'],
+    type: [String],
   })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @MinLength(1)
-  trackId!: string;
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  trackIds!: string[];
 }

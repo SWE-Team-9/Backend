@@ -28,16 +28,34 @@ export class PlaylistsService {
         ? randomBytes(24).toString('hex')
         : null;
 
-    const track = await this.prisma.track.findFirst({
+    if (!dto.trackIds || dto.trackIds.length === 0) {
+      throw new BadRequestException('Playlist must start with at least one track.');
+    }
+
+    const uniqueTrackIds = Array.from(new Set(dto.trackIds));
+    if (uniqueTrackIds.length !== dto.trackIds.length) {
+      throw new BadRequestException('trackIds must not contain duplicate values.');
+    }
+
+    const tracks = await this.prisma.track.findMany({
       where: {
-        id: dto.trackId,
+        id: { in: uniqueTrackIds },
         deletedAt: null,
       },
-      select: { id: true },
+      select: { id: true, title: true },
     });
 
-    if (!track) {
-      throw new NotFoundException('Track not found.');
+    if (tracks.length !== uniqueTrackIds.length) {
+      const foundIds = new Set(tracks.map((track) => track.id));
+      const missingIds = uniqueTrackIds.filter((id) => !foundIds.has(id));
+      throw new NotFoundException(
+        `Track not found: ${missingIds.join(', ')}`,
+      );
+    }
+
+    const normalizedTitles = tracks.map((track) => track.title.trim().toLowerCase());
+    if (new Set(normalizedTitles).size !== normalizedTitles.length) {
+      throw new ConflictException('Playlist cannot contain duplicate track names.');
     }
 
     let playlist:
@@ -71,12 +89,12 @@ export class PlaylistsService {
             },
           });
 
-          await tx.playlistTrack.create({
-            data: {
+          await tx.playlistTrack.createMany({
+            data: uniqueTrackIds.map((trackId, index) => ({
               playlistId: created.id,
-              trackId: track.id,
-              position: 0,
-            },
+              trackId,
+              position: index,
+            })),
           });
 
           return created;
@@ -332,7 +350,7 @@ export class PlaylistsService {
         id: dto.trackId,
         deletedAt: null,
       },
-      select: { id: true },
+      select: { id: true, title: true },
     });
 
     if (!track) {
@@ -351,6 +369,27 @@ export class PlaylistsService {
 
     if (existingLink) {
       throw new ConflictException('Track already exists in this playlist.');
+    }
+
+    const duplicateTrackTitle = await this.prisma.playlistTrack.findFirst({
+      where: {
+        playlistId: playlist.id,
+        trackId: {
+          not: track.id,
+        },
+        track: {
+          deletedAt: null,
+          title: {
+            equals: track.title,
+            mode: 'insensitive',
+          },
+        },
+      },
+      select: { trackId: true },
+    });
+
+    if (duplicateTrackTitle) {
+      throw new ConflictException('A track with the same title already exists in this playlist.');
     }
 
     const maxPositionRow = await this.prisma.playlistTrack.findFirst({
@@ -494,12 +533,48 @@ export class PlaylistsService {
     return { message: 'Playlist reordered successfully' };
   }
 
-  getMyPlaylists(_userId: string, query: PlaylistPaginationQueryDto) {
+  async getMyPlaylists(userId: string, query: PlaylistPaginationQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PlaylistWhereInput = {
+      ownerId: userId,
+      deletedAt: null,
+    };
+
+    const [total, playlists] = await this.prisma.$transaction([
+      this.prisma.playlist.count({ where }),
+      this.prisma.playlist.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          visibility: true,
+          _count: {
+            select: {
+              tracks: true,
+            },
+          },
+        },
+      }),
+    ]);
+
     return {
-      message: 'Get my playlists placeholder',
-      page: query.page ?? 1,
-      limit: query.limit ?? 20,
-      playlists: [],
+      page,
+      limit,
+      total,
+      playlists: playlists.map((playlist) => ({
+        playlistId: playlist.id,
+        title: playlist.title,
+        visibility: playlist.visibility,
+        tracksCount: playlist._count.tracks,
+      })),
     };
   }
 
