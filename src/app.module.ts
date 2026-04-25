@@ -31,8 +31,6 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { AdminModule } from "./admin/admin.module";
 import { EntitlementsModule } from "./entitlements/entitlements.module";
 
-const enablePaymentFeatures = process.env.ENABLE_PAYMENT_FEATURES === "true";
-
 @Module({
   imports: [
     // ── Config ───────────────────────────────────────────────────────────────
@@ -76,7 +74,8 @@ const enablePaymentFeatures = process.env.ENABLE_PAYMENT_FEATURES === "true";
     AdminModule, // Module 11 — Admin: User Enforcement + Content Moderation + Stats
     PlaylistsModule, // Module 7 — Sets & Playlists
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
-    ...(enablePaymentFeatures ? [StripeModule, PaymentMethodsModule] : []),
+    StripeModule,        // Global Stripe SDK wrapper
+    PaymentMethodsModule, // Payment method management routes
     EntitlementsModule,  // GET /entitlements/me
   ],
   controllers: [AppController],
