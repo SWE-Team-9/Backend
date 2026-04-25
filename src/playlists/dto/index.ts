@@ -6,6 +6,7 @@ export {
 } from './add-track-to-playlist.dto';
 export { ReorderPlaylistTracksDto } from './reorder-playlist-tracks.dto';
 export { PlaylistPaginationQueryDto } from './pagination-query.dto';
+export { GetMyPlaylistsResponseDto, MyPlaylistItemDto } from './get-my-playlists-response.dto';
 export { GetPlaylistDetailsParamsDto } from './get-playlist-details-params.dto';
 export { DeletePlaylistParamsDto } from './delete-playlist-params.dto';
 export {
