@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { PlaylistVisibility } from '@prisma/client';
+import { randomBytes } from 'crypto';
+
+import { PrismaService } from '../prisma/prisma.service';
 
 import {
   AddTrackToPlaylistDto,
@@ -10,13 +14,75 @@ import {
 
 @Injectable()
 export class PlaylistsService {
-  create(_userId: string, dto: CreatePlaylistDto) {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(userId: string, dto: CreatePlaylistDto) {
+    const visibility = dto.visibility as PlaylistVisibility;
+    const slug = await this.generateUniqueSlug(dto.title);
+    const secretToken =
+      visibility === PlaylistVisibility.SECRET
+        ? randomBytes(24).toString('hex')
+        : null;
+
+    const playlist = await this.prisma.playlist.create({
+      data: {
+        ownerId: userId,
+        title: dto.title,
+        description: dto.description ?? null,
+        visibility,
+        secretToken,
+        slug,
+      },
+      select: {
+        id: true,
+        title: true,
+        visibility: true,
+        secretToken: true,
+      },
+    });
+
     return {
-      message: 'Create playlist placeholder',
-      payload: dto,
-      tracks: [],
-      tracksCount: 0,
+      playlistId: playlist.id,
+      title: playlist.title,
+      visibility: playlist.visibility,
+      secretToken: playlist.secretToken,
     };
+  }
+
+  private async generateUniqueSlug(title: string): Promise<string> {
+    const baseSlug = this.slugify(title) || 'playlist';
+
+    const baseExists = await this.prisma.playlist.findFirst({
+      where: { slug: baseSlug },
+      select: { id: true },
+    });
+
+    if (!baseExists) {
+      return baseSlug;
+    }
+
+    for (let i = 0; i < 10; i += 1) {
+      const suffix = randomBytes(3).toString('hex');
+      const candidate = `${baseSlug}-${suffix}`;
+      const exists = await this.prisma.playlist.findFirst({
+        where: { slug: candidate },
+        select: { id: true },
+      });
+
+      if (!exists) {
+        return candidate;
+      }
+    }
+
+    return `${baseSlug}-${Date.now()}`;
+  }
+
+  private slugify(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
   }
 
   getDetails(playlistId: string) {

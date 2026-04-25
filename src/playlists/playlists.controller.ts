@@ -26,6 +26,7 @@ export class PlaylistsController {
   constructor(private readonly playlistsService: PlaylistsService) {}
 
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   create(@CurrentUser('userId') userId: string, @Body() dto: CreatePlaylistDto) {
     return this.playlistsService.create(userId, dto);
   }
