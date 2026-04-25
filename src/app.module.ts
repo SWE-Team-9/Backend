@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
 import { AppController } from "./app.controller";
@@ -17,10 +18,14 @@ import { FeedModule } from "./feed/feed.module";
 import { DiscoveryModule } from "./discovery/discovery.module";
 import { PlaylistsModule } from "./playlists/playlists.module";
 import { StorageModule } from "./common/storage/storage.module";
+import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
+import { StripeModule } from "./stripe/stripe.module";
+import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import configuration from "./config/configuration";
 import { validateEnvironment } from "./config/env.validation";
+import { EntitlementsModule } from "./entitlements/entitlements.module";
 
 @Module({
   imports: [
@@ -47,6 +52,7 @@ import { validateEnvironment } from "./config/env.validation";
     PrismaModule, // @Global — PrismaService available everywhere
     StorageModule, // @Global — StorageService available everywhere (Member 5)
     MailModule, // shared — MailService used by AuthModule
+    ScheduleModule.forRoot(), // enables cron jobs (e.g. trial auto-renew)
 
     // ── Feature modules ───────────────────────────────────────────────────────
     AuthModule, // Members 1, 2, 3
@@ -59,6 +65,10 @@ import { validateEnvironment } from "./config/env.validation";
     FeedModule, // Module 8 — Feed
     DiscoveryModule, // Module 8 — Search & Discovery
     PlaylistsModule, // Module 7 — Sets & Playlists
+    SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
+    StripeModule,        // Global Stripe SDK wrapper
+    PaymentMethodsModule, // Payment method management routes
+    EntitlementsModule,  // GET /entitlements/me
   ],
   controllers: [AppController],
   providers: [
