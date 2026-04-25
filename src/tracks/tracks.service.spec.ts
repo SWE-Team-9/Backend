@@ -246,6 +246,7 @@ describe('TracksService', () => {
         artistId: USER_ID,
         status: TrackStatus.PROCESSING,
         visibility: TrackVisibility.PRIVATE,
+        coverArtUrl: null,
         waveformData: null,
       });
       expect(prisma.track.create).toHaveBeenCalledTimes(1);
