@@ -25,6 +25,8 @@ import {
   PlaylistPaginationQueryDto,
   RemoveTrackFromPlaylistParamsDto,
   ReorderPlaylistTracksDto,
+  ResolveSecretPlaylistParamsDto,
+  ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
 } from './dto';
 
@@ -69,8 +71,33 @@ export class PlaylistsController {
   }
 
   @Get('secret/:secretToken')
-  resolveSecret(@Param('secretToken') secretToken: string) {
-    return this.playlistsService.resolveSecret(secretToken);
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Resolve secret playlist access',
+    description:
+      'Allows access to a private/secret playlist via an unguessable tokenized link.',
+  })
+  @ApiParam({
+    name: 'secretToken',
+    description: 'Secret share token for a private playlist',
+    example: 'sec_9f1d2a3b4c5d6e7f8a9b0c',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Access granted via secret token.',
+    type: ResolveSecretPlaylistResponseDto,
+    schema: {
+      example: {
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        visibility: 'PRIVATE',
+        message: 'Access granted via secret token',
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Secret playlist not found.' })
+  resolveSecret(@Param() params: ResolveSecretPlaylistParamsDto) {
+    return this.playlistsService.resolveSecret(params.secretToken);
   }
 
   @Get(':playlistId/embed')
