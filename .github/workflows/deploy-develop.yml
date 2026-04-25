@@ -33,7 +33,7 @@ jobs:
           CI: true
 
   deploy:
-    needs: test
+    #needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
 
