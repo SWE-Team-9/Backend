@@ -123,6 +123,32 @@ export class PlaylistsController {
 
   @Delete(':playlistId/tracks/:trackId')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Remove track from playlist',
+    description: 'Removes a track from a playlist. Owner only.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiParam({
+    name: 'trackId',
+    description: 'Track identifier',
+    example: 'trk_123',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Track removed from playlist successfully.',
+    schema: {
+      example: {
+        message: 'Track removed from playlist successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Only playlist owner can remove tracks.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found or track is not in playlist.' })
   removeTrack(
     @CurrentUser('userId') userId: string,
     @Param() params: RemoveTrackFromPlaylistParamsDto,
