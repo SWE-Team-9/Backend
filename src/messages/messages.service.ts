@@ -117,6 +117,21 @@ export class MessagesService {
 
   // ─── Helpers: map message ────────────────────────────────────────────────────
 
+  private async getTrackInteractions(
+    userId: string,
+    trackIds: string[],
+  ): Promise<{ likedTrackIds: Set<string>; repostedTrackIds: Set<string> }> {
+    if (!trackIds.length) return { likedTrackIds: new Set(), repostedTrackIds: new Set() };
+    const [likes, reposts] = await Promise.all([
+      this.prisma.like.findMany({ where: { userId, trackId: { in: trackIds } }, select: { trackId: true } }),
+      this.prisma.repost.findMany({ where: { userId, trackId: { in: trackIds } }, select: { trackId: true } }),
+    ]);
+    return {
+      likedTrackIds: new Set(likes.map((l) => l.trackId)),
+      repostedTrackIds: new Set(reposts.map((r) => r.trackId)),
+    };
+  }
+
   private mapMessage(
     msg: {
       id: string;
@@ -135,6 +150,7 @@ export class MessagesService {
           coverArtUrl: string | null;
           durationMs: number | null;
           waveformData: number[];
+          createdAt: Date;
           _count: { likes: number; reposts: number; comments: number; playEvents: number };
           uploader: { id: string; profile: { displayName: string; handle: string; avatarUrl: string | null } | null };
         } | null;
@@ -162,6 +178,7 @@ export class MessagesService {
       conversation: { participants: { userId: string }[] };
     },
     viewerId: string,
+    interactions?: { likedTrackIds: Set<string>; repostedTrackIds: Set<string> },
   ) {
     if (msg.deletedAt) {
       return {
@@ -206,7 +223,9 @@ export class MessagesService {
           commentsCount: t._count.comments,
           likesCount: t._count.likes,
           repostsCount: t._count.reposts,
-          createdAt: null,
+          liked: interactions?.likedTrackIds.has(t.id) ?? false,
+          reposted: interactions?.repostedTrackIds.has(t.id) ?? false,
+          createdAt: t.createdAt,
         },
       };
     }
@@ -267,6 +286,7 @@ export class MessagesService {
             coverArtUrl: true,
             durationMs: true,
             waveformData: true,
+            createdAt: true,
             uploader: {
               select: {
                 id: true,
@@ -473,6 +493,12 @@ export class MessagesService {
       }),
     ]);
 
+    // Batch-fetch viewer's like/repost state for all shared tracks in this page
+    const trackIds = messages
+      .filter((m) => m.messageType === "TRACK_SHARE" && (m as any).share?.track?.id)
+      .map((m) => (m as any).share.track.id as string);
+    const interactions = await this.getTrackInteractions(userId, trackIds);
+
     return {
       conversationId,
       participant: other
@@ -487,7 +513,7 @@ export class MessagesService {
       limit,
       total,
       hasMore: skip + messages.length < total,
-      messages: messages.map((m) => this.mapMessage(m as Parameters<typeof this.mapMessage>[0], userId)),
+      messages: messages.map((m) => this.mapMessage(m as Parameters<typeof this.mapMessage>[0], userId, interactions)),
       ...(blockFlags ?? {}),
     };
   }
@@ -520,11 +546,7 @@ export class MessagesService {
       currentUnreadCount: unreadCount,
     });
 
-    return {
-      message: mappedMsg,
-      conversationId,
-      currentUnreadCount: unreadCount,
-    };
+    return { message: mappedMsg, conversationId, currentUnreadCount: unreadCount };
   }
 
   // ─── Share track ─────────────────────────────────────────────────────────────
@@ -567,8 +589,9 @@ export class MessagesService {
       select: this.MESSAGE_SELECT,
     });
 
+    const interactions = await this.getTrackInteractions(senderId, [trackId]);
     const unreadCount = await this.getUnreadCount(senderId);
-    const mappedMsg = this.mapMessage(message as Parameters<typeof this.mapMessage>[0], senderId);
+    const mappedMsg = this.mapMessage(message as Parameters<typeof this.mapMessage>[0], senderId, interactions);
 
     this.gateway?.emitNewMessage(conversationId, receiverId, {
       type: "NEW_MESSAGE",
@@ -703,8 +726,11 @@ export class MessagesService {
 
     // Idempotent: if already unread (no lastReadAt), do nothing
     if (!participant.lastReadAt) {
+      const conversationUnreadCount = await this.prisma.message.count({
+        where: { conversationId, senderId: { not: userId }, deletedAt: null },
+      });
       const unreadCount = await this.getUnreadCount(userId);
-      return { message: "Conversation marked as unread", unreadCount };
+      return { message: "Conversation marked as unread", conversationUnreadCount, unreadCount };
     }
 
     await this.prisma.conversationParticipant.update({
@@ -712,10 +738,13 @@ export class MessagesService {
       data: { lastReadMessageId: null, lastReadAt: null },
     });
 
+    const conversationUnreadCount = await this.prisma.message.count({
+      where: { conversationId, senderId: { not: userId }, deletedAt: null },
+    });
     const unreadCount = await this.getUnreadCount(userId);
     this.gateway?.emitUnreadCountUpdated(userId, unreadCount);
 
-    return { message: "Conversation marked as unread", unreadCount };
+    return { message: "Conversation marked as unread", conversationUnreadCount, unreadCount };
   }
 
   // ─── Archive / Unarchive ─────────────────────────────────────────────────────
@@ -824,6 +853,11 @@ export class MessagesService {
       },
     });
 
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { updatedAt: true },
+    });
+
     return {
       conversationId,
       participant: {
@@ -836,6 +870,8 @@ export class MessagesService {
         ? { id: lastMessage.id, type: lastMessage.messageType, text: lastMessage.body, createdAt: lastMessage.createdAt }
         : null,
       unreadCount,
+      updatedAt: conversation?.updatedAt ?? null,
+      isArchived: participant?.isArchived ?? false,
       ...blockFlags,
     };
   }
