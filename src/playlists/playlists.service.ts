@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PlaylistVisibility } from '@prisma/client';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { PlaylistVisibility, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,29 +17,55 @@ export class PlaylistsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(userId: string, dto: CreatePlaylistDto) {
-    const visibility = dto.visibility as PlaylistVisibility;
-    const slug = await this.generateUniqueSlug(dto.title);
+    const visibility = dto.visibility;
     const secretToken =
       visibility === PlaylistVisibility.SECRET
         ? randomBytes(24).toString('hex')
         : null;
 
-    const playlist = await this.prisma.playlist.create({
-      data: {
-        ownerId: userId,
-        title: dto.title,
-        description: dto.description ?? null,
-        visibility,
-        secretToken,
-        slug,
-      },
-      select: {
-        id: true,
-        title: true,
-        visibility: true,
-        secretToken: true,
-      },
-    });
+    let playlist:
+      | {
+          id: string;
+          title: string;
+          visibility: PlaylistVisibility;
+          secretToken: string | null;
+        }
+      | null = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const slug = await this.generateUniqueSlug(dto.title);
+
+      try {
+        playlist = await this.prisma.playlist.create({
+          data: {
+            ownerId: userId,
+            title: dto.title,
+            description: dto.description ?? null,
+            visibility,
+            secretToken,
+            slug,
+          },
+          select: {
+            id: true,
+            title: true,
+            visibility: true,
+            secretToken: true,
+          },
+        });
+
+        break;
+      } catch (error) {
+        if (this.isSlugUniqueViolation(error) && attempt < 2) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    if (!playlist) {
+      throw new ConflictException('Unable to create playlist. Please retry.');
+    }
 
     return {
       playlistId: playlist.id,
@@ -47,6 +73,23 @@ export class PlaylistsService {
       visibility: playlist.visibility,
       secretToken: playlist.secretToken,
     };
+  }
+
+  private isSlugUniqueViolation(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') {
+      return false;
+    }
+
+    const target = error.meta?.target;
+    if (Array.isArray(target)) {
+      return target.includes('slug');
+    }
+
+    return typeof target === 'string' && target.includes('slug');
   }
 
   private async generateUniqueSlug(title: string): Promise<string> {

@@ -32,7 +32,7 @@ export class PlaylistsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({
     summary: 'Create playlist',
     description: 'Creates a new playlist (set) for the authenticated user.',

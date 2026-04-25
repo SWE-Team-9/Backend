@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PlaylistVisibility } from '@prisma/client';
 
 export class CreatePlaylistDto {
   @ApiProperty({
@@ -21,18 +22,21 @@ export class CreatePlaylistDto {
     maxLength: 5000,
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? undefined : trimmed;
+  })
   @IsString()
   @MaxLength(5000)
   description?: string;
 
   @ApiProperty({
     description: 'Playlist visibility',
-    enum: ['PUBLIC', 'SECRET'],
+    enum: PlaylistVisibility,
     example: 'PUBLIC',
   })
   @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
-  @IsString()
-  @IsIn(['PUBLIC', 'SECRET'])
-  visibility!: string;
+  @IsEnum(PlaylistVisibility)
+  visibility!: PlaylistVisibility;
 }
