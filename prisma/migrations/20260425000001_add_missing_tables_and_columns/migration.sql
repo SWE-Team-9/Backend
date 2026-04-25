@@ -5,8 +5,9 @@
 -- payment_methods, reports, and appeals.
 -- ============================================================================
 
--- Enable pg_trgm for GIN search index on user_search_indexable
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- NOTE:
+-- Do not create extensions here (may require elevated DB privileges in some envs).
+-- The trigram index is created conditionally below only when pg_trgm already exists.
 
 -- ----------------------------------------------------------------------------
 -- 1. Add missing columns to user_subscriptions
@@ -70,8 +71,16 @@ CREATE TABLE IF NOT EXISTS "user_search_indexable" (
   CONSTRAINT "user_search_indexable_pkey" PRIMARY KEY ("user_id")
 );
 
-CREATE INDEX IF NOT EXISTS "user_search_indexable_search_vector_idx"
-  ON "user_search_indexable" USING GIN ("search_vector" gin_trgm_ops);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+    CREATE INDEX IF NOT EXISTS "user_search_indexable_search_vector_idx"
+      ON "user_search_indexable" USING GIN ("search_vector" gin_trgm_ops);
+  ELSE
+    RAISE NOTICE 'Skipping user_search_indexable trigram index because pg_trgm is not installed';
+  END IF;
+END
+$$;
 
 ALTER TABLE "user_search_indexable"
   ADD CONSTRAINT "user_search_indexable_user_id_fkey"
@@ -85,7 +94,7 @@ ALTER TABLE "user_search_indexable"
 -- 5. trial_redemptions
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS "trial_redemptions" (
-  "id"                       UUID        NOT NULL DEFAULT gen_random_uuid(),
+  "id"                       UUID        NOT NULL,
   "user_id"                  UUID        NOT NULL,
   "plan_code"                TEXT        NOT NULL,
   "redeemed_at"              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -131,7 +140,7 @@ ALTER TABLE "user_billing"
 -- 7. payment_methods
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS "payment_methods" (
-  "id"                       UUID        NOT NULL DEFAULT gen_random_uuid(),
+  "id"                       UUID        NOT NULL,
   "user_id"                  UUID        NOT NULL,
   "stripe_payment_method_id" TEXT        NOT NULL,
   "brand"                    VARCHAR(20) NOT NULL,
@@ -162,7 +171,7 @@ ALTER TABLE "payment_methods"
 -- 8. reports
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS "reports" (
-  "id"          UUID               NOT NULL DEFAULT gen_random_uuid(),
+  "id"          UUID               NOT NULL,
   "reporter_id" UUID               NOT NULL,
   "target_type" "ReportTargetType" NOT NULL,
   "target_id"   UUID               NOT NULL,
@@ -198,7 +207,7 @@ ALTER TABLE "reports" VALIDATE CONSTRAINT "reports_resolved_by_fkey";
 -- 9. appeals
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS "appeals" (
-  "id"               UUID           NOT NULL DEFAULT gen_random_uuid(),
+  "id"               UUID           NOT NULL,
   "report_id"        UUID           NOT NULL,
   "user_id"          UUID           NOT NULL,
   "message"          TEXT           NOT NULL,

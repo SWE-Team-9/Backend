@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InvoiceStatus, SubscriptionStatus } from '@prisma/client';
+import { InvoiceStatus, Prisma, SubscriptionStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +25,19 @@ function mockId(prefix: string): string {
 @Injectable()
 export class TrialSchedulerService {
   private readonly logger = new Logger(TrialSchedulerService.name);
+
+  private isMissingColumnError(error: unknown, columnName: string): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2022') {
+      return false;
+    }
+
+    const metaColumn = String((error.meta as { column?: unknown } | undefined)?.column ?? '');
+    return metaColumn.includes(columnName) || String(error.message).includes(columnName);
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -278,26 +291,43 @@ export class TrialSchedulerService {
   async cancelExpiredGracePeriodSubscriptions(): Promise<void> {
     const now = new Date();
 
-    const expiredGrace = await this.prisma.userSubscription.findMany({
-      where: {
-        status: SubscriptionStatus.PAST_DUE,
-        // Use paymentFailureGraceEndsAt (the explicit deadline set at payment failure)
-        // rather than updatedAt, which resets on any subsequent write and would cause
-        // unpredictable grace-period lengths.
-        paymentFailureGraceEndsAt: { lt: now },
-      },
-      select: {
-        id: true,
-        userId: true,
-        user: {
-          select: {
-            email: true,
-            profile: { select: { displayName: true } },
-          },
+    let expiredGrace: Array<{
+      id: string;
+      userId: string;
+      user: { email: string; profile: { displayName: string | null } | null };
+      plan: { name: string };
+    }> = [];
+
+    try {
+      expiredGrace = await this.prisma.userSubscription.findMany({
+        where: {
+          status: SubscriptionStatus.PAST_DUE,
+          // Use paymentFailureGraceEndsAt (the explicit deadline set at payment failure)
+          // rather than updatedAt, which resets on any subsequent write and would cause
+          // unpredictable grace-period lengths.
+          paymentFailureGraceEndsAt: { lt: now },
         },
-        plan: { select: { name: true } },
-      },
-    });
+        select: {
+          id: true,
+          userId: true,
+          user: {
+            select: {
+              email: true,
+              profile: { select: { displayName: true } },
+            },
+          },
+          plan: { select: { name: true } },
+        },
+      });
+    } catch (error) {
+      if (this.isMissingColumnError(error, 'payment_failure_grace_ends_at')) {
+        this.logger.warn(
+          '[GRACE EXPIRED] Skipping grace-period cancellation: database column payment_failure_grace_ends_at is missing. Run migrations to enable this job.',
+        );
+        return;
+      }
+      throw error;
+    }
 
     for (const sub of expiredGrace) {
       try {
