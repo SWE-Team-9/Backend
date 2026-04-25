@@ -31,10 +31,6 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { AdminModule } from "./admin/admin.module";
 import { EntitlementsModule } from "./entitlements/entitlements.module";
 
-const enablePaymentFeatures =
-  (process.env.ENABLE_PAYMENT_FEATURES ??
-    (process.env.NODE_ENV === "test" ? "true" : "false")) === "true";
-
 @Module({
   imports: [
     // ── Config ───────────────────────────────────────────────────────────────
@@ -70,7 +66,7 @@ const enablePaymentFeatures =
     TracksModule, // Module 4 — Audio Upload & Track Management
     SocialModule, // Module 3 — Social Graph (Blocking & Moderation)
     PlayerModule, // Module 5 — Playback & Streaming Engine
-    ...(enablePaymentFeatures ? [ReportsModule] : []), // Module 11 — Reports & Appeals
+    ReportsModule, // Module 11 — Reports & Appeals
     FeedModule, // Module 8 — Feed
     DiscoveryModule, // Module 8 — Search & Discovery
     MessagesModule, // Module 9 — Messaging + WebSocket
@@ -78,7 +74,8 @@ const enablePaymentFeatures =
     AdminModule, // Module 11 — Admin: User Enforcement + Content Moderation + Stats
     PlaylistsModule, // Module 7 — Sets & Playlists
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
-    ...(enablePaymentFeatures ? [StripeModule, PaymentMethodsModule] : []),
+    StripeModule,        // Global Stripe SDK wrapper
+    PaymentMethodsModule, // Payment method management routes
     EntitlementsModule,  // GET /entitlements/me
   ],
   controllers: [AppController],
