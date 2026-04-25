@@ -79,6 +79,39 @@ export class PlaylistsController {
 
   @Post(':playlistId/tracks')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Add track to playlist',
+    description: 'Adds a track to an existing playlist. Owner only.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiBody({
+    type: AddTrackToPlaylistDto,
+    schema: {
+      example: {
+        trackId: 'trk_123',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Track added to playlist successfully.',
+    schema: {
+      example: {
+        message: 'Track added to playlist successfully',
+        playlistId: 'pl_101',
+        trackId: 'trk_123',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Only playlist owner can add tracks.' })
+  @ApiResponse({ status: 404, description: 'Playlist or track not found.' })
+  @ApiResponse({ status: 409, description: 'Track already exists in playlist.' })
   addTrack(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
