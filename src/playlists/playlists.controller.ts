@@ -143,12 +143,13 @@ export class PlaylistsController {
   }
 
   @Patch(':playlistId')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   update(
     @CurrentUser('userId') userId: string,
-    @Param('playlistId') playlistId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
     @Body() dto: UpdatePlaylistDto,
   ) {
-    return this.playlistsService.update(userId, playlistId, dto);
+    return this.playlistsService.update(userId, params.playlistId, dto);
   }
 
   @Delete(':playlistId')
