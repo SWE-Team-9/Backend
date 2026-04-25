@@ -188,8 +188,8 @@ export class UserEnforcementService {
     await this.reVerifyAdminRole(adminId);
     await this.verifyAdminPassword(adminId, dto.currentPassword);
 
-    // Hide all visible tracks and playlists
-    const [tracksResult, playlistsResult] = await this.prisma.$transaction([
+    // Hide all visible tracks and playlists, ban user, revoke sessions atomically
+    const txResults = await this.prisma.$transaction([
       this.prisma.track.updateMany({
         where: { uploaderId: targetUserId, moderationState: "VISIBLE" },
         data: { moderationState: "HIDDEN" },
@@ -204,6 +204,9 @@ export class UserEnforcementService {
       }),
       this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
     ]);
+    const tracksResult = txResults[0] as { count: number };
+    const playlistsResult = txResults[1] as { count: number };
+    void playlistsResult;
 
     const action = await this.prisma.moderationAction.create({
       data: {
@@ -249,13 +252,6 @@ export class UserEnforcementService {
     }
 
     await this.reVerifyAdminRole(adminId);
-
-    const updates: Promise<unknown>[] = [
-      this.prisma.user.update({
-        where: { id: targetUserId },
-        data: { accountStatus: "ACTIVE", suspendedUntil: null },
-      }),
-    ];
 
     let tracksRestored = 0;
     let playlistsRestored = 0;
