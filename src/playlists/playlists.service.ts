@@ -253,11 +253,26 @@ export class PlaylistsService {
     };
   }
 
-  remove(_userId: string, playlistId: string) {
-    return {
-      message: 'Delete playlist placeholder',
-      playlistId,
-    };
+  async remove(userId: string, playlistId: string): Promise<void> {
+    const playlist = await this.prisma.playlist.findUnique({
+      where: { id: playlistId },
+      select: {
+        id: true,
+        ownerId: true,
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw new ForbiddenException('You can only delete your own playlists.');
+    }
+
+    await this.prisma.playlist.delete({
+      where: { id: playlist.id },
+    });
   }
 
   addTrack(_userId: string, playlistId: string, dto: AddTrackToPlaylistDto) {
