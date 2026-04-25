@@ -17,7 +17,7 @@ import { NotificationsQueryDto } from "./dto/notifications-query.dto";
 import { NotificationPreferencesDto } from "./dto/notification-preferences.dto";
 import { RegisterDeviceDto } from "./dto/register-device.dto";
 
-@Controller("api/v1/notifications")
+@Controller("notifications")
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 

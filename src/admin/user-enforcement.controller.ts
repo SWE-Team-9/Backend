@@ -16,7 +16,7 @@ import {
   RestoreUserDto,
 } from "./dto/user-enforcement.dto";
 
-@Controller("api/v1/admin/users")
+@Controller("admin/users")
 @Roles("ADMIN")
 export class UserEnforcementController {
   constructor(private readonly userEnforcementService: UserEnforcementService) {}

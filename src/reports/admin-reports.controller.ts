@@ -23,7 +23,7 @@ import { ReportsService } from "./reports.service";
 
 @ApiTags("Admin Reports")
 @ApiBearerAuth()
-@Roles("ADMIN")
+@Roles("ADMIN", "MODERATOR")
 @Controller("admin/reports")
 export class AdminReportsController {
   constructor(private readonly reportsService: ReportsService) {}

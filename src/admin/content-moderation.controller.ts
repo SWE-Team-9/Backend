@@ -15,7 +15,7 @@ import {
   ModeratePlaylistDto,
 } from "./dto/content-moderation.dto";
 
-@Controller("api/v1/admin")
+@Controller("admin")
 @Roles("ADMIN", "MODERATOR")
 export class ContentModerationController {
   constructor(private readonly contentModerationService: ContentModerationService) {}

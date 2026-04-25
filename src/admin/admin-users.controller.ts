@@ -8,7 +8,7 @@ import {
   MostReportedQueryDto,
 } from "./dto/admin-users.dto";
 
-@Controller("api/v1/admin")
+@Controller("admin")
 @Roles("ADMIN")
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
