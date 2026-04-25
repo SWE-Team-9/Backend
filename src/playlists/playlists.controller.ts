@@ -19,6 +19,7 @@ import { PlaylistsService } from './playlists.service';
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
+  GetPlaylistDetailsParamsDto,
   PlaylistPaginationQueryDto,
   ReorderPlaylistTracksDto,
   UpdatePlaylistDto,
@@ -102,8 +103,9 @@ export class PlaylistsController {
   }
 
   @Get(':playlistId')
-  getDetails(@Param('playlistId') playlistId: string) {
-    return this.playlistsService.getDetails(playlistId);
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  getDetails(@Param() params: GetPlaylistDetailsParamsDto) {
+    return this.playlistsService.getDetails(params.playlistId);
   }
 
   @Patch(':playlistId')
