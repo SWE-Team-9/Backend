@@ -16,6 +16,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { ReportsModule } from "./reports/reports.module";
 import { FeedModule } from "./feed/feed.module";
 import { DiscoveryModule } from "./discovery/discovery.module";
+import { PlaylistsModule } from "./playlists/playlists.module";
 import { StorageModule } from "./common/storage/storage.module";
 import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
 import { StripeModule } from "./stripe/stripe.module";
@@ -63,6 +64,7 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
     ReportsModule, // Module 11 — Reports & Appeals
     FeedModule, // Module 8 — Feed
     DiscoveryModule, // Module 8 — Search & Discovery
+    PlaylistsModule, // Module 7 — Sets & Playlists
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
     StripeModule,        // Global Stripe SDK wrapper
     PaymentMethodsModule, // Payment method management routes
