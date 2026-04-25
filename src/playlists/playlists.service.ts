@@ -12,6 +12,7 @@ import {
   PlaylistPaginationQueryDto,
   RemoveTrackFromPlaylistResponseDto,
   ReorderPlaylistTracksDto,
+  ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
 } from './dto';
 
@@ -501,10 +502,28 @@ export class PlaylistsService {
     };
   }
 
-  resolveSecret(secretToken: string) {
+  async resolveSecret(secretToken: string): Promise<ResolveSecretPlaylistResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        secretToken,
+        visibility: PlaylistVisibility.SECRET,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Secret playlist not found.');
+    }
+
     return {
-      message: 'Resolve secret playlist placeholder',
-      secretToken,
+      playlistId: playlist.id,
+      title: playlist.title,
+      visibility: 'PRIVATE',
+      message: 'Access granted via secret token',
     };
   }
 
