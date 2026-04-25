@@ -8,6 +8,7 @@ import {
   AddTrackToPlaylistDto,
   AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
+  GetPlaylistEmbedCodeResponseDto,
   GetPlaylistDetailsResponseDto,
   PlaylistPaginationQueryDto,
   RemoveTrackFromPlaylistResponseDto,
@@ -527,11 +528,29 @@ export class PlaylistsService {
     };
   }
 
-  getEmbedCode(playlistId: string) {
+  async getEmbedCode(userId: string, playlistId: string): Promise<GetPlaylistEmbedCodeResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerId: true,
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw new ForbiddenException('You can only access embed code for your own playlists.');
+    }
+
     return {
-      message: 'Get playlist embed code placeholder',
-      playlistId,
-      embedCode: `<iframe src="https://example.com/embed/playlists/${playlistId}"></iframe>`,
+      playlistId: playlist.id,
+      embedCode: `<iframe src="https://example.com/embed/playlists/${playlist.id}"></iframe>`,
     };
   }
 }
