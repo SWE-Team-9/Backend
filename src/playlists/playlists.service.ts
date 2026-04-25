@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PlaylistVisibility, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
+  GetPlaylistDetailsResponseDto,
   PlaylistPaginationQueryDto,
   ReorderPlaylistTracksDto,
   UpdatePlaylistDto,
@@ -128,10 +129,65 @@ export class PlaylistsService {
       .slice(0, 80);
   }
 
-  getDetails(playlistId: string) {
+  async getDetails(playlistId: string): Promise<GetPlaylistDetailsResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        visibility: true,
+        owner: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+              },
+            },
+          },
+        },
+        tracks: {
+          where: {
+            track: {
+              deletedAt: null,
+            },
+          },
+          orderBy: {
+            position: 'asc',
+          },
+          select: {
+            track: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+
     return {
-      message: 'Get playlist details placeholder',
-      playlistId,
+      playlistId: playlist.id,
+      title: playlist.title,
+      description: playlist.description,
+      visibility: playlist.visibility,
+      owner: {
+        id: playlist.owner.id,
+        display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
+      },
+      tracks: playlist.tracks.map(({ track }) => ({
+        trackId: track.id,
+        title: track.title,
+      })),
     };
   }
 
