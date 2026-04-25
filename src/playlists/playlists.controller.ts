@@ -22,6 +22,7 @@ import {
   DeletePlaylistParamsDto,
   GetPlaylistEmbedCodeParamsDto,
   GetPlaylistEmbedCodeResponseDto,
+  GetMyPlaylistsResponseDto,
   GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
   PlaylistPaginationQueryDto,
@@ -30,6 +31,7 @@ import {
   ResolveSecretPlaylistParamsDto,
   ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
+  UpdatePlaylistResponseDto,
 } from './dto';
 
 @Controller('playlists')
@@ -65,6 +67,31 @@ export class PlaylistsController {
   }
 
   @Get('me')
+  @ApiOperation({
+    summary: 'Get my playlists',
+    description: 'Returns playlists created by the authenticated user.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playlists fetched successfully.',
+    type: GetMyPlaylistsResponseDto,
+    schema: {
+      example: {
+        page: 1,
+        limit: 20,
+        total: 5,
+        playlists: [
+          {
+            playlistId: 'pl_101',
+            title: 'Late Night Drive',
+            visibility: 'PUBLIC',
+            tracksCount: 12,
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
   getMyPlaylists(
     @CurrentUser('userId') userId: string,
     @Query() query: PlaylistPaginationQueryDto,
@@ -265,7 +292,8 @@ export class PlaylistsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Playlist details fetched successfully.',
+    description:
+      'Playlist details fetched successfully. secretToken is only returned for the playlist owner.',
     type: GetPlaylistDetailsResponseDto,
     schema: {
       example: {
@@ -273,6 +301,7 @@ export class PlaylistsController {
         title: 'Late Night Drive',
         description: 'My favorite chill tracks',
         visibility: 'PUBLIC',
+        secretToken: null,
         owner: {
           id: 'usr_1',
           display_name: 'Ahmed Hassan',
@@ -287,8 +316,11 @@ export class PlaylistsController {
     },
   })
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
-  getDetails(@Param() params: GetPlaylistDetailsParamsDto) {
-    return this.playlistsService.getDetails(params.playlistId);
+  getDetails(
+    @CurrentUser('userId') userId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
+  ) {
+    return this.playlistsService.getDetails(params.playlistId, userId);
   }
 
   @Patch(':playlistId')
@@ -314,9 +346,27 @@ export class PlaylistsController {
   @ApiResponse({
     status: 200,
     description: 'Playlist updated successfully.',
+    type: UpdatePlaylistResponseDto,
     schema: {
       example: {
         message: 'Playlist updated successfully',
+        playlist: {
+          playlistId: 'pl_101',
+          title: 'Late Night Drive Vol. 2',
+          description: 'My favorite chill tracks',
+          visibility: 'SECRET',
+          secretToken: '2e8b35f8-98d2-4f78-8899-b5fb688d809a',
+          owner: {
+            id: 'usr_1',
+            display_name: 'Ahmed Hassan',
+          },
+          tracks: [
+            {
+              trackId: 'trk_123',
+              title: 'Layali',
+            },
+          ],
+        },
       },
     },
   })

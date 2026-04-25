@@ -1,5 +1,6 @@
 export { CreatePlaylistDto } from './create-playlist.dto';
 export { UpdatePlaylistDto } from './update-playlist.dto';
+export { UpdatePlaylistResponseDto } from './update-playlist-response.dto';
 export {
 	AddTrackToPlaylistDto,
 	AddTrackToPlaylistResponseDto,

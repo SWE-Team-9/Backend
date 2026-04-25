@@ -159,23 +159,51 @@ describe('PlaylistsService', () => {
   });
 
   describe('getDetails', () => {
-    it('returns playlist details with tracks', async () => {
+    it('returns playlist details with tracks and hides secretToken for non-owner', async () => {
       prisma.playlist.findFirst.mockResolvedValue({
         id: 'pl_101',
+        ownerId: 'usr_1',
         title: 'Late Night Drive',
         description: 'chill tracks',
         visibility: 'PUBLIC',
+        secretToken: 'sec_hidden',
         owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
         tracks: [{ track: { id: 'trk_123', title: 'Layali' } }],
       });
 
-      const result = await service.getDetails('pl_101');
+      const result = await service.getDetails('pl_101', 'usr_2');
 
       expect(result).toEqual({
         playlistId: 'pl_101',
         title: 'Late Night Drive',
         description: 'chill tracks',
         visibility: 'PUBLIC',
+        owner: { id: 'usr_1', display_name: 'Ahmed Hassan' },
+        tracks: [{ trackId: 'trk_123', title: 'Layali' }],
+      });
+      expect(result).not.toHaveProperty('secretToken');
+    });
+
+    it('returns playlist details with secretToken for owner', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: 'pl_101',
+        ownerId: 'usr_1',
+        title: 'Late Night Drive',
+        description: 'chill tracks',
+        visibility: 'SECRET',
+        secretToken: 'sec_owner_visible',
+        owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
+        tracks: [{ track: { id: 'trk_123', title: 'Layali' } }],
+      });
+
+      const result = await service.findOne('pl_101', 'usr_1');
+
+      expect(result).toEqual({
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        description: 'chill tracks',
+        visibility: 'SECRET',
+        secretToken: 'sec_owner_visible',
         owner: { id: 'usr_1', display_name: 'Ahmed Hassan' },
         tracks: [{ trackId: 'trk_123', title: 'Layali' }],
       });
@@ -190,14 +218,23 @@ describe('PlaylistsService', () => {
   });
 
   describe('update', () => {
-    it('updates playlist and returns success message', async () => {
+    it('updates playlist and returns sanitized payload', async () => {
       prisma.playlist.findFirst.mockResolvedValue({
         id: 'pl_101',
         ownerId: 'usr_1',
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
       });
-      prisma.playlist.update.mockResolvedValue({});
+      prisma.playlist.update.mockResolvedValue({
+        id: 'pl_101',
+        ownerId: 'usr_1',
+        title: 'Vol 2',
+        description: null,
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+        owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
+        tracks: [],
+      });
 
       const result = await service.update('usr_1', 'pl_101', {
         title: 'Vol 2',
@@ -206,18 +243,41 @@ describe('PlaylistsService', () => {
       expect(prisma.playlist.update).toHaveBeenCalledWith({
         where: { id: 'pl_101' },
         data: { title: 'Vol 2' },
+        select: expect.any(Object),
       });
-      expect(result).toEqual({ message: 'Playlist updated successfully' });
+      expect(result).toEqual({
+        message: 'Playlist updated successfully',
+        playlist: {
+          playlistId: 'pl_101',
+          title: 'Vol 2',
+          description: null,
+          visibility: PlaylistVisibility.PUBLIC,
+          secretToken: null,
+          owner: { id: 'usr_1', display_name: 'Ahmed Hassan' },
+          tracks: [],
+        },
+      });
     });
 
-    it('maps PRIVATE to SECRET and generates token if needed', async () => {
-      prisma.playlist.findFirst.mockResolvedValue({
+    it('maps PRIVATE to SECRET and generates UUID token if needed', async () => {
+      prisma.playlist.findFirst
+        .mockResolvedValueOnce({
+          id: 'pl_101',
+          ownerId: 'usr_1',
+          visibility: PlaylistVisibility.PUBLIC,
+          secretToken: null,
+        })
+        .mockResolvedValueOnce(null);
+      prisma.playlist.update.mockResolvedValue({
         id: 'pl_101',
         ownerId: 'usr_1',
-        visibility: PlaylistVisibility.PUBLIC,
-        secretToken: null,
+        title: 'Late Night Drive',
+        description: null,
+        visibility: PlaylistVisibility.SECRET,
+        secretToken: 'placeholder',
+        owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
+        tracks: [],
       });
-      prisma.playlist.update.mockResolvedValue({});
 
       await service.update('usr_1', 'pl_101', {
         visibility: 'PRIVATE',
@@ -227,8 +287,11 @@ describe('PlaylistsService', () => {
         where: { id: 'pl_101' },
         data: expect.objectContaining({
           visibility: PlaylistVisibility.SECRET,
-          secretToken: expect.any(String),
+          secretToken: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+          ),
         }),
+        select: expect.any(Object),
       });
     });
 

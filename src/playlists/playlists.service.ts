@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PlaylistVisibility, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
+import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -16,6 +18,7 @@ import {
   ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
 } from './dto';
+import { PlaylistEntity } from './entities/playlist.entity';
 
 @Injectable()
 export class PlaylistsService {
@@ -175,7 +178,76 @@ export class PlaylistsService {
       .slice(0, 80);
   }
 
-  async getDetails(playlistId: string): Promise<GetPlaylistDetailsResponseDto> {
+  private async generateUniqueSecretToken(excludePlaylistId?: string): Promise<string> {
+    for (let i = 0; i < 5; i += 1) {
+      const candidate = randomUUID();
+      const existing = await this.prisma.playlist.findFirst({
+        where: {
+          secretToken: candidate,
+          ...(excludePlaylistId ? { id: { not: excludePlaylistId } } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    throw new ConflictException('Failed to generate a unique secret token.');
+  }
+
+  private sanitizePlaylistOutput(
+    playlist: {
+      id: string;
+      title: string;
+      description: string | null;
+      visibility: PlaylistVisibility;
+      secretToken: string | null;
+      ownerId: string;
+      owner: { id: string; profile: { displayName: string } | null };
+      tracks: Array<{ track: { id: string; title: string } }>;
+    },
+    requesterUserId?: string,
+  ): GetPlaylistDetailsResponseDto {
+    const entity = plainToInstance(
+      PlaylistEntity,
+      {
+        playlistId: playlist.id,
+        title: playlist.title,
+        description: playlist.description,
+        visibility: playlist.visibility,
+        secretToken: playlist.secretToken,
+        owner: {
+          id: playlist.owner.id,
+          display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
+        },
+        tracks: playlist.tracks.map(({ track }) => ({
+          trackId: track.id,
+          title: track.title,
+        })),
+      },
+      { excludeExtraneousValues: true },
+    );
+
+    const groups = requesterUserId === playlist.ownerId ? ['owner'] : [];
+    const plain = instanceToPlain(entity, { groups }) as GetPlaylistDetailsResponseDto & {
+      secretToken?: string | null;
+    };
+
+    if (requesterUserId === playlist.ownerId) {
+      plain.secretToken = playlist.secretToken;
+    } else {
+      delete plain.secretToken;
+    }
+
+    return plain;
+  }
+
+  async findOne(
+    playlistId: string,
+    requesterUserId?: string,
+  ): Promise<GetPlaylistDetailsResponseDto> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         id: playlistId,
@@ -183,9 +255,11 @@ export class PlaylistsService {
       },
       select: {
         id: true,
+        ownerId: true,
         title: true,
         description: true,
         visibility: true,
+        secretToken: true,
         owner: {
           select: {
             id: true,
@@ -221,20 +295,14 @@ export class PlaylistsService {
       throw new NotFoundException('Playlist not found.');
     }
 
-    return {
-      playlistId: playlist.id,
-      title: playlist.title,
-      description: playlist.description,
-      visibility: playlist.visibility,
-      owner: {
-        id: playlist.owner.id,
-        display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
-      },
-      tracks: playlist.tracks.map(({ track }) => ({
-        trackId: track.id,
-        title: track.title,
-      })),
-    };
+    return this.sanitizePlaylistOutput(playlist, requesterUserId);
+  }
+
+  async getDetails(
+    playlistId: string,
+    requesterUserId?: string,
+  ): Promise<GetPlaylistDetailsResponseDto> {
+    return this.findOne(playlistId, requesterUserId);
   }
 
   async update(userId: string, playlistId: string, dto: UpdatePlaylistDto) {
@@ -281,7 +349,7 @@ export class PlaylistsService {
         playlist.visibility !== PlaylistVisibility.SECRET ||
         !playlist.secretToken
       ) {
-        data.secretToken = randomBytes(24).toString('hex');
+        data.secretToken = await this.generateUniqueSecretToken(playlist.id);
       }
     }
 
@@ -289,13 +357,50 @@ export class PlaylistsService {
       throw new BadRequestException('At least one field must be provided for update.');
     }
 
-    await this.prisma.playlist.update({
+    const updated = await this.prisma.playlist.update({
       where: { id: playlist.id },
       data,
+      select: {
+        id: true,
+        ownerId: true,
+        title: true,
+        description: true,
+        visibility: true,
+        secretToken: true,
+        owner: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+              },
+            },
+          },
+        },
+        tracks: {
+          where: {
+            track: {
+              deletedAt: null,
+            },
+          },
+          orderBy: {
+            position: 'asc',
+          },
+          select: {
+            track: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     return {
       message: 'Playlist updated successfully',
+      playlist: this.sanitizePlaylistOutput(updated, userId),
     };
   }
 
