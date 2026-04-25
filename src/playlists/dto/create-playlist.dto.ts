@@ -39,4 +39,13 @@ export class CreatePlaylistDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
   @IsEnum(PlaylistVisibility)
   visibility!: PlaylistVisibility;
+
+  @ApiProperty({
+    description: 'Initial track id to add when creating the playlist',
+    example: 'trk_123',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  trackId!: string;
 }

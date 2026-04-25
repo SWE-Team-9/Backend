@@ -26,6 +26,18 @@ export class PlaylistsService {
         ? randomBytes(24).toString('hex')
         : null;
 
+    const track = await this.prisma.track.findFirst({
+      where: {
+        id: dto.trackId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (!track) {
+      throw new NotFoundException('Track not found.');
+    }
+
     let playlist:
       | {
           id: string;
@@ -39,21 +51,33 @@ export class PlaylistsService {
       const slug = await this.generateUniqueSlug(dto.title);
 
       try {
-        playlist = await this.prisma.playlist.create({
-          data: {
-            ownerId: userId,
-            title: dto.title,
-            description: dto.description ?? null,
-            visibility,
-            secretToken,
-            slug,
-          },
-          select: {
-            id: true,
-            title: true,
-            visibility: true,
-            secretToken: true,
-          },
+        playlist = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.playlist.create({
+            data: {
+              ownerId: userId,
+              title: dto.title,
+              description: dto.description ?? null,
+              visibility,
+              secretToken,
+              slug,
+            },
+            select: {
+              id: true,
+              title: true,
+              visibility: true,
+              secretToken: true,
+            },
+          });
+
+          await tx.playlistTrack.create({
+            data: {
+              playlistId: created.id,
+              trackId: track.id,
+              position: 0,
+            },
+          });
+
+          return created;
         });
 
         break;
