@@ -7,10 +7,15 @@ import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
 import { TrialSchedulerService } from './trial-scheduler.service';
 
+const enablePaymentFeatures = process.env.ENABLE_PAYMENT_FEATURES === 'true';
+
 @Module({
   imports: [PrismaModule, MailModule, BillingModule],
-  controllers: [SubscriptionsController],
-  providers: [SubscriptionsService, TrialSchedulerService],
+  controllers: enablePaymentFeatures ? [SubscriptionsController] : [],
+  providers: [
+    SubscriptionsService,
+    ...(enablePaymentFeatures ? [TrialSchedulerService] : []),
+  ],
   exports: [SubscriptionsService],
 })
 export class SubscriptionsModule {}
