@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 import {
   AddTrackToPlaylistDto,
+  AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
   GetPlaylistDetailsResponseDto,
   PlaylistPaginationQueryDto,
@@ -275,11 +276,74 @@ export class PlaylistsService {
     });
   }
 
-  addTrack(_userId: string, playlistId: string, dto: AddTrackToPlaylistDto) {
+  async addTrack(
+    userId: string,
+    playlistId: string,
+    dto: AddTrackToPlaylistDto,
+  ): Promise<AddTrackToPlaylistResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerId: true,
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw new ForbiddenException('You can only modify your own playlists.');
+    }
+
+    const track = await this.prisma.track.findFirst({
+      where: {
+        id: dto.trackId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (!track) {
+      throw new NotFoundException('Track not found.');
+    }
+
+    const existingLink = await this.prisma.playlistTrack.findUnique({
+      where: {
+        playlistId_trackId: {
+          playlistId: playlist.id,
+          trackId: track.id,
+        },
+      },
+      select: { playlistId: true },
+    });
+
+    if (existingLink) {
+      throw new ConflictException('Track already exists in this playlist.');
+    }
+
+    const maxPositionRow = await this.prisma.playlistTrack.findFirst({
+      where: { playlistId: playlist.id },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+
+    await this.prisma.playlistTrack.create({
+      data: {
+        playlistId: playlist.id,
+        trackId: track.id,
+        position: (maxPositionRow?.position ?? -1) + 1,
+      },
+    });
+
     return {
-      message: 'Add track to playlist placeholder',
-      playlistId,
-      trackId: dto.trackId,
+      message: 'Track added to playlist successfully',
+      playlistId: playlist.id,
+      trackId: track.id,
     };
   }
 
