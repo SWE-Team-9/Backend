@@ -157,12 +157,13 @@ export class PlaylistsController {
   }
 
   @Patch(':playlistId/reorder')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   reorderTracks(
     @CurrentUser('userId') userId: string,
-    @Param('playlistId') playlistId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
     @Body() dto: ReorderPlaylistTracksDto,
   ) {
-    return this.playlistsService.reorderTracks(userId, playlistId, dto);
+    return this.playlistsService.reorderTracks(userId, params.playlistId, dto);
   }
 
   @Get(':playlistId')
