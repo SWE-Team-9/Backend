@@ -11,7 +11,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   FileRole,
   InvoiceStatus,
-  Prisma,
   SubscriptionStatus,
   SubscriptionTier,
   TrackStatus,
@@ -111,19 +110,6 @@ function planTierToCode(tier: SubscriptionTier | string): 'FREE' | 'PRO' | 'GO_P
   if (tier === SubscriptionTier.PRO) return 'PRO';
   if (tier === SubscriptionTier.GO_PLUS) return 'GO_PLUS';
   return 'FREE';
-}
-
-function isMissingColumnError(error: unknown, columnName: string): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  if (error.code !== 'P2022') {
-    return false;
-  }
-
-  const metaColumn = String((error.meta as { column?: unknown } | undefined)?.column ?? '');
-  return metaColumn.includes(columnName) || String(error.message).includes(columnName);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -581,29 +567,10 @@ export class SubscriptionsService {
       case 'invoice.payment_action_required': {
         if (sub) {
           const graceEndsAt = addDays(now, GRACE_PERIOD_DAYS);
-          try {
-            await this.prisma.userSubscription.update({
-              where: { id: sub.id },
-              data: { status: SubscriptionStatus.PAST_DUE, paymentFailureAt: now, paymentFailureGraceEndsAt: graceEndsAt } as any,
-            });
-          } catch (error) {
-            if (
-              isMissingColumnError(error, 'payment_failure_at') ||
-              isMissingColumnError(error, 'payment_failure_grace_ends_at')
-            ) {
-              // Backward compatibility for environments where these columns are not
-              // migrated yet: still mark the subscription as PAST_DUE.
-              await this.prisma.userSubscription.update({
-                where: { id: sub.id },
-                data: { status: SubscriptionStatus.PAST_DUE },
-              });
-              this.logger.warn(
-                '[WEBHOOK] payment failure grace-period columns missing; updated status to PAST_DUE without grace metadata. Run migrations to enable full behavior.',
-              );
-            } else {
-              throw error;
-            }
-          }
+          await this.prisma.userSubscription.update({
+            where: { id: sub.id },
+            data: { status: SubscriptionStatus.PAST_DUE, paymentFailureAt: now, paymentFailureGraceEndsAt: graceEndsAt } as any,
+          });
           const user = await this.prisma.user.findUnique({
             where: { id: sub.userId },
             select: { email: true, profile: { select: { displayName: true } } },
@@ -686,23 +653,10 @@ export class SubscriptionsService {
             const expiryYear = (card['exp_year'] as number | undefined) ?? (obj['exp_year'] as number | undefined) ?? 2030;
             const newPaymentMethod: PaymentMethodSummary = { brand, last4, expiryMonth, expiryYear, isDefault: true };
             const summaryStr = `${brand.charAt(0).toUpperCase() + brand.slice(1)} ending in ${last4}`;
-            try {
-              await this.prisma.userSubscription.update({
-                where: { id: subByCustomer.id },
-                data: { paymentMethod: newPaymentMethod as any, paymentMethodSummary: summaryStr },
-              });
-            } catch (error) {
-              if (
-                isMissingColumnError(error, 'payment_method') ||
-                isMissingColumnError(error, 'payment_method_summary')
-              ) {
-                this.logger.warn(
-                  '[WEBHOOK] payment method columns missing on user_subscriptions; skipping payment method summary persistence. Run migrations to enable this.',
-                );
-              } else {
-                throw error;
-              }
-            }
+            await this.prisma.userSubscription.update({
+              where: { id: subByCustomer.id },
+              data: { paymentMethod: newPaymentMethod as any, paymentMethodSummary: summaryStr },
+            });
             // Idempotent event log (idempotency checked at top of handler)
             await this.prisma.paymentEvent.create({
               data: {
