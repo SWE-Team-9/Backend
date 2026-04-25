@@ -10,6 +10,7 @@ import {
   CreatePlaylistDto,
   GetPlaylistDetailsResponseDto,
   PlaylistPaginationQueryDto,
+  RemoveTrackFromPlaylistResponseDto,
   ReorderPlaylistTracksDto,
   UpdatePlaylistDto,
 } from './dto';
@@ -347,11 +348,72 @@ export class PlaylistsService {
     };
   }
 
-  removeTrack(_userId: string, playlistId: string, trackId: string) {
+  async removeTrack(
+    userId: string,
+    playlistId: string,
+    trackId: string,
+  ): Promise<RemoveTrackFromPlaylistResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerId: true,
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw new ForbiddenException('You can only modify your own playlists.');
+    }
+
+    const playlistTrack = await this.prisma.playlistTrack.findUnique({
+      where: {
+        playlistId_trackId: {
+          playlistId: playlist.id,
+          trackId,
+        },
+      },
+      select: {
+        position: true,
+      },
+    });
+
+    if (!playlistTrack) {
+      throw new NotFoundException('Track is not in this playlist.');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.playlistTrack.delete({
+        where: {
+          playlistId_trackId: {
+            playlistId: playlist.id,
+            trackId,
+          },
+        },
+      }),
+      this.prisma.playlistTrack.updateMany({
+        where: {
+          playlistId: playlist.id,
+          position: {
+            gt: playlistTrack.position,
+          },
+        },
+        data: {
+          position: {
+            decrement: 1,
+          },
+        },
+      }),
+    ]);
+
     return {
-      message: 'Remove track from playlist placeholder',
-      playlistId,
-      trackId,
+      message: 'Track removed from playlist successfully',
     };
   }
 
