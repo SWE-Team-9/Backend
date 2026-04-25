@@ -120,7 +120,6 @@ describe('TracksController', () => {
         'user-1',
         expect.objectContaining({ title: 'My Song' }),
         expect.objectContaining({ originalname: 'song.mp3' }),
-        undefined,
       );
       expect(res.body).toHaveProperty('trackId', UUID);
     });

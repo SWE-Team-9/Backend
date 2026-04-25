@@ -12,7 +12,6 @@ import { TracksService } from './tracks.service';
 import { TranscodingService } from './transcoding.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage/storage.service';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { TrackVisibility, TrackStatus, FileRole, FileStatus } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,7 +198,6 @@ describe('TracksService', () => {
         { provide: ConfigService, useValue: config },
         { provide: TranscodingService, useValue: transcodingService },
         { provide: StorageService, useValue: { upload: jest.fn().mockResolvedValue({ url: 'https://cdn.example.com/cover/test.jpg', key: 'cover/test.jpg' }), delete: jest.fn().mockResolvedValue(undefined) } },
-        { provide: SubscriptionsService, useValue: { getUploadQuota: jest.fn().mockResolvedValue({ uploadLimit: 100, uploadedCount: 0 }) } },
       ],
     }).compile();
 
