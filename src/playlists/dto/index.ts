@@ -12,6 +12,10 @@ export {
 	ResolveSecretPlaylistParamsDto,
 	ResolveSecretPlaylistResponseDto,
 } from './resolve-secret-playlist.dto';
+export {
+	GetPlaylistEmbedCodeParamsDto,
+	GetPlaylistEmbedCodeResponseDto,
+} from './get-playlist-embed-code.dto';
 export { DeletePlaylistParamsDto } from './delete-playlist-params.dto';
 export {
   RemoveTrackFromPlaylistParamsDto,
