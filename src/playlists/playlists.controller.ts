@@ -144,6 +144,37 @@ export class PlaylistsController {
 
   @Patch(':playlistId')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Update playlist',
+    description: 'Updates playlist title, description, or visibility. Owner only.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiBody({
+    type: UpdatePlaylistDto,
+    schema: {
+      example: {
+        title: 'Late Night Drive Vol. 2',
+        visibility: 'PRIVATE',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playlist updated successfully.',
+    schema: {
+      example: {
+        message: 'Playlist updated successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Validation error or empty update payload.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Only playlist owner can update this playlist.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
   update(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
