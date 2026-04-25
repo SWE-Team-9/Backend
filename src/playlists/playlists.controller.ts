@@ -12,6 +12,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PlaylistsService } from './playlists.service';
@@ -24,12 +25,33 @@ import {
 } from './dto';
 
 @Controller('playlists')
+@ApiTags('Playlists')
+@ApiBearerAuth()
 export class PlaylistsController {
   constructor(private readonly playlistsService: PlaylistsService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  @ApiOperation({
+    summary: 'Create playlist',
+    description: 'Creates a new playlist (set) for the authenticated user.',
+  })
+  @ApiBody({ type: CreatePlaylistDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Playlist created successfully.',
+    schema: {
+      example: {
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        visibility: 'PUBLIC',
+        secretToken: null,
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
   create(@CurrentUser('userId') userId: string, @Body() dto: CreatePlaylistDto) {
     return this.playlistsService.create(userId, dto);
   }
