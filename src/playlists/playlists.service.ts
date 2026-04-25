@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PlaylistVisibility, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
@@ -191,11 +191,65 @@ export class PlaylistsService {
     };
   }
 
-  update(_userId: string, playlistId: string, dto: UpdatePlaylistDto) {
+  async update(userId: string, playlistId: string, dto: UpdatePlaylistDto) {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        visibility: true,
+        secretToken: true,
+      },
+    });
+
+    if (!playlist) {
+      throw new NotFoundException('Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw new ForbiddenException('You can only update your own playlists.');
+    }
+
+    const data: Prisma.PlaylistUpdateInput = {};
+
+    if (dto.title !== undefined) {
+      data.title = dto.title;
+    }
+
+    if (dto.description !== undefined) {
+      data.description = dto.description;
+    }
+
+    if (dto.visibility !== undefined) {
+      const normalizedVisibility =
+        dto.visibility === 'PRIVATE' ? PlaylistVisibility.SECRET : dto.visibility;
+
+      data.visibility = normalizedVisibility;
+
+      if (normalizedVisibility === PlaylistVisibility.PUBLIC) {
+        data.secretToken = null;
+      } else if (
+        playlist.visibility !== PlaylistVisibility.SECRET ||
+        !playlist.secretToken
+      ) {
+        data.secretToken = randomBytes(24).toString('hex');
+      }
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('At least one field must be provided for update.');
+    }
+
+    await this.prisma.playlist.update({
+      where: { id: playlist.id },
+      data,
+    });
+
     return {
-      message: 'Update playlist placeholder',
-      playlistId,
-      payload: dto,
+      message: 'Playlist updated successfully',
     };
   }
 
