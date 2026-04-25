@@ -12,13 +12,14 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PlaylistsService } from './playlists.service';
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
+  GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
   PlaylistPaginationQueryDto,
   ReorderPlaylistTracksDto,
@@ -104,6 +105,39 @@ export class PlaylistsController {
 
   @Get(':playlistId')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Get playlist details',
+    description: 'Returns playlist details and its tracks.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playlist details fetched successfully.',
+    type: GetPlaylistDetailsResponseDto,
+    schema: {
+      example: {
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        description: 'My favorite chill tracks',
+        visibility: 'PUBLIC',
+        owner: {
+          id: 'usr_1',
+          display_name: 'Ahmed Hassan',
+        },
+        tracks: [
+          {
+            trackId: 'trk_123',
+            title: 'Layali',
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
   getDetails(@Param() params: GetPlaylistDetailsParamsDto) {
     return this.playlistsService.getDetails(params.playlistId);
   }
