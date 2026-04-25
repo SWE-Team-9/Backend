@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 
 import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
@@ -20,6 +21,9 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import configuration from "./config/configuration";
 import { validateEnvironment } from "./config/env.validation";
+import { MessagesModule } from "./messages/messages.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
@@ -46,6 +50,7 @@ import { validateEnvironment } from "./config/env.validation";
     PrismaModule, // @Global — PrismaService available everywhere
     StorageModule, // @Global — StorageService available everywhere (Member 5)
     MailModule, // shared — MailService used by AuthModule
+    EventEmitterModule.forRoot(), // global event bus for decoupled notifications
 
     // ── Feature modules ───────────────────────────────────────────────────────
     AuthModule, // Members 1, 2, 3
@@ -57,6 +62,9 @@ import { validateEnvironment } from "./config/env.validation";
     ReportsModule, // Module 11 — Reports & Appeals
     FeedModule, // Module 8 — Feed
     DiscoveryModule, // Module 8 — Search & Discovery
+    MessagesModule, // Module 9 — Messaging + WebSocket
+    NotificationsModule, // Module 10 — Notifications + WebSocket
+    AdminModule, // Module 11 — Admin: User Enforcement + Content Moderation + Stats
   ],
   controllers: [AppController],
   providers: [

@@ -7,6 +7,7 @@ import {
   NotImplementedException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { PrismaService } from "../prisma/prisma.service";
 import { PaginationQueryDto } from "./dto/pagination-query.dto";
 import { SuggestionsQueryDto } from "./dto/suggestions-query.dto";
@@ -14,7 +15,10 @@ import { UserIdParamDto } from "./dto/user-id-param.dto";
 
 @Injectable()
 export class SocialService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async followUser(followerId: string, followingId: string) {
     if (followerId === followingId) {
@@ -79,6 +83,11 @@ export class SocialService {
 
     const followersCount = await this.prisma.userFollow.count({
       where: { followingId },
+    });
+
+    this.eventEmitter.emit("user.followed", {
+      followerId,
+      followingId,
     });
 
     return {

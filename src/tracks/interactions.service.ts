@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, TrackStatus } from "@prisma/client";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { InteractionsGateway } from "./interactions.gateway";
@@ -68,6 +69,7 @@ export class InteractionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly interactionsGateway: InteractionsGateway,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async likeTrack(userId: string, trackId: string): Promise<void> {
@@ -104,6 +106,11 @@ export class InteractionsService {
         userId,
         trackId,
         createdAt: new Date().toISOString(),
+      });
+      this.eventEmitter.emit("track.liked", {
+        trackId,
+        actorId: userId,
+        ownerId: track.uploaderId,
       });
     } catch (error: unknown) {
       this.handlePrismaWriteError(error, "TRACK_ALREADY_LIKED");
@@ -159,6 +166,11 @@ export class InteractionsService {
         userId,
         trackId,
         createdAt: new Date().toISOString(),
+      });
+      this.eventEmitter.emit("track.reposted", {
+        trackId,
+        actorId: userId,
+        ownerId: track.uploaderId,
       });
     } catch (error: unknown) {
       this.handlePrismaWriteError(error, "TRACK_ALREADY_REPOSTED");
@@ -601,6 +613,20 @@ export class InteractionsService {
       commentId: comment.id,
       timestampAt: comment.timestampAt,
     });
+
+    // Fetch uploader for notification event
+    const trackRecord = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: { uploaderId: true },
+    });
+    if (trackRecord) {
+      this.eventEmitter.emit("track.commented", {
+        trackId,
+        actorId: userId,
+        ownerId: trackRecord.uploaderId,
+        commentId: comment.id,
+      });
+    }
 
     return {
       id: comment.id,

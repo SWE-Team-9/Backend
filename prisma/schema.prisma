@@ -363,6 +363,7 @@ model User {
   appealsSubmitted         Appeal[]                  @relation("AppealUser")
   appealsResolved          Appeal[]                  @relation("AppealResolver")
   searchIndex              UserSearchIndexable?
+  notificationPreference   UserNotificationPreference?
 
   @@index([email])
   @@index([accountStatus])
@@ -381,6 +382,18 @@ model UserSearchIndexable {
 
   @@index([searchVector(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("user_search_indexable")
+}
+
+model UserNotificationPreference {
+  userId   String  @id @map("user_id") @db.Uuid
+  likes    Boolean @default(true)
+  comments Boolean @default(true)
+  follows  Boolean @default(true)
+  reposts  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_preferences")
 }
 
 model UserProfile {
@@ -819,12 +832,13 @@ model Repost {
 }
 
 model Comment {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  trackId     String   @map("track_id") @db.Uuid
-  content     String   @db.Text
-  timestampAt Int      @map("timestamp_at")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @map("user_id") @db.Uuid
+  trackId         String          @map("track_id") @db.Uuid
+  content         String          @db.Text
+  timestampAt     Int             @map("timestamp_at")
+  moderationState ModerationState @default(VISIBLE) @map("moderation_state")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   track             Track              @relation(fields: [trackId], references: [id], onDelete: Cascade)
