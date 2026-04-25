@@ -19,6 +19,7 @@ import { PlaylistsService } from './playlists.service';
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
+  DeletePlaylistParamsDto,
   GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
   PlaylistPaginationQueryDto,
@@ -185,7 +186,8 @@ export class PlaylistsController {
 
   @Delete(':playlistId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@CurrentUser('userId') userId: string, @Param('playlistId') playlistId: string) {
-    this.playlistsService.remove(userId, playlistId);
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  remove(@CurrentUser('userId') userId: string, @Param() params: DeletePlaylistParamsDto) {
+    this.playlistsService.remove(userId, params.playlistId);
   }
 }
