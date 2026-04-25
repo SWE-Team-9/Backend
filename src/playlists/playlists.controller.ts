@@ -78,12 +78,13 @@ export class PlaylistsController {
   }
 
   @Post(':playlistId/tracks')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   addTrack(
     @CurrentUser('userId') userId: string,
-    @Param('playlistId') playlistId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
     @Body() dto: AddTrackToPlaylistDto,
   ) {
-    return this.playlistsService.addTrack(userId, playlistId, dto);
+    return this.playlistsService.addTrack(userId, params.playlistId, dto);
   }
 
   @Delete(':playlistId/tracks/:trackId')
