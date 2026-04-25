@@ -19,7 +19,7 @@ import { ConversationQueryDto } from "./dto/conversation-query.dto";
 import { ConversationMessagesQueryDto } from "./dto/conversation-messages-query.dto";
 import { DirectConversationDto } from "./dto/direct-conversation.dto";
 
-@Controller("api/v1/messages")
+@Controller("messages")
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 
