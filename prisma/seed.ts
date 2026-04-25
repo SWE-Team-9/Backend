@@ -1,46 +1,5 @@
-import { PrismaClient, SubscriptionTier, BillingInterval } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { createHash } from 'crypto';
-
-// ── Subscription plans ──────────────────────────────────────────────────────
-// Upload limits: FREE=3, PRO=100, GO_PLUS=1000
-// These must stay in sync with FREE_UPLOAD_LIMIT in src/subscriptions/subscriptions.service.ts
-const SUBSCRIPTION_PLANS: {
-  code: string;
-  name: string;
-  tier: SubscriptionTier;
-  priceCents: number;
-  billingInterval: BillingInterval;
-  uploadLimit: number;
-  features: object;
-}[] = [
-  {
-    code: 'free-monthly',
-    name: 'Free',
-    tier: SubscriptionTier.FREE,
-    priceCents: 0,
-    billingInterval: BillingInterval.MONTH,
-    uploadLimit: 3,
-    features: { adFree: false, offlineListening: false },
-  },
-  {
-    code: 'pro-monthly',
-    name: 'Pro Monthly',
-    tier: SubscriptionTier.PRO,
-    priceCents: 999,
-    billingInterval: BillingInterval.MONTH,
-    uploadLimit: 100,
-    features: { adFree: true, offlineListening: true },
-  },
-  {
-    code: 'go-plus-monthly',
-    name: 'Go+ Monthly',
-    tier: SubscriptionTier.GO_PLUS,
-    priceCents: 1999,
-    billingInterval: BillingInterval.MONTH,
-    uploadLimit: 1000,
-    features: { adFree: true, offlineListening: true },
-  },
-];
 
 // Genre slugs must stay in sync with ALLOWED_GENRES in src/users/dto/profile.dto.ts
 const GENRES: { slug: string; name: string }[] = [
@@ -92,31 +51,6 @@ async function main() {
     }
 
     console.log(`Seeded ${GENRES.length} genres.`);
-
-    // ── Subscription plans ───────────────────────────────────────────────────
-    for (const plan of SUBSCRIPTION_PLANS) {
-      await prisma.subscriptionPlan.upsert({
-        where: { code: plan.code },
-        update: {
-          name: plan.name,
-          priceCents: plan.priceCents,
-          uploadLimit: plan.uploadLimit,
-          features: plan.features,
-          isActive: true,
-        },
-        create: {
-          code: plan.code,
-          name: plan.name,
-          tier: plan.tier,
-          priceCents: plan.priceCents,
-          billingInterval: plan.billingInterval,
-          uploadLimit: plan.uploadLimit,
-          features: plan.features,
-          isActive: true,
-        },
-      });
-    }
-    console.log(`Seeded ${SUBSCRIPTION_PLANS.length} subscription plans.`);
 
     const nativeClientId = 'soundclone-native-app';
     const nativeClientSecret =

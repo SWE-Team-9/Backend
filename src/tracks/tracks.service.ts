@@ -23,7 +23,6 @@ import { CreateTrackDto } from './dto/create-track.dto';
 import { UpdateTrackDto } from './dto/update-track.dto';
 import { TranscodingCallbackDto } from './dto/transcoding-callback.dto';
 import { TranscodingService } from './transcoding.service';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -198,7 +197,6 @@ export class TracksService {
     private readonly config: ConfigService,
     private readonly transcodingService: TranscodingService,
     private readonly storageService: StorageService,
-    private readonly subscriptionsService: SubscriptionsService,
   ) {
     this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
     this.localUploadDir = this.config.get<string>('storage.localUploadDir', './uploads');
@@ -209,13 +207,12 @@ export class TracksService {
     this.transcodingApiKey = this.config.get<string>('app.transcodingApiKey', '');
 
     if (this.storageProvider === 's3') {
-      const accessKeyId = this.config.get<string>('storage.awsAccessKeyId', '');
-      const secretAccessKey = this.config.get<string>('storage.awsSecretAccessKey', '');
       this.s3Client = new S3Client({
         region: this.s3Region,
-        ...(accessKeyId && secretAccessKey
-          ? { credentials: { accessKeyId, secretAccessKey } }
-          : {}),
+        credentials: {
+          accessKeyId: this.config.get<string>('storage.awsAccessKeyId', ''),
+          secretAccessKey: this.config.get<string>('storage.awsSecretAccessKey', ''),
+        },
       });
     } else {
       this.s3Client = null;
@@ -240,17 +237,6 @@ export class TracksService {
     file: Express.Multer.File,
     coverArtFile?: Express.Multer.File,
   ) {
-    // --- upload quota guard ---
-    const { uploadLimit, uploadedCount } =
-      await this.subscriptionsService.getUploadQuota(userId);
-    if (uploadedCount >= uploadLimit) {
-      throw new ForbiddenException({
-        code: 'UPLOAD_LIMIT_REACHED',
-        message:
-          'You have reached your upload limit. Upgrade your plan to upload more tracks.',
-      });
-    }
-
     // --- validate the file ---
     if (!file || !file.buffer) {
       throw new BadRequestException('Audio file is required.');

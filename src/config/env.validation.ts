@@ -101,19 +101,6 @@ export function validateEnvironment(config: Env): Env {
     }
   }
 
-  // ── Stripe — warn in production if keys are missing ───────────────────────
-  // Not a hard failure (allows local dev without Stripe keys), but Stripe
-  // features will not work without them.
-  const nodeEnvForStripe = config["NODE_ENV"];
-  if (nodeEnvForStripe === "production") {
-    const stripeKeys = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
-    for (const key of stripeKeys) {
-      if (!config[key] || config[key]!.trim() === "") {
-        errors.push(`${key} is required in production.`);
-      }
-    }
-  }
-
   // ── Fail fast ──────────────────────────────────────────────────────────────
   if (errors.length > 0) {
     throw new Error(
