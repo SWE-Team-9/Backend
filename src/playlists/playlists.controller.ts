@@ -20,6 +20,8 @@ import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
   DeletePlaylistParamsDto,
+  GetPlaylistEmbedCodeParamsDto,
+  GetPlaylistEmbedCodeResponseDto,
   GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
   PlaylistPaginationQueryDto,
@@ -101,8 +103,35 @@ export class PlaylistsController {
   }
 
   @Get(':playlistId/embed')
-  getEmbedCode(@Param('playlistId') playlistId: string) {
-    return this.playlistsService.getEmbedCode(playlistId);
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  @ApiOperation({
+    summary: 'Get playlist embed code',
+    description: 'Returns a simple iframe embed code for externally sharing a playlist.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playlist embed code generated successfully.',
+    type: GetPlaylistEmbedCodeResponseDto,
+    schema: {
+      example: {
+        playlistId: 'pl_101',
+        embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Only playlist owner can access embed code.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  getEmbedCode(
+    @CurrentUser('userId') userId: string,
+    @Param() params: GetPlaylistEmbedCodeParamsDto,
+  ) {
+    return this.playlistsService.getEmbedCode(userId, params.playlistId);
   }
 
   @Post(':playlistId/tracks')
