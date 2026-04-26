@@ -70,7 +70,7 @@ const enablePaymentFeatures =
     TracksModule, // Module 4 — Audio Upload & Track Management
     SocialModule, // Module 3 — Social Graph (Blocking & Moderation)
     PlayerModule, // Module 5 — Playback & Streaming Engine
-    ...(enablePaymentFeatures ? [ReportsModule] : []), // Module 11 — Reports & Appeals
+    ReportsModule, // Module 11 — Reports & Appeals
     FeedModule, // Module 8 — Feed
     DiscoveryModule, // Module 8 — Search & Discovery
     MessagesModule, // Module 9 — Messaging + WebSocket

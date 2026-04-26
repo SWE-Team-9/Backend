@@ -1,8 +1,6 @@
 import {
   Body,
   Controller,
-  Param,
-  ParseUUIDPipe,
   Post,
 } from "@nestjs/common";
 import {
@@ -35,7 +33,7 @@ export class ReportsController {
     return this.reportsService.createReport(reporterId, dto);
   }
 
-  @Post(":id/appeal")
+  @Post("appeal")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Create an appeal for a report" })
   @ApiResponse({ status: 201, description: "Appeal created successfully." })
@@ -44,9 +42,8 @@ export class ReportsController {
   @ApiResponse({ status: 404, description: "Report not found." })
   createAppeal(
     @CurrentUser("userId") userId: string,
-    @Param("id", new ParseUUIDPipe({ version: "4" })) reportId: string,
     @Body() dto: CreateAppealDto,
   ) {
-    return this.reportsService.createAppeal(reportId, userId, dto);
+    return this.reportsService.createAppeal(dto.reportId, userId, dto);
   }
 }
