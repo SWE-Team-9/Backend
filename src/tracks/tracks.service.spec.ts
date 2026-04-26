@@ -250,7 +250,6 @@ describe('TracksService', () => {
         visibility: TrackVisibility.PRIVATE,
         coverArtUrl: null,
         waveformData: null,
-        coverArtUrl: null,
       });
       expect(prisma.track.create).toHaveBeenCalledTimes(1);
       expect(prisma.trackFile.create).toHaveBeenCalledTimes(1);
