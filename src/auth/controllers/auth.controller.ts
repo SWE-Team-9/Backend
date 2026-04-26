@@ -66,10 +66,43 @@ export class AuthController {
       "Requires a reCAPTCHA v3 token in production.",
   })
   @ApiBody({ type: RegisterDto })
-  @ApiResponse({ status: 201, description: "Account created — verification email sent.", schema: { example: { message: "Registration successful. Please check your email to verify your account." } } })
-  @ApiResponse({ status: 400, description: "Validation error (weak password, invalid DOB, underage, etc.)", schema: { example: { statusCode: 400, error: "Bad Request", message: "Password must be at least 8 characters..." } } })
-  @ApiResponse({ status: 409, description: "Email already registered.", schema: { example: { statusCode: 409, error: "EMAIL_ALREADY_EXISTS", message: "An account with this email already exists." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (5 requests/min)." })
+  @ApiResponse({
+    status: 201,
+    description: "Account created — verification email sent.",
+    schema: {
+      example: {
+        message:
+          "Registration successful. Please check your email to verify your account.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Validation error (weak password, invalid DOB, underage, etc.)",
+    schema: {
+      example: {
+        statusCode: 400,
+        error: "Bad Request",
+        message: "Password must be at least 8 characters...",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: "Email already registered.",
+    schema: {
+      example: {
+        statusCode: 409,
+        error: "EMAIL_ALREADY_EXISTS",
+        message: "An account with this email already exists.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (5 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(5, 60_000)
   @Post("register")
@@ -106,10 +139,27 @@ export class AuthController {
       "Tokens expire after 24 hours. Use /auth/resend-verification to get a new one.",
   })
   @ApiBody({ type: VerifyEmailDto })
-  @ApiResponse({ status: 200, description: "Email verified — account is now active.", schema: { example: { message: "Email verified successfully." } } })
+  @ApiResponse({
+    status: 200,
+    description: "Email verified — account is now active.",
+    schema: { example: { message: "Email verified successfully." } },
+  })
   @ApiResponse({ status: 400, description: "Token missing or malformed." })
-  @ApiResponse({ status: 410, description: "Token expired or already used.", schema: { example: { statusCode: 410, error: "TOKEN_EXPIRED", message: "Verification token has expired." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (10 requests/min)." })
+  @ApiResponse({
+    status: 410,
+    description: "Token expired or already used.",
+    schema: {
+      example: {
+        statusCode: 410,
+        error: "TOKEN_EXPIRED",
+        message: "Verification token has expired.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (10 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(10, 60_000)
   @Post("verify-email")
@@ -125,8 +175,21 @@ export class AuthController {
       "Always returns 200 to prevent email enumeration — even if the email is not registered.",
   })
   @ApiBody({ type: ResendVerificationDto })
-  @ApiResponse({ status: 200, description: "Verification email sent (always, regardless of whether the email exists).", schema: { example: { message: "If this email is registered and unverified, a new verification link has been sent." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (3 requests/min)." })
+  @ApiResponse({
+    status: 200,
+    description:
+      "Verification email sent (always, regardless of whether the email exists).",
+    schema: {
+      example: {
+        message:
+          "If this email is registered and unverified, a new verification link has been sent.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (3 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(3, 60_000)
   @Post("resend-verification")
@@ -161,9 +224,32 @@ export class AuthController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Invalid credentials.", schema: { example: { statusCode: 401, error: "INVALID_CREDENTIALS", message: "Invalid email or password." } } })
-  @ApiResponse({ status: 403, description: "Email not verified.", schema: { example: { statusCode: 403, error: "EMAIL_NOT_VERIFIED", message: "Please verify your email address before logging in." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (10 requests/min)." })
+  @ApiResponse({
+    status: 401,
+    description: "Invalid credentials.",
+    schema: {
+      example: {
+        statusCode: 401,
+        error: "INVALID_CREDENTIALS",
+        message: "Invalid email or password.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Email not verified.",
+    schema: {
+      example: {
+        statusCode: 403,
+        error: "EMAIL_NOT_VERIFIED",
+        message: "Please verify your email address before logging in.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (10 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(10, 60_000)
   @Post("login")
@@ -200,7 +286,10 @@ export class AuthController {
       "Redirects the browser to Google's OAuth consent page. " +
       "This endpoint is not testable via Swagger — open it directly in a browser tab.",
   })
-  @ApiResponse({ status: 302, description: "Redirect to Google OAuth consent page." })
+  @ApiResponse({
+    status: 302,
+    description: "Redirect to Google OAuth consent page.",
+  })
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get("google")
@@ -213,20 +302,26 @@ export class AuthController {
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get("google/callback")
-  async googleCallback(
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
     const googleUser = req.user as any;
     const ip = req.ip ?? "unknown";
     const userAgent = req.headers["user-agent"] ?? "unknown";
 
-    const result = await this.authService.googleLogin(googleUser, ip, userAgent);
+    const result = await this.authService.googleLogin(
+      googleUser,
+      ip,
+      userAgent,
+    );
 
     // Set httpOnly cookies
-    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
+    this.cookieService.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
 
-    const stateValue = typeof req.query?.state === "string" ? req.query.state : "";
+    const stateValue =
+      typeof req.query?.state === "string" ? req.query.state : "";
     const nativeRedirectUri = this.decodeGoogleState(stateValue);
 
     if (nativeRedirectUri) {
@@ -250,7 +345,9 @@ export class AuthController {
     }
 
     try {
-      const nativeRedirectUri = Buffer.from(state, "base64url").toString("utf8").trim();
+      const nativeRedirectUri = Buffer.from(state, "base64url")
+        .toString("utf8")
+        .trim();
 
       return nativeRedirectUri.length > 0 ? nativeRedirectUri : null;
     } catch {
@@ -267,9 +364,26 @@ export class AuthController {
       "The frontend axios interceptor calls this automatically on 401 responses. " +
       "Token reuse detection is active — a reused refresh token invalidates all sessions.",
   })
-  @ApiResponse({ status: 200, description: "New tokens issued — cookies updated.", schema: { example: { message: "Token refreshed successfully" } } })
-  @ApiResponse({ status: 401, description: "No refresh token cookie, or token is invalid/expired/reused.", schema: { example: { statusCode: 401, error: "NO_REFRESH_TOKEN", message: "No refresh token provided." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (30 requests/min)." })
+  @ApiResponse({
+    status: 200,
+    description: "New tokens issued — cookies updated.",
+    schema: { example: { message: "Token refreshed successfully" } },
+  })
+  @ApiResponse({
+    status: 401,
+    description: "No refresh token cookie, or token is invalid/expired/reused.",
+    schema: {
+      example: {
+        statusCode: 401,
+        error: "NO_REFRESH_TOKEN",
+        message: "No refresh token provided.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (30 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(30, 60_000)
   @Post("refresh")
@@ -290,7 +404,11 @@ export class AuthController {
     const result = await this.authService.refresh(refreshTokenRaw);
 
     // Set new cookies with rotated tokens
-    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
+    this.cookieService.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
 
     return { message: "Token refreshed successfully" };
   }
@@ -302,14 +420,15 @@ export class AuthController {
       "Revokes the current session's refresh token and clears both auth cookies. " +
       "Does NOT require authentication — anyone can call this (idempotent).",
   })
-  @ApiResponse({ status: 200, description: "Logged out — cookies cleared.", schema: { example: { message: "Logged out successfully" } } })
+  @ApiResponse({
+    status: 200,
+    description: "Logged out — cookies cleared.",
+    schema: { example: { message: "Logged out successfully" } },
+  })
   @Public()
   @Post("logout")
   @HttpCode(HttpStatus.OK)
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshTokenRaw = req.cookies?.["refresh_token"];
     await this.authService.logout(refreshTokenRaw);
     this.cookieService.clearAuthCookies(res);
@@ -324,7 +443,11 @@ export class AuthController {
       "Useful if the account is compromised. Requires a valid access_token cookie.",
   })
   @ApiCookieAuth("access_token")
-  @ApiResponse({ status: 200, description: "All sessions revoked — cookies cleared.", schema: { example: { message: "All sessions revoked", revokedCount: 3 } } })
+  @ApiResponse({
+    status: 200,
+    description: "All sessions revoked — cookies cleared.",
+    schema: { example: { message: "All sessions revoked", revokedCount: 3 } },
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Post("logout-all")
   @HttpCode(HttpStatus.OK)
@@ -346,8 +469,21 @@ export class AuthController {
       "The reset link is valid for 1 hour.",
   })
   @ApiBody({ type: ForgotPasswordDto })
-  @ApiResponse({ status: 200, description: "Reset email sent (always, regardless of whether the email exists).", schema: { example: { message: "If this email is registered, a password reset link has been sent." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (3 requests/min)." })
+  @ApiResponse({
+    status: 200,
+    description:
+      "Reset email sent (always, regardless of whether the email exists).",
+    schema: {
+      example: {
+        message:
+          "If this email is registered, a password reset link has been sent.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (3 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(3, 60_000)
   @Post("forgot-password")
@@ -365,10 +501,30 @@ export class AuthController {
       "On success, all other sessions are revoked.",
   })
   @ApiBody({ type: ResetPasswordDto })
-  @ApiResponse({ status: 200, description: "Password reset successfully.", schema: { example: { message: "Password has been reset successfully." } } })
-  @ApiResponse({ status: 400, description: "Weak password or passwords do not match." })
-  @ApiResponse({ status: 410, description: "Token expired or already used.", schema: { example: { statusCode: 410, error: "TOKEN_EXPIRED", message: "Reset token has expired." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (5 requests/min)." })
+  @ApiResponse({
+    status: 200,
+    description: "Password reset successfully.",
+    schema: { example: { message: "Password has been reset successfully." } },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Weak password or passwords do not match.",
+  })
+  @ApiResponse({
+    status: 410,
+    description: "Token expired or already used.",
+    schema: {
+      example: {
+        statusCode: 410,
+        error: "TOKEN_EXPIRED",
+        message: "Reset token has expired.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (5 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(5, 60_000)
   @Post("reset-password")
@@ -387,10 +543,30 @@ export class AuthController {
   })
   @ApiCookieAuth("access_token")
   @ApiBody({ type: ChangePasswordDto })
-  @ApiResponse({ status: 200, description: "Password changed — other sessions revoked.", schema: { example: { message: "Password changed successfully." } } })
-  @ApiResponse({ status: 400, description: "Weak password, passwords don't match, or same as current." })
-  @ApiResponse({ status: 401, description: "Current password is incorrect or not authenticated.", schema: { example: { statusCode: 401, error: "INVALID_CURRENT_PASSWORD", message: "Current password is incorrect." } } })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (5 requests/min)." })
+  @ApiResponse({
+    status: 200,
+    description: "Password changed — other sessions revoked.",
+    schema: { example: { message: "Password changed successfully." } },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Weak password, passwords don't match, or same as current.",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Current password is incorrect or not authenticated.",
+    schema: {
+      example: {
+        statusCode: 401,
+        error: "INVALID_CURRENT_PASSWORD",
+        message: "Current password is incorrect.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (5 requests/min).",
+  })
   @ThrottlePolicy(5, 60_000)
   @Post("change-password")
   @HttpCode(HttpStatus.OK)
@@ -420,10 +596,27 @@ export class AuthController {
   })
   @ApiCookieAuth("access_token")
   @ApiBody({ type: RequestEmailChangeDto })
-  @ApiResponse({ status: 200, description: "Confirmation email sent to the new address.", schema: { example: { message: "A confirmation link has been sent to your new email address." } } })
-  @ApiResponse({ status: 400, description: "Invalid email or same as current." })
-  @ApiResponse({ status: 401, description: "Current password is incorrect or not authenticated." })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (3 requests/min)." })
+  @ApiResponse({
+    status: 200,
+    description: "Confirmation email sent to the new address.",
+    schema: {
+      example: {
+        message: "A confirmation link has been sent to your new email address.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid email or same as current.",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Current password is incorrect or not authenticated.",
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (3 requests/min).",
+  })
   @ThrottlePolicy(3, 60_000)
   @Post("email/change")
   @HttpCode(HttpStatus.OK)
@@ -442,9 +635,16 @@ export class AuthController {
       "On success, the email is updated and ALL sessions are revoked (user must log in again with the new email).",
   })
   @ApiBody({ type: ConfirmEmailChangeDto })
-  @ApiResponse({ status: 200, description: "Email changed — all sessions revoked.", schema: { example: { message: "Email address updated successfully." } } })
+  @ApiResponse({
+    status: 200,
+    description: "Email changed — all sessions revoked.",
+    schema: { example: { message: "Email address updated successfully." } },
+  })
   @ApiResponse({ status: 410, description: "Token expired or already used." })
-  @ApiResponse({ status: 429, description: "Rate limit exceeded (5 requests/min)." })
+  @ApiResponse({
+    status: 429,
+    description: "Rate limit exceeded (5 requests/min).",
+  })
   @Public()
   @ThrottlePolicy(5, 60_000)
   @Post("email/confirm-change")
@@ -525,11 +725,25 @@ export class AuthController {
       "The sessionId must be a valid v4 UUID.",
   })
   @ApiCookieAuth("access_token")
-  @ApiParam({ name: "sessionId", type: "string", format: "uuid", description: "UUID of the session to revoke", example: "550e8400-e29b-41d4-a716-446655440000" })
-  @ApiResponse({ status: 200, description: "Session revoked.", schema: { example: { message: "Session revoked successfully." } } })
+  @ApiParam({
+    name: "sessionId",
+    type: "string",
+    format: "uuid",
+    description: "UUID of the session to revoke",
+    example: "550e8400-e29b-41d4-a716-446655440000",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Session revoked.",
+    schema: { example: { message: "Session revoked successfully." } },
+  })
   @ApiResponse({ status: 400, description: "sessionId is not a valid UUID." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Attempt to revoke current session or session belonging to another user." })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Attempt to revoke current session or session belonging to another user.",
+  })
   @ApiResponse({ status: 404, description: "Session not found." })
   @Delete("sessions/:sessionId")
   async revokeSession(
@@ -538,6 +752,10 @@ export class AuthController {
     @Req() req: Request,
   ) {
     const refreshTokenRaw = req.cookies?.["refresh_token"];
-    return this.authService.revokeSession(userId, params.sessionId, refreshTokenRaw);
+    return this.authService.revokeSession(
+      userId,
+      params.sessionId,
+      refreshTokenRaw,
+    );
   }
 }

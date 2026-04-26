@@ -125,6 +125,18 @@ async function bootstrap() {
   // these are now the ONLY JSON/urlencoded parsers on the Express stack.
   // Reject large payloads before they reach any controller.
   // Multer (file uploads) has its own per-route size limits via FileInterceptor.
+
+  // Stripe webhook requires the raw body for HMAC signature verification.
+  // This middleware captures raw bytes before JSON parsing, for the webhook route.
+  app.use(
+    '/api/v1/subscriptions/webhook',
+    require('express').raw({ type: 'application/json', limit: '64kb' }),
+    (req: any, _res: any, next: any) => {
+      req.rawBody = req.body; // preserve Buffer for signature check
+      next();
+    },
+  );
+
   app.use(require("express").json({ limit: "64kb" }));
   app.use(require("express").urlencoded({ extended: true, limit: "64kb" }));
 

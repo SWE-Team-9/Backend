@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { SocialService } from "./social.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 function buildPrismaMock() {
   const prismaMock: any = {
@@ -38,10 +39,12 @@ function buildPrismaMock() {
 describe("SocialService", () => {
   let service: SocialService;
   let prisma: ReturnType<typeof buildPrismaMock>;
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(() => {
     prisma = buildPrismaMock();
-    service = new SocialService(prisma as unknown as PrismaService);
+    eventEmitter = { emit: jest.fn() };
+    service = new SocialService(prisma as unknown as PrismaService, eventEmitter as unknown as EventEmitter2);
   });
 
   describe("followUser", () => {
