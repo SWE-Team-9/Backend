@@ -9,6 +9,7 @@ import { Prisma, TrackStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { InteractionsGateway } from "./interactions.gateway";
 import { InteractionsService } from "./interactions.service";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 describe("InteractionsService", () => {
   let service: InteractionsService;
@@ -58,9 +59,11 @@ describe("InteractionsService", () => {
     },
   };
 
+  const eventEmitterMock = { emit: jest.fn() } as unknown as EventEmitter2;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new InteractionsService(prismaMock, gatewayMock);
+    service = new InteractionsService(prismaMock, gatewayMock, eventEmitterMock);
   });
 
   describe("likeTrack", () => {

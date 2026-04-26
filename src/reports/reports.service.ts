@@ -10,6 +10,7 @@ import {
   SystemRole,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { BulkUpdateReportsDto } from "./dto/bulk-update-reports.dto";
 import { CreateAppealDto } from "./dto/create-appeal.dto";
 import { CreateReportDto } from "./dto/create-report.dto";
@@ -18,12 +19,15 @@ import { AdminReportsQueryDto } from "./dto/admin-reports-query.dto";
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async createReport(reporterId: string, dto: CreateReportDto) {
     await this.ensureTargetExists(dto.targetType, dto.targetId);
 
-    return this.prisma.report.create({
+    const report = await this.prisma.report.create({
       data: {
         reporterId,
         targetType: dto.targetType,
@@ -32,6 +36,15 @@ export class ReportsService {
         description: dto.description,
       },
     });
+
+    this.eventEmitter.emit("report.created", {
+      reportId: report.id,
+      reporterId,
+      category: dto.reason,
+      targetType: dto.targetType,
+    });
+
+    return report;
   }
 
   async createAppeal(reportId: string, userId: string, dto: CreateAppealDto) {

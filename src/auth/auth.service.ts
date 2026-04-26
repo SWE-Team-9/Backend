@@ -829,7 +829,9 @@ export class AuthService {
         profile: true,
         subscriptions: {
           where: { status: "ACTIVE" },
-          include: { plan: true },
+          select: {
+            plan: { select: { name: true, tier: true } },
+          },
           take: 1,
         },
       },

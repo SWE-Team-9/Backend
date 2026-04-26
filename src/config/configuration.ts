@@ -53,4 +53,8 @@ export default () => ({
     maxAvatarBytes: 5 * 1024 * 1024, // 5 MB
     maxCoverBytes: 15 * 1024 * 1024, // 15 MB
   },
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY ?? "",
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+  },
 });
