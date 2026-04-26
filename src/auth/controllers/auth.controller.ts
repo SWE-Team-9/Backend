@@ -264,7 +264,7 @@ export class AuthController {
 
     const result = await this.authService.login(dto, ip, userAgent);
 
-    // Set httpOnly cookies
+    // Set httpOnly cookies (for browser / web clients)
     this.cookieService.setAuthCookies(
       res,
       result.accessToken,
@@ -272,10 +272,13 @@ export class AuthController {
       dto.remember_me,
     );
 
-    // Return user data (without raw tokens in bod─── Endpoint 5:
+    // Also return tokens in the response body so non-browser clients
+    // (Postman, Swagger UI, mobile HTTP clients) can use Bearer auth.
     return {
       message: "Login successful",
       user: result.user,
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
     };
   }
 
@@ -403,14 +406,19 @@ export class AuthController {
 
     const result = await this.authService.refresh(refreshTokenRaw);
 
-    // Set new cookies with rotated tokens
+    // Set new cookies with rotated tokens (for browser / web clients)
     this.cookieService.setAuthCookies(
       res,
       result.accessToken,
       result.refreshToken,
     );
 
-    return { message: "Token refreshed successfully" };
+    // Return new tokens in body for non-browser clients using Bearer auth.
+    return {
+      message: "Token refreshed successfully",
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
+    };
   }
 
   // ─── Endpoint 8: POST /auth/logout ─────────────────────────────────────
