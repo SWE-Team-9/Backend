@@ -525,7 +525,15 @@ export class SocialService {
     return Math.min(value / maxValue, 1);
   }
 
-  private recencyScore(date: Date, nowMs: number, halfLifeDays: number): number {
+  private recencyScore(
+    date: Date | null | undefined,
+    nowMs: number,
+    halfLifeDays: number,
+  ): number {
+    if (!date) {
+      return 0;
+    }
+
     const ageMs = Math.max(nowMs - date.getTime(), 0);
     const ageDays = ageMs / (1000 * 60 * 60 * 24);
     return Math.exp(-ageDays / halfLifeDays);
