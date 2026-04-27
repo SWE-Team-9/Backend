@@ -193,21 +193,27 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
         .send(body)
         .expect(201);
 
-      expect(reportsServiceMock.createReport).toHaveBeenCalledWith(USER_ID, body);
+      expect(reportsServiceMock.createReport).toHaveBeenCalledWith(
+        USER_ID,
+        body,
+      );
       expect(res.body).toHaveProperty("id");
       expect(res.body).toHaveProperty("status");
     });
 
-    it("POST /reports/:id/appeal should create an appeal", async () => {
-      const body = { message: "Please review this report again." };
+    it("POST /reports/appeal should create an appeal", async () => {
+      const body = {
+        reportId: REPORT_ID,
+        message: "Please review this report again.",
+      };
 
       const res = await request(app.getHttpServer())
-        .post(`/reports/${REPORT_ID}/appeal`)
+        .post("/reports/appeal")
         .send(body)
         .expect(201);
 
       expect(reportsServiceMock.createAppeal).toHaveBeenCalledWith(
-        REPORT_ID,
+        body.reportId,
         USER_ID,
         body,
       );

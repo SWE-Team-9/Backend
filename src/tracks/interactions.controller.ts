@@ -450,7 +450,9 @@ export class InteractionsController {
 
   @Get("tracks/:id/status")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Get interaction status for current user on a track" })
+  @ApiOperation({
+    summary: "Get interaction status for current user on a track",
+  })
   @ApiParam({ name: "id", description: "Track ID" })
   @ApiOkResponse({
     description: "Interaction status fetched.",

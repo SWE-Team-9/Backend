@@ -659,20 +659,29 @@ export class PlaylistsService {
       );
     }
 
-    const values = Prisma.join(
-      orderedTrackIds.map((trackId, index) => Prisma.sql`(${trackId}::uuid, ${index})`),
-      ', ',
-    );
+    try {
+      // Build CASE WHEN statement for position updates
+      const caseStatements = orderedTrackIds
+        .map((trackId, index) => `WHEN '${trackId}' THEN ${index}`)
+        .join(' ');
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        UPDATE "playlist_tracks" AS pt
-        SET "position" = v.position
-        FROM (VALUES ${values}) AS v(track_id, position)
-        WHERE pt."playlist_id" = ${playlist.id}::uuid
-          AND pt."track_id" = v.track_id
-      `,
-    );
+      await this.prisma.$executeRaw(
+        Prisma.sql`
+          UPDATE "playlist_tracks"
+          SET "position" = CASE "track_id"
+            ${Prisma.raw(caseStatements)}
+            ELSE "position"
+          END
+          WHERE "playlist_id" = ${playlist.id}::uuid
+        `,
+      );
+    } catch (error) {
+      this.logger.error('Reorder failed:', error);
+      throw this.badRequest(
+        'PLAYLIST_REORDER_FAILED',
+        'Failed to reorder tracks. Please ensure all track IDs are valid.',
+      );
+    }
 
     this.logAudit('playlist.tracks.reorder', userId, playlist.id, {
       tracksCount: orderedTrackIds.length,

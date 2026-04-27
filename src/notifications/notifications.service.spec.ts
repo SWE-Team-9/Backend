@@ -37,7 +37,7 @@ describe("NotificationsService", () => {
     jest.clearAllMocks();
   });
 
-  // 1. getNotifications — filters by type correctly
+  // 1. getNotifications - filters by type correctly
   it("getNotifications: passes type filter to prisma as eventType", async () => {
     mockPrisma.notification.findMany.mockResolvedValueOnce([]);
     mockPrisma.notification.count.mockResolvedValueOnce(0);
@@ -49,7 +49,7 @@ describe("NotificationsService", () => {
     );
   });
 
-  // 2. getNotifications — isRead=true maps to readAt: { not: null }
+  // 2. getNotifications - isRead=true maps to readAt: { not: null }
   it("getNotifications: converts isRead=true to readAt not-null filter", async () => {
     mockPrisma.notification.findMany.mockResolvedValueOnce([]);
     mockPrisma.notification.count.mockResolvedValueOnce(0);
@@ -61,18 +61,18 @@ describe("NotificationsService", () => {
     );
   });
 
-  // 3. markAsRead — throws 403 when notification belongs to different user
+  // 3. markAsRead - throws 403 when notification belongs to different user
   it("markAsRead: throws 403 when notification does not belong to user", async () => {
     mockPrisma.notification.findUnique.mockResolvedValueOnce({
       id: "notif-1",
       recipientId: "other-user",
     });
-    await expect(
-      service.markAsRead("user-1", "notif-1"),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.markAsRead("user-1", "notif-1")).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
-  // 4. markAllRead — calls updateMany with readAt:null filter + emits WS
+  // 4. markAllRead - calls updateMany with readAt:null filter + emits WS
   it("markAllRead: calls updateMany with readAt null filter and emits WS event", async () => {
     mockPrisma.notification.updateMany.mockResolvedValueOnce({ count: 3 });
     const mockGateway = { emitToUser: jest.fn() };

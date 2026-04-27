@@ -25,7 +25,7 @@ export class JwtAuthGuard extends AuthGuard("jwt-cookie") {
       try {
         await super.canActivate(context);
       } catch {
-        // no valid token — that's fine on public routes
+        // no valid token - that's fine on public routes
       }
       return true;
     }
@@ -46,7 +46,7 @@ export class JwtAuthGuard extends AuthGuard("jwt-cookie") {
         ])
       : false;
 
-    // On public routes, missing/invalid tokens are fine — just return no user
+    // On public routes, missing/invalid tokens are fine - just return no user
     if (isPublic) {
       return (user || undefined) as TUser;
     }

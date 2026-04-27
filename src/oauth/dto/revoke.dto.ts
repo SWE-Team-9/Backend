@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsIn,
+  MaxLength,
+} from "class-validator";
 
 /**
  * OAuth2 Token Revocation Request DTO (RFC 7009)
@@ -21,8 +27,8 @@ export class RevokeDto {
    */
   @IsOptional()
   @IsString()
-  @IsIn(['access_token', 'refresh_token'])
-  token_type_hint?: 'access_token' | 'refresh_token';
+  @IsIn(["access_token", "refresh_token"])
+  token_type_hint?: "access_token" | "refresh_token";
 
   /**
    * REQUIRED. Client identifier for authentication.

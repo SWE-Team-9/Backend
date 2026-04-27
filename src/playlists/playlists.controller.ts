@@ -16,7 +16,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } 
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
-import { PlaylistsService } from 'src/playlists/playlists.service';
+import { PlaylistsService } from './playlists.service';
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,

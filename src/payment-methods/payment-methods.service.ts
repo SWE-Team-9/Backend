@@ -4,10 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { StripeService } from '../stripe/stripe.service';
-import { AttachPaymentMethodDto } from './dto/attach-payment-method.dto';
+} from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { StripeService } from "../stripe/stripe.service";
+import { AttachPaymentMethodDto } from "./dto/attach-payment-method.dto";
 
 @Injectable()
 export class PaymentMethodsService {
@@ -37,7 +37,7 @@ export class PaymentMethodsService {
       },
     });
 
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
 
     const customer = await this.stripe.createCustomer({
       email: user.email,
@@ -61,7 +61,7 @@ export class PaymentMethodsService {
     const intent = await this.stripe.createSetupIntent(stripeCustomerId);
 
     if (!intent.client_secret) {
-      throw new BadRequestException('Failed to create Setup Intent');
+      throw new BadRequestException("Failed to create Setup Intent");
     }
 
     return { clientSecret: intent.client_secret };
@@ -82,7 +82,7 @@ export class PaymentMethodsService {
       where: { stripePaymentMethodId: dto.stripePaymentMethodId },
     });
     if (existing) {
-      throw new ConflictException('This payment method is already saved');
+      throw new ConflictException("This payment method is already saved");
     }
 
     // Attach to the Stripe customer (idempotent if already attached)
@@ -91,11 +91,12 @@ export class PaymentMethodsService {
       stripeCustomerId,
     );
 
-    if (pm.type !== 'card' || !pm.card) {
-      throw new BadRequestException('Only card payment methods are supported');
+    if (pm.type !== "card" || !pm.card) {
+      throw new BadRequestException("Only card payment methods are supported");
     }
 
-    const isFirstMethod = (await this.prisma.paymentMethod.count({ where: { userId } })) === 0;
+    const isFirstMethod =
+      (await this.prisma.paymentMethod.count({ where: { userId } })) === 0;
     const makeDefault = dto.setAsDefault ?? isFirstMethod;
 
     // If this will be the default, clear any existing default flag
@@ -131,7 +132,7 @@ export class PaymentMethodsService {
   async listPaymentMethods(userId: string): Promise<object[]> {
     const methods = await this.prisma.paymentMethod.findMany({
       where: { userId },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
     });
     return methods.map((m) => this.formatPaymentMethod(m));
   }
@@ -142,7 +143,7 @@ export class PaymentMethodsService {
     const pm = await this.prisma.paymentMethod.findFirst({
       where: { id: paymentMethodId, userId },
     });
-    if (!pm) throw new NotFoundException('Payment method not found');
+    if (!pm) throw new NotFoundException("Payment method not found");
 
     const stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
 
@@ -171,11 +172,14 @@ export class PaymentMethodsService {
 
   // ── Delete (detach) a payment method ─────────────────────────────────────
 
-  async deletePaymentMethod(userId: string, paymentMethodId: string): Promise<void> {
+  async deletePaymentMethod(
+    userId: string,
+    paymentMethodId: string,
+  ): Promise<void> {
     const pm = await this.prisma.paymentMethod.findFirst({
       where: { id: paymentMethodId, userId },
     });
-    if (!pm) throw new NotFoundException('Payment method not found');
+    if (!pm) throw new NotFoundException("Payment method not found");
 
     // Detach from Stripe (ignore error if already detached)
     try {
@@ -192,7 +196,7 @@ export class PaymentMethodsService {
     if (pm.isDefault) {
       const next = await this.prisma.paymentMethod.findFirst({
         where: { userId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       });
       if (next) {
         await this.prisma.paymentMethod.update({
@@ -200,10 +204,14 @@ export class PaymentMethodsService {
           data: { isDefault: true },
         });
         const stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
-        await this.stripe.updateCustomerDefaultPaymentMethod(
-          stripeCustomerId,
-          next.stripePaymentMethodId,
-        ).catch(() => {/* best effort */});
+        await this.stripe
+          .updateCustomerDefaultPaymentMethod(
+            stripeCustomerId,
+            next.stripePaymentMethodId,
+          )
+          .catch(() => {
+            /* best effort */
+          });
       }
     }
   }

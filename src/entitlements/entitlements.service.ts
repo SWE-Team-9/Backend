@@ -1,9 +1,9 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from "@nestjs/common";
 
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 
 /**
- * EntitlementsService — single source of truth for "what can this user do?"
+ * EntitlementsService - single source of truth for "what can this user do?"
  *
  * Consumed by:
  *  - TracksService (upload guard)
@@ -22,18 +22,20 @@ export class EntitlementsService {
 
     const { uploadLimit, uploadedCount } = quotaResult;
     const isUnlimited = !isFinite(uploadLimit);
-    const planCode = sub ? this.planTier(sub.plan.tier) : 'FREE';
+    const planCode = sub ? this.planTier(sub.plan.tier) : "FREE";
 
     return {
       planCode,
-      isPremium: planCode !== 'FREE',
+      isPremium: planCode !== "FREE",
       uploadLimit: isUnlimited ? -1 : uploadLimit,
       uploadedCount,
-      remainingUploads: isUnlimited ? null : Math.max(0, uploadLimit - uploadedCount),
+      remainingUploads: isUnlimited
+        ? null
+        : Math.max(0, uploadLimit - uploadedCount),
       canUpload: isUnlimited || uploadedCount < uploadLimit,
-      adsEnabled: planCode === 'FREE',
-      canDownload: planCode !== 'FREE',
-      supportLevel: planCode === 'FREE' ? 'community' : 'priority',
+      adsEnabled: planCode === "FREE",
+      canDownload: planCode !== "FREE",
+      supportLevel: planCode === "FREE" ? "community" : "priority",
       trialEnd: (sub as any)?.trialEnd ?? null,
     };
   }
@@ -44,12 +46,17 @@ export class EntitlementsService {
   }
 
   async assertCanUploadTrack(userId: string): Promise<void> {
-    const { canUpload, uploadLimit, uploadedCount } = await this.getUserEntitlements(userId);
+    const { canUpload, uploadLimit, uploadedCount } =
+      await this.getUserEntitlements(userId);
     if (!canUpload) {
       throw new ForbiddenException({
-        code: 'UPLOAD_LIMIT_REACHED',
+        code: "UPLOAD_LIMIT_REACHED",
         message: `You have reached your upload limit of ${uploadLimit} tracks. Upgrade your plan to upload more.`,
-        details: { uploadLimit, uploadedCount, upgradeOptions: ['PRO', 'GO_PLUS'] },
+        details: {
+          uploadLimit,
+          uploadedCount,
+          upgradeOptions: ["PRO", "GO_PLUS"],
+        },
       });
     }
   }
@@ -64,9 +71,9 @@ export class EntitlementsService {
     return isPremium;
   }
 
-  private planTier(tier: string): 'FREE' | 'PRO' | 'GO_PLUS' {
-    if (tier === 'PRO') return 'PRO';
-    if (tier === 'GO_PLUS') return 'GO_PLUS';
-    return 'FREE';
+  private planTier(tier: string): "FREE" | "PRO" | "GO_PLUS" {
+    if (tier === "PRO") return "PRO";
+    if (tier === "GO_PLUS") return "GO_PLUS";
+    return "FREE";
   }
 }

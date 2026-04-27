@@ -20,8 +20,10 @@ export default () => ({
     recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
     recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,
     // Per-platform Enterprise site keys
-    recaptchaEnterpriseAndroidSiteKey: process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
-    recaptchaEnterpriseWebSiteKey: process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
+    recaptchaEnterpriseAndroidSiteKey:
+      process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
+    recaptchaEnterpriseWebSiteKey:
+      process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
     authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? "false") === "true",
   },
   database: {

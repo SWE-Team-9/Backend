@@ -44,22 +44,30 @@ describe("SocialService", () => {
   beforeEach(() => {
     prisma = buildPrismaMock();
     eventEmitter = { emit: jest.fn() };
-    service = new SocialService(prisma as unknown as PrismaService, eventEmitter as unknown as EventEmitter2);
+    service = new SocialService(
+      prisma as unknown as PrismaService,
+      eventEmitter as unknown as EventEmitter2,
+    );
   });
 
   describe("followUser", () => {
     it("follows target user and returns expected payload", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_target",
+        deletedAt: null,
+      });
       prisma.userBlock.findUnique.mockResolvedValue(null);
       prisma.userFollow.create.mockResolvedValue({});
       prisma.userFollow.count.mockResolvedValue(3);
 
-      await expect(service.followUser("usr_me", "usr_target")).resolves.toEqual({
-        message: "User followed successfully",
-        targetUserId: "usr_target",
-        followersCount: 3,
-        isFollowing: true,
-      });
+      await expect(service.followUser("usr_me", "usr_target")).resolves.toEqual(
+        {
+          message: "User followed successfully",
+          targetUserId: "usr_target",
+          followersCount: 3,
+          isFollowing: true,
+        },
+      );
     });
 
     it("throws BadRequestException when user follows themselves", async () => {
@@ -71,11 +79,16 @@ describe("SocialService", () => {
 
   describe("unfollowUser", () => {
     it("unfollows target user and returns expected payload", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_target",
+        deletedAt: null,
+      });
       prisma.userFollow.findUnique.mockResolvedValue({ followerId: "usr_me" });
       prisma.userFollow.delete.mockResolvedValue({});
 
-      await expect(service.unfollowUser("usr_me", "usr_target")).resolves.toEqual({
+      await expect(
+        service.unfollowUser("usr_me", "usr_target"),
+      ).resolves.toEqual({
         message: "User unfollowed successfully",
         targetUserId: "usr_target",
         isFollowing: false,
@@ -83,18 +96,24 @@ describe("SocialService", () => {
     });
 
     it("throws NotFoundException when relation does not exist", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_target",
+        deletedAt: null,
+      });
       prisma.userFollow.findUnique.mockResolvedValue(null);
 
-      await expect(service.unfollowUser("usr_me", "usr_target")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.unfollowUser("usr_me", "usr_target"),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe("getFollowers", () => {
     it("returns paginated followers", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_target",
+        deletedAt: null,
+      });
       prisma.userFollow.count.mockResolvedValue(1);
       prisma.userFollow.findMany.mockResolvedValue([
         {
@@ -109,7 +128,10 @@ describe("SocialService", () => {
         },
       ]);
 
-      const result = await service.getFollowers("usr_target", { page: 1, limit: 20 });
+      const result = await service.getFollowers("usr_target", {
+        page: 1,
+        limit: 20,
+      });
       expect(result.total).toBe(1);
       expect(result.followers[0]).toMatchObject({
         id: "usr_f1",
@@ -120,7 +142,10 @@ describe("SocialService", () => {
 
   describe("getFollowing", () => {
     it("returns paginated following", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_me", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_me",
+        deletedAt: null,
+      });
       prisma.userFollow.count.mockResolvedValue(1);
       prisma.userFollow.findMany.mockResolvedValue([
         {
@@ -135,7 +160,10 @@ describe("SocialService", () => {
         },
       ]);
 
-      const result = await service.getFollowing("usr_me", { page: 1, limit: 20 });
+      const result = await service.getFollowing("usr_me", {
+        page: 1,
+        limit: 20,
+      });
       expect(result.total).toBe(1);
       expect(result.following[0]).toMatchObject({
         id: "usr_t1",
@@ -146,7 +174,10 @@ describe("SocialService", () => {
 
   describe("getSuggestions", () => {
     it("returns suggestions list", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_me", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_me",
+        deletedAt: null,
+      });
       prisma.userFollow.findMany.mockResolvedValue([]);
       prisma.userBlock.findMany
         .mockResolvedValueOnce([])
@@ -155,7 +186,11 @@ describe("SocialService", () => {
       prisma.user.findMany.mockResolvedValue([
         {
           id: "usr_s1",
-          profile: { displayName: "Suggest One", handle: "suggest-one", avatarUrl: null },
+          profile: {
+            displayName: "Suggest One",
+            handle: "suggest-one",
+            avatarUrl: null,
+          },
           favoriteGenres: [],
         },
       ]);
@@ -168,7 +203,10 @@ describe("SocialService", () => {
 
   describe("blockUser", () => {
     it("blocks target user and returns expected payload", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_target",
+        deletedAt: null,
+      });
       prisma.userBlock.upsert.mockResolvedValue({});
       prisma.userFollow.deleteMany.mockResolvedValue({ count: 0 });
 
@@ -187,11 +225,16 @@ describe("SocialService", () => {
 
   describe("unblockUser", () => {
     it("unblocks target user and returns expected payload", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_target", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_target",
+        deletedAt: null,
+      });
       prisma.userBlock.findUnique.mockResolvedValue({ blockerId: "usr_me" });
       prisma.userBlock.delete.mockResolvedValue({});
 
-      await expect(service.unblockUser("usr_me", "usr_target")).resolves.toEqual({
+      await expect(
+        service.unblockUser("usr_me", "usr_target"),
+      ).resolves.toEqual({
         message: "User unblocked successfully",
         blockedUserId: "usr_target",
       });
@@ -200,7 +243,10 @@ describe("SocialService", () => {
 
   describe("getBlockedUsers", () => {
     it("returns paginated blocked users", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "usr_me", deletedAt: null });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "usr_me",
+        deletedAt: null,
+      });
       prisma.userBlock.count.mockResolvedValue(1);
       prisma.userBlock.findMany.mockResolvedValue([
         {
@@ -216,7 +262,10 @@ describe("SocialService", () => {
         },
       ]);
 
-      const result = await service.getBlockedUsers("usr_me", { page: 1, limit: 20 });
+      const result = await service.getBlockedUsers("usr_me", {
+        page: 1,
+        limit: 20,
+      });
       expect(result.total).toBe(1);
       expect(result.blockedUsers[0]).toMatchObject({
         id: "usr_b1",
