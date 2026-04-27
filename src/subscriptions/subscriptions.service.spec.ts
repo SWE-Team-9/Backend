@@ -949,7 +949,28 @@ describe("SubscriptionsService", () => {
       expect(uploadLimit).toBe(100);
       expect(uploadedCount).toBe(100);
     });
-  });
+
+    it('GO_PLUS boundary: exactly at GO_PLUS limit (1000/1000)', async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.GO_PLUS, 1000),
+      );
+      mockPrisma.track.count.mockResolvedValue(1000);
+
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
+
+      expect(uploadLimit).toBe(1000);
+      expect(uploadedCount).toBe(1000); // at limit, 0 remaining → upload blocked
+    });
+
+    it('FREE plan: 4th upload (uploadedCount=3 >= uploadLimit=3) is at-limit', async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
+      mockPrisma.track.count.mockResolvedValue(FREE_UPLOAD_LIMIT); // 3/3
+
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
+
+      // The service consumer (TracksService / EntitlementsService) blocks when uploadedCount >= uploadLimit
+      expect(uploadedCount).toBeGreaterThanOrEqual(uploadLimit);
+    });
 
   // ─────────────────────────────────────────────────────────────────────────
   // PLAN_CONFIG static contract
