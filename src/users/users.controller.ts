@@ -1,4 +1,4 @@
-﻿import {
+import {
   Body,
   Controller,
   Delete,
@@ -69,7 +69,7 @@ export class UsersController {
   @ApiQuery({
     name: "handle",
     description:
-      "The handle to check (3–30 chars, lowercase letters, numbers, underscores).",
+      "The handle to check (3-30 chars, lowercase letters, numbers, underscores).",
     example: "yahia_dev",
   })
   @ApiResponse({ status: 200, description: "{ available: boolean }" })
@@ -81,7 +81,7 @@ export class UsersController {
     description: `Verify if a desired username handle is available for registration or update.
 
 Validation:
-- 3–30 characters (alphanumeric + underscores only)
+- 3-30 characters (alphanumeric + underscores only)
 - Real-time availability check
 - 30-day retirement window (recently deleted handles cannot be re-used)
 
@@ -145,7 +145,7 @@ Rate Limited: Default (100 req/min).`,
   @ApiOperation({
     summary: "Update my profile",
     description:
-      "Partial update — only fields present in the body are written. Send favorite_genres: [] to clear all genres.",
+      "Partial update - only fields present in the body are written. Send favorite_genres: [] to clear all genres.",
   })
   @ApiResponse({ status: 200, description: "Updated profile." })
   @ApiResponse({ status: 400, description: "Validation error." })
@@ -163,7 +163,7 @@ Rate Limited: Default (100 req/min).`,
   @ApiOperation({
     summary: "Update external links",
     description:
-      "Full-replace — client sends the complete desired list. Send links: [] to clear all.",
+      "Full-replace - client sends the complete desired list. Send links: [] to clear all.",
   })
   @ApiResponse({ status: 200, description: "Updated links array." })
   @ApiResponse({ status: 400, description: "Validation or SSRF error." })

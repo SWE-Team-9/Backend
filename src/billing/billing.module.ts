@@ -4,11 +4,11 @@ import { BILLING_PROVIDER } from "./billing-provider.interface";
 import { MockStripeBillingProvider } from "./mock-stripe.provider";
 
 /**
- * BillingModule — provides IBillingProvider to the application.
+ * BillingModule - provides IBillingProvider to the application.
  *
  * BILLING_PROVIDER env var selects the implementation:
- *   mock_stripe (default) — MockStripeBillingProvider (no real Stripe calls)
- *   stripe               — RealStripeBillingProvider (real Stripe API calls)
+ *   mock_stripe (default) - MockStripeBillingProvider (no real Stripe calls)
+ *   stripe               - RealStripeBillingProvider (real Stripe API calls)
  *
  * To add real Stripe support:
  * 1. Implement RealStripeBillingProvider using StripeService.

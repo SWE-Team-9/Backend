@@ -57,9 +57,9 @@ const enablePaymentFeatures =
     ]),
 
     // ── Shared infrastructure (global modules) ────────────────────────────────
-    PrismaModule, // @Global — PrismaService available everywhere
-    StorageModule, // @Global — StorageService available everywhere (Member 5)
-    MailModule, // shared — MailService used by AuthModule
+    PrismaModule, // @Global - PrismaService available everywhere
+    StorageModule, // @Global - StorageService available everywhere (Member 5)
+    MailModule, // shared - MailService used by AuthModule
     EventEmitterModule.forRoot(), // global event bus for decoupled notifications
     ScheduleModule.forRoot(), // enables cron jobs (e.g. trial auto-renew)
 
@@ -67,23 +67,23 @@ const enablePaymentFeatures =
     AuthModule, // Members 1, 2, 3
     OAuthModule, // OAuth2 provider (third-party API access)
     UsersModule, // Members 4, 5
-    TracksModule, // Module 4 — Audio Upload & Track Management
-    SocialModule, // Module 3 — Social Graph (Blocking & Moderation)
-    PlayerModule, // Module 5 — Playback & Streaming Engine
-    ReportsModule, // Module 11 — Reports & Appeals
-    FeedModule, // Module 8 — Feed
-    DiscoveryModule, // Module 8 — Search & Discovery
-    MessagesModule, // Module 9 — Messaging + WebSocket
-    NotificationsModule, // Module 10 — Notifications + WebSocket
-    AdminModule, // Module 11 — Admin: User Enforcement + Content Moderation + Stats
-    PlaylistsModule, // Module 7 — Sets & Playlists
-    SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
+    TracksModule, // Module 4 - Audio Upload & Track Management
+    SocialModule, // Module 3 - Social Graph (Blocking & Moderation)
+    PlayerModule, // Module 5 - Playback & Streaming Engine
+    ReportsModule, // Module 11 - Reports & Appeals
+    FeedModule, // Module 8 - Feed
+    DiscoveryModule, // Module 8 - Search & Discovery
+    MessagesModule, // Module 9 - Messaging + WebSocket
+    NotificationsModule, // Module 10 - Notifications + WebSocket
+    AdminModule, // Module 11 - Admin: User Enforcement + Content Moderation + Stats
+    PlaylistsModule, // Module 7 - Sets & Playlists
+    SubscriptionsModule, // Module 12 - Subscriptions & Upload Guard
     ...(enablePaymentFeatures ? [StripeModule, PaymentMethodsModule] : []),
     EntitlementsModule, // GET /entitlements/me
   ],
   controllers: [AppController],
   providers: [
-    // Guard execution order: throttle → JWT auth → roles
+    // Guard execution order: throttle -> JWT auth -> roles
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

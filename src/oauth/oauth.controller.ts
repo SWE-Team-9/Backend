@@ -86,8 +86,8 @@ export class OAuthController {
 - Code is single-use (consuming same code twice returns error)
 
 **Permissions Model:** Scopes define what the third-party app can do:
-- "read" — Read access to user profile, library
-- "write" — Write access to playlists, reposts, likes
+- "read" - Read access to user profile, library
+- "write" - Write access to playlists, reposts, likes
 - Third-party app cannot request scopes beyond what your admin allowed
 
 **Error Behavior:**
@@ -251,7 +251,7 @@ export class OAuthController {
 
 **Token Format:** Both access and refresh tokens are:
 - Cryptographically random (32 bytes = 256 bits)
-- Opaque (not JWTs) — no structure the third-party app can parse
+- Opaque (not JWTs) - no structure the third-party app can parse
 - Hashed with SHA256 before storage (database breaches don't leak raw tokens)
 - Subject to rate limiting by client (default 1000 reqs/hour)
 
@@ -394,8 +394,8 @@ RFC 7009 states that to prevent information leakage about token existence, the e
 This prevents attackers from enumerating valid tokens.
 
 **Token Type Hints:** (optional, helps with performance)
-- "access_token" — search access_token_hash first
-- "refresh_token" — search refresh_token_hash first
+- "access_token" - search access_token_hash first
+- "refresh_token" - search refresh_token_hash first
 - Without hint, search both (slower)
 
 **Security:**
@@ -407,7 +407,7 @@ This prevents attackers from enumerating valid tokens.
   @ApiResponse({
     status: 200,
     description:
-      "Token revocations (successful or was already revoked—same response)",
+      "Token revocations (successful or was already revoked-same response)",
     schema: {
       type: "object",
       properties: {

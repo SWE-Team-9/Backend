@@ -22,7 +22,7 @@ import {
   ModeratePlaylistDto,
 } from "./dto/content-moderation.dto";
 
-@ApiTags("Admin — Content Moderation")
+@ApiTags("Admin - Content Moderation")
 @ApiCookieAuth("access_token")
 @Controller("admin")
 @Roles("ADMIN", "MODERATOR")
@@ -47,7 +47,7 @@ export class ContentModerationController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({
     status: 403,
-    description: "Forbidden — ADMIN or MODERATOR role required.",
+    description: "Forbidden - ADMIN or MODERATOR role required.",
   })
   @ApiResponse({ status: 404, description: "Track not found." })
   @Patch("tracks/:id/moderation")
@@ -79,7 +79,7 @@ export class ContentModerationController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({
     status: 403,
-    description: "Forbidden — ADMIN or MODERATOR role required.",
+    description: "Forbidden - ADMIN or MODERATOR role required.",
   })
   @ApiResponse({ status: 404, description: "Comment not found." })
   @Patch("comments/:id/moderation")
@@ -115,7 +115,7 @@ export class ContentModerationController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({
     status: 403,
-    description: "Forbidden — ADMIN or MODERATOR role required.",
+    description: "Forbidden - ADMIN or MODERATOR role required.",
   })
   @ApiResponse({ status: 404, description: "Playlist not found." })
   @Patch("playlists/:id/moderation")

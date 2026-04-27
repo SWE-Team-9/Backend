@@ -89,7 +89,7 @@ export class AuthService {
     );
 
     // Create user, profile, auth identity, AND email token in one transaction.
-    // If anything here fails the entire insert is rolled back — no orphaned rows.
+    // If anything here fails the entire insert is rolled back - no orphaned rows.
     let user;
     try {
       user = await this.prisma.$transaction(async (tx: any) => {
@@ -153,7 +153,7 @@ export class AuthService {
       throw error;
     }
 
-    // Send verification email AFTER the transaction commits (non-fatal — user
+    // Send verification email AFTER the transaction commits (non-fatal - user
     // can always request a resend via /auth/resend-verification).
     await this.sendVerificationEmail(
       dto.email,
@@ -399,7 +399,7 @@ export class AuthService {
     let user: any;
 
     if (authIdentity) {
-      // Existing Google user — just log them in
+      // Existing Google user - just log them in
       user = authIdentity.user;
     } else {
       // Case B: Check if a user with this email already exists (registered via email)
@@ -420,7 +420,7 @@ export class AuthService {
         });
         user = existingUser;
       } else {
-        // Case C: Brand new user — create everything
+        // Case C: Brand new user - create everything
         user = await this.prisma.$transaction(async (tx: any) => {
           const newUser = await tx.user.create({
             data: {
@@ -988,7 +988,7 @@ export class AuthService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Helper: Send verification email (mail only — token already saved to DB)
+  // Helper: Send verification email (mail only - token already saved to DB)
   // ═══════════════════════════════════════════════════════════════════════════
   private async sendVerificationEmail(
     email: string,

@@ -39,7 +39,7 @@ export class AuthorizeDto {
 
   /**
    * Space-separated list of scopes (e.g., "read write").
-   * Limit to 256 chars — plenty of room for multiple scopes.
+   * Limit to 256 chars - plenty of room for multiple scopes.
    */
   @IsString()
   @IsNotEmpty()

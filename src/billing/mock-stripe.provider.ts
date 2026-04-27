@@ -63,32 +63,32 @@ function addOneMonth(date: Date): Date {
 }
 
 /**
- * MockStripeBillingProvider — zero real Stripe calls.
+ * MockStripeBillingProvider - zero real Stripe calls.
  *
- * Generates deterministic mock IDs (mock_sub_…, mock_cus_…, etc.) and returns
+ * Generates deterministic mock IDs (mock_sub_..., mock_cus_..., etc.) and returns
  * payloads shaped close enough to real Stripe that swapping to
  * RealStripeBillingProvider requires only replacing this class.
  *
  * ── Real Stripe swap guide ─────────────────────────────────────────────────
  * To activate real Stripe, set BILLING_PROVIDER=stripe in .env and implement
  * RealStripeBillingProvider that:
- *   - getOrCreateCustomer → stripe.customers.create / retrieve
- *   - createCheckoutSession → stripe.checkout.sessions.create (mode='subscription')
- *   - createBillingPortalSession → stripe.billingPortal.sessions.create
- *   - cancelSubscription → stripe.subscriptions.update / cancel
- *   - resumeSubscription → stripe.subscriptions.update cancel_at_period_end=false
- *   - changePlan → stripe.subscriptions.update with new items[0].price
- *   - retrieveSubscription → stripe.subscriptions.retrieve
- *   - constructWebhookEvent → stripe.webhooks.constructEvent
+ *   - getOrCreateCustomer -> stripe.customers.create / retrieve
+ *   - createCheckoutSession -> stripe.checkout.sessions.create (mode='subscription')
+ *   - createBillingPortalSession -> stripe.billingPortal.sessions.create
+ *   - cancelSubscription -> stripe.subscriptions.update / cancel
+ *   - resumeSubscription -> stripe.subscriptions.update cancel_at_period_end=false
+ *   - changePlan -> stripe.subscriptions.update with new items[0].price
+ *   - retrieveSubscription -> stripe.subscriptions.retrieve
+ *   - constructWebhookEvent -> stripe.webhooks.constructEvent
  */
 @Injectable()
 export class MockStripeBillingProvider implements IBillingProvider {
   private readonly logger = new Logger(MockStripeBillingProvider.name);
 
-  // In-memory store of mock customers: userId → customerId
+  // In-memory store of mock customers: userId -> customerId
   private readonly customers = new Map<string, string>();
 
-  // In-memory store of mock subscriptions: providerSubscriptionId → state
+  // In-memory store of mock subscriptions: providerSubscriptionId -> state
   private readonly subscriptions = new Map<
     string,
     {
@@ -259,7 +259,7 @@ export class MockStripeBillingProvider implements IBillingProvider {
     const periodEnd = sub?.currentPeriodEnd ?? addOneMonth(now);
 
     this.logger.debug(
-      `[MOCK] Changed plan for ${params.providerSubscriptionId} → ${params.newPlanCode}`,
+      `[MOCK] Changed plan for ${params.providerSubscriptionId} -> ${params.newPlanCode}`,
     );
 
     return {

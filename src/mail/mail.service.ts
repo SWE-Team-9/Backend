@@ -166,7 +166,7 @@ export class MailService {
         `Your free trial for ${params.planName} ends on ${endsOn}.`,
         `After that, you will be automatically charged ${priceDisplay}.`,
         "",
-        "No action is needed — your subscription will renew automatically.",
+        "No action is needed - your subscription will renew automatically.",
         "If you'd like to cancel before your trial ends, go to Settings > Subscription in the app.",
         "",
         "Thanks for being part of IQA3!",
@@ -175,7 +175,7 @@ export class MailService {
         `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
         `<p>Your free trial for <strong>${this.escapeHtml(params.planName)}</strong> ends on <strong>${this.escapeHtml(endsOn)}</strong>.</p>`,
         `<p>After that, you will be automatically charged <strong>${this.escapeHtml(priceDisplay)}</strong>.</p>`,
-        "<p>No action is needed — your subscription will renew automatically.</p>",
+        "<p>No action is needed - your subscription will renew automatically.</p>",
         "<p>If you'd like to cancel before your trial ends, go to <strong>Settings &gt; Subscription</strong> in the app.</p>",
         "<p>Thanks for being part of IQA3!</p>",
       ].join(""),
@@ -203,7 +203,7 @@ export class MailService {
         `Hi ${params.displayName ?? "there"},`,
         "",
         `Welcome to your free ${params.planName} trial!`,
-        `You have full access until ${endsOn} — completely free.`,
+        `You have full access until ${endsOn} - completely free.`,
         "",
         `After your trial ends, you will be automatically charged ${priceDisplay}.`,
         "We will send you a reminder email approximately 48 hours before that happens.",
@@ -215,7 +215,7 @@ export class MailService {
       html: [
         `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
         `<p>Welcome to your free <strong>${this.escapeHtml(params.planName)}</strong> trial!</p>`,
-        `<p>You have full access until <strong>${this.escapeHtml(endsOn)}</strong> — completely free.</p>`,
+        `<p>You have full access until <strong>${this.escapeHtml(endsOn)}</strong> - completely free.</p>`,
         `<p>After your trial ends, you will be automatically charged <strong>${this.escapeHtml(priceDisplay)}</strong>.</p>`,
         "<p>We will send you a reminder email approximately 48 hours before that happens.</p>",
         "<p>To cancel at any time before the trial ends, go to <strong>Settings &gt; Subscription</strong> in the app.</p>",
@@ -301,7 +301,7 @@ export class MailService {
   }): Promise<void> {
     await this.sendMail({
       to: params.to,
-      subject: "Your IQA3 payment failed — subscription paused",
+      subject: "Your IQA3 payment failed - subscription paused",
       text: [
         `Hi ${params.displayName ?? "there"},`,
         "",

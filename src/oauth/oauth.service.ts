@@ -33,7 +33,7 @@ export class OAuthService {
   private readonly REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
   // In-memory store for pending native OAuth codes.
-  // Maps internal code → { tokens, user, codeChallenge, expiresAt }
+  // Maps internal code -> { tokens, user, codeChallenge, expiresAt }
   private readonly pendingNativeCodes = new Map<
     string,
     {
@@ -70,7 +70,7 @@ export class OAuthService {
     const googleClientId =
       this.config.get<string>("google.clientId") || "fallback_google_client_id";
 
-    // Use the backend's own HTTPS callback URL for Google — NOT the native URI.
+    // Use the backend's own HTTPS callback URL for Google - NOT the native URI.
     // Google only accepts redirect URIs registered in Google Cloud Console.
     // The native redirect URI is stored in the state param and used later.
     const backendCallbackUrl = this.getNativeOAuthCallbackUrl();
@@ -98,7 +98,7 @@ export class OAuthService {
     params.set("include_granted_scopes", "true");
     params.set("prompt", "consent");
 
-    // Note: PKCE code_challenge is NOT sent to Google — it's between the app and our backend.
+    // Note: PKCE code_challenge is NOT sent to Google - it's between the app and our backend.
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
@@ -124,7 +124,7 @@ export class OAuthService {
   }
 
   // ---------------------------------------------------------------------------
-  // Native OAuth: Google redirects here → exchange code → redirect to app
+  // Native OAuth: Google redirects here -> exchange code -> redirect to app
   // ---------------------------------------------------------------------------
 
   async processGoogleNativeCallback(

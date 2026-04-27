@@ -1,5 +1,5 @@
 /**
- * Payment Methods Management — service-level tests.
+ * Payment Methods Management - service-level tests.
  *
  * Covers:
  *  - createBillingPortal() response shape (portalSessionId, portalUrl, capabilities,
@@ -18,7 +18,7 @@
  *  - payment_method.updated webhook: fires email (fire-and-forget)
  *  - payment_method.updated webhook: idempotent (duplicate event ID skipped at top)
  *  - payment_method.updated webhook: no-op when customer ID not found
- *  - User not found → NotFoundException on portal creation
+ *  - User not found -> NotFoundException on portal creation
  */
 
 import { NotFoundException } from "@nestjs/common";
@@ -293,7 +293,7 @@ describe("Payment Methods Management (service)", () => {
     it("never exposes full card number in response", async () => {
       const result = await service.createBillingPortal(USER_ID);
       const json = JSON.stringify(result);
-      // A full Visa number has 16 digits — 4242424242424242 should never appear
+      // A full Visa number has 16 digits - 4242424242424242 should never appear
       expect(json).not.toMatch(/\b\d{15,16}\b/);
     });
 

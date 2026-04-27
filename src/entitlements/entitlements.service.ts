@@ -3,7 +3,7 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 
 /**
- * EntitlementsService — single source of truth for "what can this user do?"
+ * EntitlementsService - single source of truth for "what can this user do?"
  *
  * Consumed by:
  *  - TracksService (upload guard)

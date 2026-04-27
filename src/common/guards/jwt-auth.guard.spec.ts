@@ -40,7 +40,7 @@ describe("JwtAuthGuard", () => {
 
   // ─── @Public() bypass ─────────────────────────────────────────────────────
 
-  describe("canActivate — public routes", () => {
+  describe("canActivate - public routes", () => {
     it("should return true immediately when the route is decorated with @Public()", async () => {
       jest
         .spyOn(reflector, "getAllAndOverride")
@@ -156,7 +156,7 @@ describe("JwtAuthGuard", () => {
 
   // ─── non-public route (super.canActivate delegation) ─────────────────────
 
-  describe("canActivate — protected routes", () => {
+  describe("canActivate - protected routes", () => {
     it("should delegate to passport AuthGuard when the route is not public", async () => {
       // Reflect that there is NO @Public() decorator on this context.
       jest

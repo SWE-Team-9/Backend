@@ -292,7 +292,7 @@ export class TrialSchedulerService {
    * Cancels PAST_DUE subscriptions whose grace period (GRACE_PERIOD_DAYS) has elapsed
    * without the user updating their payment method.
    * Moves the user to Free and sends a "moved to free" email.
-   * The grace period is measured from `updatedAt` — the timestamp when the sub
+   * The grace period is measured from `updatedAt` - the timestamp when the sub
    * was set to PAST_DUE by the invoice.payment_failed webhook.
    */
   @Cron("0 * * * *")

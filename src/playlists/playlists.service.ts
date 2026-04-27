@@ -642,14 +642,14 @@ export class PlaylistsService {
       );
     }
 
-    // 5. Require full coverage — every track must be represented
+    // 5. Require full coverage - every track must be represented
     if (dto.orderedTrackIds.length !== existingIds.size) {
       throw new BadRequestException(
         `orderedTrackIds must include all ${existingIds.size} tracks currently in the playlist.`,
       );
     }
 
-    // 6. Atomic position update — single transaction, one UPDATE per track
+    // 6. Atomic position update - single transaction, one UPDATE per track
     await this.prisma.$transaction(
       dto.orderedTrackIds.map((trackId, index) =>
         this.prisma.playlistTrack.update({

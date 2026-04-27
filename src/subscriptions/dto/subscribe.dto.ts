@@ -17,7 +17,7 @@ export class SubscribeDto {
 
   @ApiPropertyOptional({
     description:
-      "Payment method identifier (optional — handled via checkout flow)",
+      "Payment method identifier (optional - handled via checkout flow)",
     example: "pm_mock_1234567890",
     maxLength: 100,
   })

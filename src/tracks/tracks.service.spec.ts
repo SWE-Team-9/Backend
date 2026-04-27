@@ -212,12 +212,10 @@ describe("TracksService", () => {
         {
           provide: StorageService,
           useValue: {
-            upload: jest
-              .fn()
-              .mockResolvedValue({
-                url: "https://cdn.example.com/cover/test.jpg",
-                key: "cover/test.jpg",
-              }),
+            upload: jest.fn().mockResolvedValue({
+              url: "https://cdn.example.com/cover/test.jpg",
+              key: "cover/test.jpg",
+            }),
             delete: jest.fn().mockResolvedValue(undefined),
           },
         },
@@ -975,7 +973,7 @@ describe("TracksService", () => {
       await service.changeVisibility(TRACK_ID, USER_ID, TrackVisibility.PUBLIC);
 
       const updateCall = prisma.track.update.mock.calls[0][0];
-      // publishedAt should NOT be in the update data — keep existing
+      // publishedAt should NOT be in the update data - keep existing
       expect(updateCall.data.publishedAt).toBeUndefined();
     });
 
@@ -1019,7 +1017,7 @@ describe("TracksService", () => {
       expect(result.tracks).toHaveLength(1);
       expect(result.page).toBe(1);
       expect(result.limit).toBe(20);
-      // Owner sees all — no visibility filter
+      // Owner sees all - no visibility filter
       const whereArg = prisma.track.findMany.mock.calls[0][0].where;
       expect(whereArg.visibility).toBeUndefined();
     });

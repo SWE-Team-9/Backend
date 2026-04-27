@@ -27,7 +27,7 @@ export class CookieService {
     refreshToken: string,
     rememberMe = false,
   ): void {
-    // Access token cookie — short-lived
+    // Access token cookie - short-lived
     res.cookie(ACCESS_COOKIE, accessToken, {
       httpOnly: true,
       secure: this.isSecure,
@@ -36,7 +36,7 @@ export class CookieService {
       maxAge: FIFTEEN_MINUTES,
     });
 
-    // Refresh token cookie — longer-lived
+    // Refresh token cookie - longer-lived
     res.cookie(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
       secure: this.isSecure,

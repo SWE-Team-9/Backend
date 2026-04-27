@@ -92,7 +92,7 @@ export class RegisterDto {
 
   @ApiProperty({
     example: "John Doe",
-    description: "Display name (2–50 characters)",
+    description: "Display name (2-50 characters)",
   })
   @IsString()
   @MinLength(2, {
@@ -233,7 +233,7 @@ export class ResetPasswordDto {
   @ApiProperty({
     example: "NewPassw0rd!",
     description:
-      "New password — min 8 chars, uppercase, lowercase, digit, special char",
+      "New password - min 8 chars, uppercase, lowercase, digit, special char",
   })
   @IsString()
   @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
@@ -263,7 +263,7 @@ export class ChangePasswordDto {
   @ApiProperty({
     example: "NewPassw0rd!",
     description:
-      "New password — min 8 chars, uppercase, lowercase, digit, special char",
+      "New password - min 8 chars, uppercase, lowercase, digit, special char",
   })
   @IsString()
   @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
@@ -313,14 +313,14 @@ export class ConfirmEmailChangeDto {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Endpoint 7: Refresh Token (optional body — for non-browser clients)
+// Endpoint 7: Refresh Token (optional body - for non-browser clients)
 // ══════════════════════════════════════════════════════════════════════════════
 export class RefreshTokenDto {
   @ApiPropertyOptional({
     example: "a3f1c2b4...",
     description:
       "Refresh token for non-browser clients (mobile/desktop). " +
-      "Browser clients omit this — the token is read from the httpOnly cookie automatically.",
+      "Browser clients omit this - the token is read from the httpOnly cookie automatically.",
   })
   @IsOptional()
   @IsString()

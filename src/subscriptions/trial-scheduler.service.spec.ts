@@ -314,7 +314,7 @@ describe("TrialSchedulerService", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────────
-  // cancelExpiredGracePeriodSubscriptions — BUG FIX VERIFICATION
+  // cancelExpiredGracePeriodSubscriptions - BUG FIX VERIFICATION
   // The query MUST use paymentFailureGraceEndsAt, NOT updatedAt
   // ────────────────────────────────────────────────────────────────────────
   describe("cancelExpiredGracePeriodSubscriptions", () => {

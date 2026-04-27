@@ -53,7 +53,7 @@ export class TranscodingService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // PUBLIC API — called fire-and-forget after upload
+  // PUBLIC API - called fire-and-forget after upload
   // ──────────────────────────────────────────────────────────────────────────
 
   /**
@@ -62,7 +62,7 @@ export class TranscodingService {
    *  2. Transcode to 128 kbps MP3
    *  3. Generate waveform peaks
    *  4. Upload the transcoded file back to storage
-   *  5. Update DB: status → FINISHED, store TrackFile + waveformData
+   *  5. Update DB: status -> FINISHED, store TrackFile + waveformData
    *
    * On any error the track is marked FAILED.
    */
@@ -75,23 +75,23 @@ export class TranscodingService {
     const outputPath = path.join(tmpDir, "output.mp3");
 
     try {
-      // 1 — Fetch original file to a temp location
+      // 1 - Fetch original file to a temp location
       await this.downloadToTemp(originalStorageKey, inputPath);
 
-      // 2 — Transcode to 128 kbps MP3
+      // 2 - Transcode to 128 kbps MP3
       const durationMs = await this.transcode(inputPath, outputPath);
 
-      // 3 — Generate waveform peaks from the transcoded file
+      // 3 - Generate waveform peaks from the transcoded file
       const waveformData = await this.generateWaveform(outputPath);
 
-      // 4 — Upload transcoded file to storage
+      // 4 - Upload transcoded file to storage
       const transcodedKey = `tracks/${randomUUID()}.mp3`;
       const transcodedBuffer = await fs.promises.readFile(outputPath);
       await this.uploadBuffer(transcodedBuffer, transcodedKey, "audio/mpeg");
 
       const fileSizeBytes = transcodedBuffer.length;
 
-      // 5 — Update DB in a transaction
+      // 5 - Update DB in a transaction
       await this.prisma.$transaction(async (tx) => {
         await tx.track.update({
           where: { id: trackId },
@@ -122,7 +122,7 @@ export class TranscodingService {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Track ${trackId} processing failed: ${message}`);
 
-      // Mark track as FAILED — never throw so the caller's catch-all also stays clean
+      // Mark track as FAILED - never throw so the caller's catch-all also stays clean
       await this.prisma.track
         .update({
           where: { id: trackId },
@@ -142,7 +142,7 @@ export class TranscodingService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // TRANSCODE — 128 kbps MP3
+  // TRANSCODE - 128 kbps MP3
   // ──────────────────────────────────────────────────────────────────────────
 
   private transcode(inputPath: string, outputPath: string): Promise<number> {
@@ -172,7 +172,7 @@ export class TranscodingService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // WAVEFORM — extract amplitude peaks via ffmpeg raw PCM
+  // WAVEFORM - extract amplitude peaks via ffmpeg raw PCM
   // ──────────────────────────────────────────────────────────────────────────
 
   /**

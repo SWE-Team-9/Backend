@@ -47,7 +47,7 @@ describe("MessagesService", () => {
     jest.clearAllMocks();
   });
 
-  // 1. sendMessage — blocked users cannot message
+  // 1. sendMessage - blocked users cannot message
   it("sendMessage: throws MESSAGING_BLOCKED when block exists", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce({
       blockerId: "userA",
@@ -57,7 +57,7 @@ describe("MessagesService", () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  // 2. sendMessage — creates new conversation when none exists
+  // 2. sendMessage - creates new conversation when none exists
   it("sendMessage: calls conversation.create when no conversation exists", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce(null);
     mockPrisma.conversation.findFirst.mockResolvedValueOnce(null);
@@ -84,7 +84,7 @@ describe("MessagesService", () => {
     expect(mockPrisma.conversation.create).toHaveBeenCalled();
   });
 
-  // 3. sendMessage — reuses existing conversation
+  // 3. sendMessage - reuses existing conversation
   it("sendMessage: does not create conversation when one exists", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce(null);
     const convId = "conv-existing";
@@ -110,7 +110,7 @@ describe("MessagesService", () => {
     expect(mockPrisma.conversation.create).not.toHaveBeenCalled();
   });
 
-  // 4. getConversationMessages — non-participant gets 404
+  // 4. getConversationMessages - non-participant gets 404
   it("getConversationMessages: throws NotFoundException for non-participant", async () => {
     mockPrisma.conversationParticipant.findUnique.mockResolvedValueOnce(null);
     await expect(
@@ -118,7 +118,7 @@ describe("MessagesService", () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  // 5. shareTrack — throws 404 when track not found
+  // 5. shareTrack - throws 404 when track not found
   it("shareTrack: throws 404 when track not found", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce(null);
     mockPrisma.track.findUnique.mockResolvedValueOnce(null);
@@ -127,7 +127,7 @@ describe("MessagesService", () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  // 6. shareTrack — throws 403 for private track not owned by sender
+  // 6. shareTrack - throws 403 for private track not owned by sender
   it("shareTrack: throws 403 for private track not owned by sender", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce(null);
     mockPrisma.track.findUnique.mockResolvedValueOnce({
@@ -140,7 +140,7 @@ describe("MessagesService", () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  // 7. sharePlaylist — throws 403 for SECRET playlist not owned by sender
+  // 7. sharePlaylist - throws 403 for SECRET playlist not owned by sender
   it("sharePlaylist: throws 403 for SECRET playlist not owned by sender", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce(null);
     mockPrisma.playlist.findUnique.mockResolvedValueOnce({
@@ -153,7 +153,7 @@ describe("MessagesService", () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  // 8. deleteMessage — non-sender gets 403
+  // 8. deleteMessage - non-sender gets 403
   it("deleteMessage: throws 403 when user is not sender", async () => {
     mockPrisma.message.findUnique.mockResolvedValueOnce({
       id: "msg-3",
@@ -166,14 +166,14 @@ describe("MessagesService", () => {
     );
   });
 
-  // 9. getUnreadCount — returns 0 when no conversations
+  // 9. getUnreadCount - returns 0 when no conversations
   it("getUnreadCount: returns 0 when user has no conversations", async () => {
     mockPrisma.conversationParticipant.findMany.mockResolvedValueOnce([]);
     const result = await service.getUnreadCount("userA");
     expect(result).toBe(0);
   });
 
-  // 10. markAsUnread — non-participant gets NotFoundException
+  // 10. markAsUnread - non-participant gets NotFoundException
   it("markAsUnread: throws NotFoundException for non-participant", async () => {
     mockPrisma.conversationParticipant.findUnique.mockResolvedValueOnce(null);
     await expect(service.markAsUnread("userX", "conv-1")).rejects.toThrow(

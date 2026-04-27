@@ -30,12 +30,12 @@ import { PaginationQueryDto } from "./dto";
 export class UserTracksController {
   constructor(private readonly tracksService: TracksService) {}
 
-  // ─── Endpoint 6: GET /users/:userId/tracks — Get artist's tracks ──────
+  // ─── Endpoint 6: GET /users/:userId/tracks - Get artist's tracks ──────
   @ApiOperation({
     summary: "Get a user's tracks (paginated)",
     description:
       "Returns a paginated list of tracks for the specified user. " +
-      "Public endpoint — no authentication required. " +
+      "Public endpoint - no authentication required. " +
       "Non-owners only see PUBLIC tracks with status FINISHED. " +
       "The track owner sees all their tracks (including PRIVATE and PROCESSING). " +
       "Results are ordered by creation date (newest first).",

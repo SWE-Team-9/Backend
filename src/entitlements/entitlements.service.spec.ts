@@ -1,5 +1,5 @@
 /**
- * Module 12 — Premium Subscriptions
+ * Module 12 - Premium Subscriptions
  * Unit tests for EntitlementsService
  *
  * EntitlementsService wraps SubscriptionsService into plan-gated capability checks.
@@ -66,7 +66,7 @@ describe("EntitlementsService", () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // getUserEntitlements — plan tier mapping
+  // getUserEntitlements - plan tier mapping
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe("getUserEntitlements()", () => {

@@ -225,7 +225,7 @@ describe("SubscriptionsService", () => {
 
     service = module.get<SubscriptionsService>(SubscriptionsService);
     jest.clearAllMocks();
-    // Default user mock — must have isVerified:true for checkout() to proceed
+    // Default user mock - must have isVerified:true for checkout() to proceed
     mockPrisma.user.findUnique.mockResolvedValue({
       email: "test@example.com",
       isVerified: true,
@@ -435,7 +435,7 @@ describe("SubscriptionsService", () => {
     it("starts a free trial for first-time PRO subscribers", async () => {
       const plan = makePlan(SubscriptionTier.PRO, 100);
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(plan);
-      mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // no existing sub — trial eligible
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // no existing sub - trial eligible
       mockPrisma.userSubscription.create.mockResolvedValue({
         id: "trial-sub-id",
       });
@@ -468,7 +468,7 @@ describe("SubscriptionsService", () => {
     });
 
     it("does not start trial if a TrialRedemption already exists (charges normally)", async () => {
-      // User has a prior TrialRedemption record — no second trial allowed
+      // User has a prior TrialRedemption record - no second trial allowed
       const plan = makePlan(SubscriptionTier.PRO, 100);
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(plan);
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // no active sub
@@ -483,7 +483,7 @@ describe("SubscriptionsService", () => {
 
       await service.subscribe(USER_ID, dto);
 
-      // Normal paid subscription — full price invoice
+      // Normal paid subscription - full price invoice
       expect(mockPrisma.billingInvoice.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -502,7 +502,7 @@ describe("SubscriptionsService", () => {
     });
 
     it("upgrades an existing active subscription when switching to a different plan", async () => {
-      // Use a different plan ID to simulate an upgrade (GO_PLUS → PRO or PRO → different plan)
+      // Use a different plan ID to simulate an upgrade (GO_PLUS -> PRO or PRO -> different plan)
       const plan = makePlan(SubscriptionTier.PRO, 100, "plan-uuid-NEW");
       const existing = makeActiveSub(SubscriptionTier.GO_PLUS, 50); // planId='plan-uuid-4444'
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(plan);
@@ -727,7 +727,7 @@ describe("SubscriptionsService", () => {
         "",
       );
 
-      // Status should be PAST_DUE (grace period — user keeps access)
+      // Status should be PAST_DUE (grace period - user keeps access)
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -766,7 +766,7 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("is idempotent — skips duplicate events", async () => {
+    it("is idempotent - skips duplicate events", async () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue({
         id: "sub-uuid-3333",
         userId: USER_ID,
@@ -904,7 +904,7 @@ describe("SubscriptionsService", () => {
       expect(result).toEqual({ uploadLimit: 1000, uploadedCount: 50 });
     });
 
-    it("returns plan config limit for unlimited plan (uploadLimit=-1 in DB → GO_PLUS config limit)", async () => {
+    it("returns plan config limit for unlimited plan (uploadLimit=-1 in DB -> GO_PLUS config limit)", async () => {
       const sub = makeActiveSub(SubscriptionTier.GO_PLUS, -1);
       mockPrisma.userSubscription.findFirst.mockResolvedValue(sub);
       mockPrisma.track.count.mockResolvedValue(999);
@@ -1019,7 +1019,7 @@ describe("SubscriptionsService", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // checkout() — additional cases not covered by subscribe() tests
+  // checkout() - additional cases not covered by subscribe() tests
   // ─────────────────────────────────────────────────────────────────────────
 
   describe("checkout()", () => {
@@ -1081,7 +1081,7 @@ describe("SubscriptionsService", () => {
     });
 
     it("sets amountPaidCents=0 and records trial_started event on trial", async () => {
-      // trialRedemption returns null → trial eligible
+      // trialRedemption returns null -> trial eligible
       mockBillingProvider.createCheckoutSession.mockResolvedValue({
         checkoutSessionId: "cs_trial",
         checkoutUrl: "https://checkout.mock/trial",
@@ -1346,10 +1346,10 @@ describe("SubscriptionsService", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // cancelSubscription() — additional coverage
+  // cancelSubscription() - additional coverage
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe("cancelSubscription() — extended", () => {
+  describe("cancelSubscription() - extended", () => {
     const dto: CancelSubscriptionDto = {};
 
     it("throws ConflictException(SUBSCRIPTION_ALREADY_CANCELED) when already canceling", async () => {
@@ -1439,7 +1439,7 @@ describe("SubscriptionsService", () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it("PRO → GO_PLUS: updates subscription planId to GO_PLUS plan", async () => {
+    it("PRO -> GO_PLUS: updates subscription planId to GO_PLUS plan", async () => {
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
       mockPrisma.userSubscription.findFirst
         .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100))
@@ -1491,7 +1491,7 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("GO_PLUS → PRO: hides over-limit tracks (5 tracks, limit=3 → hides 2)", async () => {
+    it("GO_PLUS -> PRO: hides over-limit tracks (5 tracks, limit=3 -> hides 2)", async () => {
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(proPlan);
       mockPrisma.userSubscription.findFirst
         .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.GO_PLUS, 1000))
@@ -1717,10 +1717,10 @@ describe("SubscriptionsService", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // handleStripeWebhook() — extended coverage
+  // handleStripeWebhook() - extended coverage
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe("handleStripeWebhook() — extended", () => {
+  describe("handleStripeWebhook() - extended", () => {
     function makeWebhookBuf(
       type: string,
       overrides: Record<string, unknown> = {},
@@ -1902,7 +1902,7 @@ describe("SubscriptionsService", () => {
         "",
       );
 
-      // 5 tracks > FREE_UPLOAD_LIMIT(3) → 2 tracks should be hidden
+      // 5 tracks > FREE_UPLOAD_LIMIT(3) -> 2 tracks should be hidden
       expect(mockPrisma.track.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ hiddenByPlanLimit: true }),
@@ -1933,10 +1933,10 @@ describe("SubscriptionsService", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // getOfflineTrack() — extended
+  // getOfflineTrack() - extended
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe("getOfflineTrack() — extended", () => {
+  describe("getOfflineTrack() - extended", () => {
     it("GO_PLUS users can also download tracks", async () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.GO_PLUS, 1000),
@@ -2084,7 +2084,7 @@ describe("SubscriptionsService", () => {
 
       await service.applyPlanLimitToTracks(USER_ID, 1);
 
-      // Only one updateMany call — for tracks to restore (none fit)
+      // Only one updateMany call - for tracks to restore (none fit)
       // t2 is already hidden, so no re-hide needed
       const hideCalls = mockPrisma.track.updateMany.mock.calls.filter(
         (c) => (c[0] as any).data.hiddenByPlanLimit === true,
@@ -2210,10 +2210,10 @@ describe("SubscriptionsService", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // getMySubscription() — extended edge cases
+  // getMySubscription() - extended edge cases
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe("getMySubscription() — extended", () => {
+  describe("getMySubscription() - extended", () => {
     it("sets renewalDate (not expiresAt) when sub is active and NOT canceling", async () => {
       const sub = makeActiveSub(SubscriptionTier.PRO, 100, {
         cancelAtPeriodEnd: false,

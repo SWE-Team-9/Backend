@@ -1,8 +1,8 @@
 /**
- * Module 12 — Premium Subscriptions
+ * Module 12 - Premium Subscriptions
  * Unit tests for MockStripeBillingProvider
  *
- * MockStripeBillingProvider has no NestJS dependencies — it can be instantiated
+ * MockStripeBillingProvider has no NestJS dependencies - it can be instantiated
  * directly without a test module.  These tests verify the billing abstraction layer
  * behaves correctly and that the webhook parser validates payloads properly.
  */

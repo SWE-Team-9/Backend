@@ -22,9 +22,9 @@ export class NotificationsGateway
   @WebSocketServer()
   private readonly server!: Server;
 
-  // userId → Set of socketIds
+  // userId -> Set of socketIds
   private readonly userSocketMap = new Map<string, Set<string>>();
-  // socketId → userId
+  // socketId -> userId
   private readonly socketUserMap = new Map<string, string>();
 
   constructor(

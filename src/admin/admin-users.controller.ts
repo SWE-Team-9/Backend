@@ -15,7 +15,7 @@ import {
   MostReportedQueryDto,
 } from "./dto/admin-users.dto";
 
-@ApiTags("Admin — Users")
+@ApiTags("Admin - Users")
 @ApiCookieAuth("access_token")
 @Controller("admin")
 @Roles("ADMIN")
@@ -30,7 +30,7 @@ export class AdminUsersController {
   })
   @ApiResponse({ status: 200, description: "Paginated user list." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @Get("users")
   getUsers(@Query() query: AdminUsersQueryDto) {
     return this.adminUsersService.getUsers(query);
@@ -50,7 +50,7 @@ export class AdminUsersController {
   })
   @ApiResponse({ status: 200, description: "User detail returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @ApiResponse({ status: 404, description: "User not found." })
   @Get("users/:userId")
   getUserDetail(@Param("userId", ParseUUIDPipe) userId: string) {
@@ -64,7 +64,7 @@ export class AdminUsersController {
   })
   @ApiResponse({ status: 200, description: "Audit log entries returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @Get("audit-log")
   getAuditLog(@Query() query: AuditLogQueryDto) {
     return this.adminUsersService.getAuditLog(query);
@@ -78,7 +78,7 @@ export class AdminUsersController {
   })
   @ApiResponse({ status: 200, description: "Overview stats returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @Get("stats/overview")
   getOverviewStats() {
     return this.adminUsersService.getOverviewStats();
@@ -92,7 +92,7 @@ export class AdminUsersController {
   })
   @ApiResponse({ status: 200, description: "Daily stats returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @Get("stats/daily")
   getDailyStats(@Query() query: DailyStatsQueryDto) {
     return this.adminUsersService.getDailyStats(query);
@@ -109,7 +109,7 @@ export class AdminUsersController {
     description: "Most-reported users list returned.",
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @Get("stats/most-reported")
   getMostReported(@Query() query: MostReportedQueryDto) {
     return this.adminUsersService.getMostReported(query);

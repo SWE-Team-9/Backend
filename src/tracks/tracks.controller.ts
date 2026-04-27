@@ -93,13 +93,13 @@ const UPLOAD_OPTIONS = {
 export class TracksController {
   constructor(private readonly tracksService: TracksService) {}
 
-  // ─── Endpoint 1: POST /tracks — Upload a new track ────────────────────
+  // ─── Endpoint 1: POST /tracks - Upload a new track ────────────────────
   @ApiOperation({
     summary: "Upload a new audio track",
     description:
       "Accepts a multipart/form-data request containing an audio file (MP3 or WAV, max 250 MB) " +
       "and track metadata. The file is validated by magic bytes (not just MIME type) to prevent " +
-      "disguised uploads. Returns immediately with status=PROCESSING — the frontend should poll " +
+      "disguised uploads. Returns immediately with status=PROCESSING - the frontend should poll " +
       "GET /tracks/{trackId}/status until it becomes FINISHED or FAILED. " +
       "Rate limited to 5 uploads per minute per user.",
   })
@@ -140,7 +140,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 202,
-    description: "Track upload accepted — processing started.",
+    description: "Track upload accepted - processing started.",
     schema: {
       example: {
         trackId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -155,7 +155,7 @@ export class TracksController {
   @ApiResponse({
     status: 400,
     description:
-      "Invalid file or metadata — file missing, too large, not a real audio file, invalid genre, or validation errors.",
+      "Invalid file or metadata - file missing, too large, not a real audio file, invalid genre, or validation errors.",
     schema: {
       example: {
         statusCode: 400,
@@ -166,7 +166,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 401,
-    description: "Not authenticated — missing or invalid JWT cookie.",
+    description: "Not authenticated - missing or invalid JWT cookie.",
     schema: { example: { statusCode: 401, message: "Unauthorized" } },
   })
   @ApiResponse({
@@ -206,13 +206,13 @@ export class TracksController {
     return this.tracksService.uploadTrack(userId, dto, audioFile, coverArt);
   }
 
-  // ─── Endpoint 10: GET /tracks/secret/:secretToken — Resolve private track ─
+  // ─── Endpoint 10: GET /tracks/secret/:secretToken - Resolve private track ─
   // (must be declared BEFORE :trackId routes to avoid param collision)
   @ApiOperation({
     summary: "Access a private track via secret token",
     description:
       "Returns full track details for a private track using its unique secret share link. " +
-      "This endpoint is public — no authentication required. " +
+      "This endpoint is public - no authentication required. " +
       "A new secret token is generated every time a track is switched to PRIVATE, " +
       "so old links become invalid.",
   })
@@ -223,7 +223,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 200,
-    description: "Track details returned — access granted via secret token.",
+    description: "Track details returned - access granted via secret token.",
     schema: {
       example: {
         trackId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -263,7 +263,7 @@ export class TracksController {
     return this.tracksService.getTrackBySecretToken(secretToken);
   }
 
-  // ─── Endpoint 9: POST /tracks/transcoding/callback — Internal callback ─
+  // ─── Endpoint 9: POST /tracks/transcoding/callback - Internal callback ─
   @ApiOperation({
     summary: "Transcoding service callback (internal)",
     description:
@@ -345,12 +345,12 @@ export class TracksController {
     return this.tracksService.handleTranscodingCallback(apiKey, dto);
   }
 
-  // ─── Endpoint 2: GET /tracks/:trackId — Get track details ─────────────
+  // ─── Endpoint 2: GET /tracks/:trackId - Get track details ─────────────
   @ApiOperation({
     summary: "Get full track details",
     description:
       "Returns complete track metadata including artist info, genre, tags, waveform data, and files. " +
-      "Public tracks are visible to everyone. Private tracks are only visible to the owner — " +
+      "Public tracks are visible to everyone. Private tracks are only visible to the owner - " +
       "other users receive a 404 (to avoid leaking the existence of private tracks). " +
       "Use GET /tracks/secret/{secretToken} for sharing private tracks externally.",
   })
@@ -425,11 +425,11 @@ export class TracksController {
     return this.tracksService.getTrackById(trackId, requesterId);
   }
 
-  // ─── Endpoint 3: GET /tracks/:trackId/status — Lightweight polling ────
+  // ─── Endpoint 3: GET /tracks/:trackId/status - Lightweight polling ────
   @ApiOperation({
     summary: "Get track processing status (lightweight)",
     description:
-      "Returns only the trackId and current status — designed for polling after upload. " +
+      "Returns only the trackId and current status - designed for polling after upload. " +
       "The frontend should call this every few seconds after uploading until status is " +
       "FINISHED or FAILED. Private tracks return 404 for non-owners.",
   })
@@ -469,11 +469,11 @@ export class TracksController {
     return this.tracksService.getTrackStatus(trackId, requesterId);
   }
 
-  // ─── Endpoint 8: GET /tracks/:trackId/waveform — Waveform data ────────
+  // ─── Endpoint 8: GET /tracks/:trackId/waveform - Waveform data ────────
   @ApiOperation({
     summary: "Get track waveform data",
     description:
-      "Returns only the waveform amplitude array for a track — lightweight endpoint for rendering. " +
+      "Returns only the waveform amplitude array for a track - lightweight endpoint for rendering. " +
       "Only available after track processing is complete (status=FINISHED). " +
       "Returns null waveformData if processing is still in progress.",
   })
@@ -509,12 +509,12 @@ export class TracksController {
     return this.tracksService.getWaveform(trackId);
   }
 
-  // ─── Endpoint 4: PUT /tracks/:trackId — Update track metadata ─────────
+  // ─── Endpoint 4: PUT /tracks/:trackId - Update track metadata ─────────
   @ApiOperation({
     summary: "Update track metadata (owner only)",
     description:
       "Updates one or more metadata fields for a track. Only the track owner can update. " +
-      "All fields are optional — only provided fields are changed. " +
+      "All fields are optional - only provided fields are changed. " +
       "Changing the title automatically regenerates the slug. " +
       "Tags are replaced entirely (not merged) when provided.",
   })
@@ -587,13 +587,13 @@ export class TracksController {
     return this.tracksService.updateTrack(trackId, userId, dto);
   }
 
-  // ─── Endpoint 5: DELETE /tracks/:trackId — Soft-delete track ──────────
+  // ─── Endpoint 5: DELETE /tracks/:trackId - Soft-delete track ──────────
   @ApiOperation({
     summary: "Delete a track (owner or admin)",
     description:
       "Soft-deletes a track by setting its deletedAt timestamp. " +
       "Only the track owner or an ADMIN user can delete. " +
-      "Returns 204 No Content on success — no response body. " +
+      "Returns 204 No Content on success - no response body. " +
       "Associated files (S3 or local) are cleaned up asynchronously in the background.",
   })
   @ApiParam({
@@ -603,7 +603,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 204,
-    description: "Track deleted successfully — no response body.",
+    description: "Track deleted successfully - no response body.",
   })
   @ApiResponse({
     status: 401,
@@ -642,7 +642,7 @@ export class TracksController {
     await this.tracksService.deleteTrack(trackId, userId, role);
   }
 
-  // ─── Endpoint 7: PATCH /tracks/:trackId/visibility — Toggle visibility ─
+  // ─── Endpoint 7: PATCH /tracks/:trackId/visibility - Toggle visibility ─
   @ApiOperation({
     summary: "Change track visibility (owner only)",
     description:
@@ -658,7 +658,7 @@ export class TracksController {
   @ApiBody({ type: TrackVisibilityDto })
   @ApiResponse({
     status: 200,
-    description: "Track visibility updated — full track details returned.",
+    description: "Track visibility updated - full track details returned.",
     schema: {
       example: {
         trackId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",

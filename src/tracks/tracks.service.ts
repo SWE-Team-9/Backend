@@ -37,7 +37,7 @@ import {
 // Audio file validation
 // ──────────────────────────────────────────────────────────────────────────────
 
-/** Only allow real audio files — validated by magic bytes, not extension */
+/** Only allow real audio files - validated by magic bytes, not extension */
 const AUDIO_MIME_TYPES = new Set([
   "audio/mpeg", // MP3
   "audio/wav", // WAV
@@ -51,14 +51,14 @@ const AUDIO_SIGNATURES: Array<{
   offset: number;
   mime: string;
 }> = [
-  // MP3 — ID3 tag header
+  // MP3 - ID3 tag header
   { bytes: [0x49, 0x44, 0x33], offset: 0, mime: "audio/mpeg" },
-  // MP3 — frame sync (0xFF 0xFB / 0xFF 0xFA / 0xFF 0xF3 / 0xFF 0xF2)
+  // MP3 - frame sync (0xFF 0xFB / 0xFF 0xFA / 0xFF 0xF3 / 0xFF 0xF2)
   { bytes: [0xff, 0xfb], offset: 0, mime: "audio/mpeg" },
   { bytes: [0xff, 0xfa], offset: 0, mime: "audio/mpeg" },
   { bytes: [0xff, 0xf3], offset: 0, mime: "audio/mpeg" },
   { bytes: [0xff, 0xf2], offset: 0, mime: "audio/mpeg" },
-  // WAV — RIFF....WAVE
+  // WAV - RIFF....WAVE
   { bytes: [0x52, 0x49, 0x46, 0x46], offset: 0, mime: "audio/wav" },
 ];
 
@@ -85,7 +85,7 @@ function slugify(text: string): string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Select objects — control exactly what leaves the service
+// Select objects - control exactly what leaves the service
 // ──────────────────────────────────────────────────────────────────────────────
 
 /** Fields returned for a full track detail */
@@ -366,7 +366,7 @@ export class TracksService {
       return newTrack;
     });
 
-    // Fire transcoding in the background — never await so the upload response
+    // Fire transcoding in the background - never await so the upload response
     // returns immediately with status=PROCESSING.
     this.transcodingService
       .processTrack(track.id, storageKey)
@@ -643,7 +643,7 @@ export class TracksService {
   // ──────────────────────────────────────────────────────────────────────────
 
   async handleTranscodingCallback(apiKey: string, dto: TranscodingCallbackDto) {
-    // Validate API key — constant-time comparison to prevent timing attacks
+    // Validate API key - constant-time comparison to prevent timing attacks
     if (!this.transcodingApiKey) {
       throw new BadRequestException("Transcoding API key is not configured.");
     }
@@ -774,7 +774,7 @@ export class TracksService {
           data: { trackId, tagId: tag.id },
         })
         .catch(() => {
-          // Duplicate key — already linked, ignore
+          // Duplicate key - already linked, ignore
         });
     }
   }

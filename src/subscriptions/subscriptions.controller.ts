@@ -72,7 +72,7 @@ export class SubscriptionsController {
   @ApiResponse({ status: 200, description: "Download URL returned." })
   @ApiResponse({
     status: 403,
-    description: "DOWNLOAD_NOT_ALLOWED — requires PRO or GO+.",
+    description: "DOWNLOAD_NOT_ALLOWED - requires PRO or GO+.",
   })
   @ApiResponse({ status: 404, description: "Track not found." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -135,7 +135,7 @@ export class SubscriptionsController {
       "Creates a Stripe Customer Portal session. The user is redirected to a secure, " +
       "hosted page where they can add, update, or remove payment methods, view invoices, " +
       "cancel, or change plans. The response includes a safe payment method summary for " +
-      "display on the settings page (brand, last4, expiry — never full card data). " +
+      "display on the settings page (brand, last4, expiry - never full card data). " +
       'Pass flow="payment_methods" to open the payment-methods screen directly.',
   })
   @ApiBody({ type: PaymentMethodPortalDto, required: false })
@@ -250,7 +250,7 @@ export class SubscriptionsController {
     return this.subscriptionsService.cancelSubscription(userId, dto);
   }
 
-  // ─── POST /subscriptions/webhook (public — Stripe calls this) ─────────────
+  // ─── POST /subscriptions/webhook (public - Stripe calls this) ─────────────
   @ApiOperation({
     summary: "Stripe webhook receiver",
     description:

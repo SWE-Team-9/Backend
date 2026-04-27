@@ -34,7 +34,7 @@ async function bootstrap() {
   // ── Global prefix ────────────────────────────────────────────────────────────
   app.setGlobalPrefix("api/v1");
 
-  // ── Helmet — Relaxed for development/MVP ──────────────────────────────────────
+  // ── Helmet - Relaxed for development/MVP ──────────────────────────────────────
   // Security headers are less strict to allow frontend integration.
   app.use(
     helmet({
@@ -55,10 +55,10 @@ async function bootstrap() {
         },
       },
 
-      // X-Frame-Options: DENY — belt-and-suspenders alongside frameAncestors.
+      // X-Frame-Options: DENY - belt-and-suspenders alongside frameAncestors.
       frameguard: { action: "deny" },
 
-      // HTTP Strict Transport Security — only in production where TLS is used.
+      // HTTP Strict Transport Security - only in production where TLS is used.
       // Tells browsers to always use HTTPS for this domain for 1 year.
       hsts: isProduction
         ? {
@@ -91,10 +91,10 @@ async function bootstrap() {
 
       // Cross-Origin-Embedder-Policy: credentialless
       // Prevents documents from loading cross-origin resources that do not grant
-      // permission — defence-in-depth for Spectre-style attacks.
-      crossOriginEmbedderPolicy: false, // keep off — breaks some OAuth redirects
+      // permission - defence-in-depth for Spectre-style attacks.
+      crossOriginEmbedderPolicy: false, // keep off - breaks some OAuth redirects
 
-      // Permissions-Policy — revoke access to sensitive browser APIs.
+      // Permissions-Policy - revoke access to sensitive browser APIs.
       // helmet does not set this natively; we add it as a custom header below.
     }),
   );
@@ -120,7 +120,7 @@ async function bootstrap() {
     next();
   });
 
-  // ── Request body size limit — OWASP A05 / DoS prevention ────────────────────
+  // ── Request body size limit - OWASP A05 / DoS prevention ────────────────────
   // Since we disabled NestJS's default body parser (bodyParser: false above),
   // these are now the ONLY JSON/urlencoded parsers on the Express stack.
   // Reject large payloads before they reach any controller.
@@ -146,18 +146,18 @@ async function bootstrap() {
 
   // ── Local static file serving ────────────────────────────────────────────────
   // Serves uploaded images from /uploads directory when using local storage.
-  // Placed before CORS so paths remain /uploads/… (not wrapped in global prefix).
+  // Placed before CORS so paths remain /uploads/... (not wrapped in global prefix).
   if (process.env.STORAGE_PROVIDER !== "s3") {
     const uploadDir = path.resolve(process.env.LOCAL_UPLOAD_DIR ?? "./uploads");
     app.use("/uploads", require("express").static(uploadDir));
   }
 
   // ── CORS ─────────────────────────────────────────────────────────────────────
-  // CORS is a browser security mechanism. It only affects web browsers — mobile
+  // CORS is a browser security mechanism. It only affects web browsers - mobile
   // apps and server-to-server calls are NOT restricted by CORS at all.
   //
   // For browsers, we need to explicitly allow each frontend origin.
-  // Since our auth uses httpOnly cookies, we MUST restrict to known origins —
+  // Since our auth uses httpOnly cookies, we MUST restrict to known origins -
   // otherwise any website could silently trigger authenticated requests on
   // behalf of your users (CSRF via cookie attachment).
   //
@@ -185,7 +185,7 @@ async function bootstrap() {
   const allowedOrigins = [...new Set([...defaultDevOrigins, ...envOrigins])];
 
   app.enableCors({
-    // Pass the array to Express — it will match the incoming Origin header
+    // Pass the array to Express - it will match the incoming Origin header
     // against this list and reflect back only the matched one.
     // If the origin is not in the list the browser gets no CORS headers
     // and blocks the request.
@@ -196,11 +196,11 @@ async function bootstrap() {
     maxAge: 600,
   });
 
-  // ── Global ValidationPipe — OWASP A03 (Injection) ───────────────────────────
-  // • whitelist         : strips properties not defined in the DTO class.
-  // • forbidNonWhitelisted : rejects requests that include extra properties.
-  // • transform         : auto-converts query strings to their DTO types.
-  // • transformOptions  : enables implicit type conversion (e.g. "true" → true).
+  // ── Global ValidationPipe - OWASP A03 (Injection) ───────────────────────────
+  // - whitelist         : strips properties not defined in the DTO class.
+  // - forbidNonWhitelisted : rejects requests that include extra properties.
+  // - transform         : auto-converts query strings to their DTO types.
+  // - transformOptions  : enables implicit type conversion (e.g. "true" -> true).
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -213,7 +213,7 @@ async function bootstrap() {
     }),
   );
 
-  // ── Global exception filter — OWASP A05 ─────────────────────────────────────
+  // ── Global exception filter - OWASP A05 ─────────────────────────────────────
   // Ensures every error response follows the same { statusCode, error, message,
   // timestamp, path } shape.  Never leaks stack traces or internal details.
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
@@ -225,7 +225,7 @@ async function bootstrap() {
   // By default Swagger is ON in development and OFF in production.
   // You can override this by setting SWAGGER_ENABLED=true in .env
   // (useful for team/staging servers where NODE_ENV=production but you
-  // still need the docs — e.g. for Postman import or cross-team integration).
+  // still need the docs - e.g. for Postman import or cross-team integration).
   const swaggerEnabled =
     process.env.SWAGGER_ENABLED === "true" || !isProduction;
 

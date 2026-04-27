@@ -33,7 +33,7 @@ import { ChangePlanDto } from "./dto/change-plan.dto";
 import { PaymentMethodPortalDto } from "./dto/payment-method-portal.dto";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Constants — single source of truth for plan limits / prices / features
+// Constants - single source of truth for plan limits / prices / features
 // ──────────────────────────────────────────────────────────────────────────────
 
 export const FREE_UPLOAD_LIMIT = 3;
@@ -45,7 +45,7 @@ export const FREE_UPLOAD_LIMIT = 3;
 export const GRACE_PERIOD_DAYS = 1;
 
 /**
- * Plan catalog — all prices, limits, and trial durations live here.
+ * Plan catalog - all prices, limits, and trial durations live here.
  * Never let controllers or DTOs define plan features.
  */
 export const PLAN_CONFIG: Record<
@@ -786,12 +786,12 @@ export class SubscriptionsService {
 
     this.logger.log(`[WEBHOOK] type=${event.type} id=${event.id}`);
 
-    // Idempotency — skip duplicate events
+    // Idempotency - skip duplicate events
     const existingEvent = await this.prisma.paymentEvent.findUnique({
       where: { stripeEventId: event.id },
     });
     if (existingEvent) {
-      this.logger.warn(`[WEBHOOK] Duplicate event ${event.id} — skipped`);
+      this.logger.warn(`[WEBHOOK] Duplicate event ${event.id} - skipped`);
       return { received: true };
     }
 
@@ -1119,7 +1119,7 @@ export class SubscriptionsService {
     let downloadUrl: string;
 
     if (this.storageProvider === "s3" && this.s3Client) {
-      // Do NOT log the presigned URL — it contains a signature
+      // Do NOT log the presigned URL - it contains a signature
       this.logger.log(
         `[DOWNLOAD] Generating S3 presigned URL for track ${track.id} user ${userId}`,
       );

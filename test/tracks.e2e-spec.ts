@@ -13,13 +13,13 @@ import { TranscodingService } from "../src/tracks/transcoding.service";
 import { TrackStatus, TrackVisibility } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock auth guard — simulate authenticated requests
+// Mock auth guard - simulate authenticated requests
 // ─────────────────────────────────────────────────────────────────────────────
 
 const USER_ID = "a1b2c3d4-e5f6-4890-abcd-ef1234567890";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Prisma mock — simulates DB interactions for E2E
+// Prisma mock - simulates DB interactions for E2E
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TRACK_ID = "b1c2d3e4-f5a6-4890-abcd-ef1234567890";
@@ -214,7 +214,7 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
     await app.close();
   });
 
-  // ─── 1. Upload → 202 PROCESSING ─────────────────────────────────────
+  // ─── 1. Upload -> 202 PROCESSING ─────────────────────────────────────
   describe("POST /tracks (upload)", () => {
     it("should accept a valid MP3 upload and return PROCESSING", async () => {
       const res = await request(app.getHttpServer())
@@ -271,7 +271,7 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
     });
   });
 
-  // ─── 2. Get Track Status → poll loop ─────────────────────────────────
+  // ─── 2. Get Track Status -> poll loop ─────────────────────────────────
   describe("GET /tracks/:trackId/status", () => {
     it("should return track status", async () => {
       const res = await request(app.getHttpServer())

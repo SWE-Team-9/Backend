@@ -37,27 +37,23 @@ function buildServiceMock() {
     changeVisibility: jest
       .fn()
       .mockResolvedValue({ ...mockTrackResponse, visibility: "PUBLIC" }),
-    getUserTracks: jest
-      .fn()
-      .mockResolvedValue({
-        artist: null,
-        page: 1,
-        limit: 20,
-        totalTracks: 0,
-        tracks: [],
-      }),
+    getUserTracks: jest.fn().mockResolvedValue({
+      artist: null,
+      page: 1,
+      limit: 20,
+      totalTracks: 0,
+      tracks: [],
+    }),
     getWaveform: jest
       .fn()
       .mockResolvedValue({ trackId: UUID, waveformData: [0.1, 0.5] }),
     handleTranscodingCallback: jest
       .fn()
       .mockResolvedValue({ trackId: UUID, status: "FINISHED" }),
-    getTrackBySecretToken: jest
-      .fn()
-      .mockResolvedValue({
-        ...mockTrackResponse,
-        message: "Access granted via secret token",
-      }),
+    getTrackBySecretToken: jest.fn().mockResolvedValue({
+      ...mockTrackResponse,
+      message: "Access granted via secret token",
+    }),
   };
 }
 
@@ -146,7 +142,7 @@ describe("TracksController", () => {
           contentType: "image/png",
         })
         .field("title", "Bad File")
-        .expect(400); // multer filter throws BadRequestException → 400
+        .expect(400); // multer filter throws BadRequestException -> 400
     });
   });
 
@@ -252,7 +248,7 @@ describe("TracksController", () => {
       await request(app.getHttpServer())
         .put(`/tracks/${UUID}`)
         .send({ title: "Valid", hackerField: "malicious" })
-        .expect(400); // forbidNonWhitelisted → 400
+        .expect(400); // forbidNonWhitelisted -> 400
     });
   });
 
