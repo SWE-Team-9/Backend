@@ -240,6 +240,22 @@ export class ConfirmEmailChangeDto {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 7: Refresh Token (optional body — for non-browser clients)
+// ══════════════════════════════════════════════════════════════════════════════
+export class RefreshTokenDto {
+  @ApiPropertyOptional({
+    example: "a3f1c2b4...",
+    description:
+      "Refresh token for non-browser clients (mobile/desktop). " +
+      "Browser clients omit this — the token is read from the httpOnly cookie automatically.",
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: "refresh_token must not be an empty string if provided." })
+  refresh_token?: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Endpoint 17: Revoke Session (path param)
 // ══════════════════════════════════════════════════════════════════════════════
 export class RevokeSessionParamsDto {
