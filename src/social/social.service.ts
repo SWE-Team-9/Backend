@@ -279,6 +279,9 @@ export class SocialService {
     }
 
     const limit = query.limit ?? 10;
+    if (limit <= 0) {
+      return { suggestions: [] };
+    }
 
     const [followingRows, followerRows, blocksByMe, blocksAgainstMe, myGenres] =
       await this.prisma.$transaction([
@@ -345,23 +348,37 @@ export class SocialService {
       },
     });
 
+    if (candidates.length === 0) {
+      return { suggestions: [] };
+    }
+
     const candidateIds = candidates.map((candidate) => candidate.id);
 
-    const [sharedFollowingEdges, sharedFollowerEdges] = await this.prisma.$transaction([
-      this.prisma.userFollow.findMany({
-        where: {
-          followerId: { in: candidateIds },
-          followingId: { in: myFollowingIds },
-        },
-        select: { followerId: true },
-      }),
-      this.prisma.userFollow.findMany({
-        where: {
-          followingId: { in: candidateIds },
-          followerId: { in: myFollowerIds },
-        },
-        select: { followingId: true },
-      }),
+    const sharedFollowingPromise =
+      myFollowingIds.length > 0
+        ? this.prisma.userFollow.findMany({
+            where: {
+              followerId: { in: candidateIds },
+              followingId: { in: myFollowingIds },
+            },
+            select: { followerId: true },
+          })
+        : Promise.resolve([] as { followerId: string }[]);
+
+    const sharedFollowerPromise =
+      myFollowerIds.length > 0
+        ? this.prisma.userFollow.findMany({
+            where: {
+              followingId: { in: candidateIds },
+              followerId: { in: myFollowerIds },
+            },
+            select: { followingId: true },
+          })
+        : Promise.resolve([] as { followingId: string }[]);
+
+    const [sharedFollowingEdges, sharedFollowerEdges] = await Promise.all([
+      sharedFollowingPromise,
+      sharedFollowerPromise,
     ]);
 
     const sharedFollowingCountByUser = new Map<string, number>();
@@ -382,13 +399,20 @@ export class SocialService {
 
     const now = Date.now();
     const myGenreSet = new Set(myGenreIds);
-    const rawCandidates = candidates.map((candidate) => {
-      const candidateGenreIds = candidate.favoriteGenres.map((genre) => genre.genreId);
-      const candidateGenreSet = new Set(candidateGenreIds);
+    let maxGraphRaw = 0;
+    let maxEngagementRaw = 0;
 
-      const sharedGenresCount = candidateGenreIds.filter((genreId) =>
-        myGenreSet.has(genreId),
-      ).length;
+    const rawCandidates = candidates.map((candidate) => {
+      const candidateGenreSet = new Set<number>();
+      let sharedGenresCount = 0;
+
+      for (const genre of candidate.favoriteGenres) {
+        candidateGenreSet.add(genre.genreId);
+        if (myGenreSet.has(genre.genreId)) {
+          sharedGenresCount += 1;
+        }
+      }
+
       const tasteScore =
         myGenreIds.length > 0
           ? this.normalizeScore(sharedGenresCount, myGenreIds.length)
@@ -403,6 +427,13 @@ export class SocialService {
         (candidate._count?.likes ?? 0) +
         (candidate._count?.reposts ?? 0) +
         (candidate._count?.comments ?? 0);
+
+      if (graphRaw > maxGraphRaw) {
+        maxGraphRaw = graphRaw;
+      }
+      if (engagementRaw > maxEngagementRaw) {
+        maxEngagementRaw = engagementRaw;
+      }
 
       const activityRecency = this.recencyScore(
         candidate.lastLoginAt ?? candidate.createdAt,
@@ -422,15 +453,6 @@ export class SocialService {
         freshnessScore,
       };
     });
-
-    const maxGraphRaw = rawCandidates.reduce(
-      (max, candidate) => Math.max(max, candidate.graphRaw),
-      0,
-    );
-    const maxEngagementRaw = rawCandidates.reduce(
-      (max, candidate) => Math.max(max, candidate.engagementRaw),
-      0,
-    );
 
     const scoredCandidates = rawCandidates.map((candidate) => {
       const graphScore = this.normalizeScore(candidate.graphRaw, maxGraphRaw);
@@ -455,6 +477,7 @@ export class SocialService {
     });
 
     const selected: typeof scoredCandidates = [];
+    const selectedGenreSets: Set<number>[] = [];
     const remaining = [...scoredCandidates];
 
     while (selected.length < limit && remaining.length > 0) {
@@ -465,7 +488,7 @@ export class SocialService {
         const candidate = remaining[index];
         const diversityScore = this.computeDiversityScore(
           candidate.candidateGenreSet,
-          selected.map((item) => item.candidateGenreSet),
+          selectedGenreSets,
         );
         const finalScore = candidate.baseScore + 0.05 * diversityScore;
 
@@ -475,7 +498,9 @@ export class SocialService {
         }
       }
 
-      selected.push(remaining.splice(bestIndex, 1)[0]);
+      const chosen = remaining.splice(bestIndex, 1)[0];
+      selected.push(chosen);
+      selectedGenreSets.push(chosen.candidateGenreSet);
     }
 
     return {
