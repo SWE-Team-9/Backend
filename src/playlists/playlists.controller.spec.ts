@@ -168,7 +168,7 @@ describe('PlaylistsController', () => {
         .get('/playlists/pl_101/embed')
         .expect(200);
 
-      expect(service.getEmbedCode).toHaveBeenCalledWith('usr_1', 'pl_101');
+      expect(service.getEmbedCode).toHaveBeenCalledWith('usr_1', 'pl_101', {});
     });
   });
 
@@ -225,7 +225,7 @@ describe('PlaylistsController', () => {
   describe('GET /playlists/:playlistId', () => {
     it('returns playlist details', async () => {
       await request(app.getHttpServer()).get('/playlists/pl_101').expect(200);
-      expect(service.getDetails).toHaveBeenCalledWith('pl_101', 'usr_1');
+      expect(service.getDetails).toHaveBeenCalledWith('pl_101', 'usr_1', {});
     });
   });
 

@@ -12,6 +12,7 @@ import { PlaylistsService } from './playlists.service';
 
 function buildPrismaMock() {
   const prismaMock: any = {
+    $executeRaw: jest.fn(),
     $transaction: jest
       .fn()
       .mockImplementation((fnOrQueries: any) =>
@@ -35,9 +36,11 @@ function buildPrismaMock() {
     playlistTrack: {
       create: jest.fn(),
       createMany: jest.fn(),
+      count: jest.fn(),
       findFirst: jest.fn(),
       findUnique: jest.fn(),
       findMany: jest.fn(),
+      aggregate: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
       delete: jest.fn(),
@@ -142,11 +145,16 @@ describe('PlaylistsService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('throws when initial tracks contain duplicate names', async () => {
-      prisma.track.findMany.mockResolvedValue([
-        { id: 'trk_123', title: 'Layali' },
-        { id: 'trk_456', title: 'layali' },
-      ]);
+    it('allows initial tracks with same title if IDs are different', async () => {
+      prisma.track.findMany.mockResolvedValue([{ id: 'trk_123' }, { id: 'trk_456' }]);
+      prisma.playlist.findFirst.mockResolvedValue(null);
+      prisma.playlist.create.mockResolvedValue({
+        id: 'pl_101',
+        title: 'Playlist',
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+      });
+      prisma.playlistTrack.createMany.mockResolvedValue({ count: 2 });
 
       await expect(
         service.create('usr_1', {
@@ -154,7 +162,7 @@ describe('PlaylistsService', () => {
           visibility: PlaylistVisibility.PUBLIC,
           trackIds: ['trk_123', 'trk_456'],
         } as any),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).resolves.toBeTruthy();
     });
   });
 
@@ -168,8 +176,9 @@ describe('PlaylistsService', () => {
         visibility: 'PUBLIC',
         secretToken: 'sec_hidden',
         owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
-        tracks: [{ track: { id: 'trk_123', title: 'Layali' } }],
       });
+      prisma.playlistTrack.count.mockResolvedValue(1);
+      prisma.playlistTrack.findMany.mockResolvedValue([{ track: { id: 'trk_123', title: 'Layali' } }]);
 
       const result = await service.getDetails('pl_101', 'usr_2');
 
@@ -193,8 +202,9 @@ describe('PlaylistsService', () => {
         visibility: 'SECRET',
         secretToken: 'sec_owner_visible',
         owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
-        tracks: [{ track: { id: 'trk_123', title: 'Layali' } }],
       });
+      prisma.playlistTrack.count.mockResolvedValue(1);
+      prisma.playlistTrack.findMany.mockResolvedValue([{ track: { id: 'trk_123', title: 'Layali' } }]);
 
       const result = await service.findOne('pl_101', 'usr_1');
 
@@ -328,24 +338,27 @@ describe('PlaylistsService', () => {
   });
 
   describe('remove', () => {
-    it('deletes playlist for owner', async () => {
-      prisma.playlist.findUnique.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_1' });
-      prisma.playlist.delete.mockResolvedValue({});
+    it('soft deletes playlist for owner', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_1' });
+      prisma.playlist.update.mockResolvedValue({});
 
       await service.remove('usr_1', 'pl_101');
 
-      expect(prisma.playlist.delete).toHaveBeenCalledWith({ where: { id: 'pl_101' } });
+      expect(prisma.playlist.update).toHaveBeenCalledWith({
+        where: { id: 'pl_101' },
+        data: { deletedAt: expect.any(Date) },
+      });
     });
 
     it('throws when playlist missing', async () => {
-      prisma.playlist.findUnique.mockResolvedValue(null);
+      prisma.playlist.findFirst.mockResolvedValue(null);
       await expect(service.remove('usr_1', 'missing')).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
 
     it('throws when non-owner tries deleting', async () => {
-      prisma.playlist.findUnique.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_x' });
+      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_x' });
       await expect(service.remove('usr_1', 'pl_101')).rejects.toBeInstanceOf(
         ForbiddenException,
       );
@@ -355,11 +368,8 @@ describe('PlaylistsService', () => {
   describe('addTrack', () => {
     it('adds track to playlist', async () => {
       prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_1' });
-      prisma.track.findFirst.mockResolvedValue({ id: 'trk_123', title: 'Layali' });
-      prisma.playlistTrack.findUnique.mockResolvedValue(null);
-      prisma.playlistTrack.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ position: 2 });
+      prisma.track.findFirst.mockResolvedValue({ id: 'trk_123' });
+      prisma.playlistTrack.aggregate.mockResolvedValue({ _count: { _all: 3 }, _max: { position: 2 } });
       prisma.playlistTrack.create.mockResolvedValue({});
 
       const result = await service.addTrack('usr_1', 'pl_101', { trackId: 'trk_123' });
@@ -376,19 +386,9 @@ describe('PlaylistsService', () => {
 
     it('throws conflict when track already exists in playlist', async () => {
       prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_1' });
-      prisma.track.findFirst.mockResolvedValue({ id: 'trk_123', title: 'Layali' });
-      prisma.playlistTrack.findUnique.mockResolvedValue({ playlistId: 'pl_101' });
-
-      await expect(
-        service.addTrack('usr_1', 'pl_101', { trackId: 'trk_123' }),
-      ).rejects.toBeInstanceOf(ConflictException);
-    });
-
-    it('throws conflict when another track with same title already exists', async () => {
-      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_1' });
-      prisma.track.findFirst.mockResolvedValue({ id: 'trk_123', title: 'Layali' });
-      prisma.playlistTrack.findUnique.mockResolvedValue(null);
-      prisma.playlistTrack.findFirst.mockResolvedValue({ trackId: 'trk_other' });
+      prisma.track.findFirst.mockResolvedValue({ id: 'trk_123' });
+      prisma.playlistTrack.aggregate.mockResolvedValue({ _count: { _all: 0 }, _max: { position: null } });
+      prisma.playlistTrack.create.mockRejectedValue({ code: 'P2002' });
 
       await expect(
         service.addTrack('usr_1', 'pl_101', { trackId: 'trk_123' }),
@@ -426,14 +426,14 @@ describe('PlaylistsService', () => {
         { trackId: 'trk_8' },
         { trackId: 'trk_3' },
       ]);
-      prisma.playlistTrack.update.mockResolvedValue({});
+      prisma.$executeRaw.mockResolvedValue(2);
 
       const result = await service.reorderTracks('usr_1', 'pl_101', {
         orderedTrackIds: ['trk_3', 'trk_8'],
       });
 
       expect(result).toEqual({ message: 'Playlist reordered successfully' });
-      expect(prisma.playlistTrack.update).toHaveBeenCalledTimes(2);
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
     });
 
     it('throws when orderedTrackIds miss some existing tracks', async () => {

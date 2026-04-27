@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PlaylistVisibility } from '@prisma/client';
 
@@ -46,6 +46,7 @@ export class CreatePlaylistDto {
     type: [String],
   })
   @IsArray()
+  @ArrayMaxSize(5000)
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
   trackIds!: string[];

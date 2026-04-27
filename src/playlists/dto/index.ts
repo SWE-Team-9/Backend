@@ -15,6 +15,7 @@ export {
 } from './resolve-secret-playlist.dto';
 export {
 	GetPlaylistEmbedCodeParamsDto,
+	GetPlaylistEmbedCodeQueryDto,
 	GetPlaylistEmbedCodeResponseDto,
 } from './get-playlist-embed-code.dto';
 export { DeletePlaylistParamsDto } from './delete-playlist-params.dto';
@@ -27,3 +28,4 @@ export {
 	PlaylistDetailsOwnerDto,
 	PlaylistDetailsTrackDto,
 } from './get-playlist-details-response.dto';
+export { PlaylistTracksQueryDto } from './get-playlist-details-query.dto';

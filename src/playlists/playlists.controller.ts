@@ -15,16 +15,19 @@ import {
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { PlaylistsService } from './playlists.service';
+import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
+import { PlaylistsService } from 'src/playlists/playlists.service';
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
   DeletePlaylistParamsDto,
   GetPlaylistEmbedCodeParamsDto,
+  GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
   GetMyPlaylistsResponseDto,
   GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
+  PlaylistTracksQueryDto,
   PlaylistPaginationQueryDto,
   RemoveTrackFromPlaylistParamsDto,
   ReorderPlaylistTracksDto,
@@ -62,6 +65,7 @@ export class PlaylistsController {
   })
   @ApiResponse({ status: 400, description: 'Validation error.' })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ThrottlePolicy(15, 60_000)
   create(@CurrentUser('userId') userId: string, @Body() dto: CreatePlaylistDto) {
     return this.playlistsService.create(userId, dto);
   }
@@ -154,11 +158,13 @@ export class PlaylistsController {
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({ status: 403, description: 'Only playlist owner can access embed code.' })
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  @ThrottlePolicy(30, 60_000)
   getEmbedCode(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistEmbedCodeParamsDto,
+    @Query() query: GetPlaylistEmbedCodeQueryDto,
   ) {
-    return this.playlistsService.getEmbedCode(userId, params.playlistId);
+    return this.playlistsService.getEmbedCode(userId, params.playlistId, query);
   }
 
   @Post(':playlistId/tracks')
@@ -196,6 +202,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 403, description: 'Only playlist owner can add tracks.' })
   @ApiResponse({ status: 404, description: 'Playlist or track not found.' })
   @ApiResponse({ status: 409, description: 'Track already exists in playlist.' })
+  @ThrottlePolicy(60, 60_000)
   addTrack(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
@@ -232,6 +239,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({ status: 403, description: 'Only playlist owner can remove tracks.' })
   @ApiResponse({ status: 404, description: 'Playlist not found or track is not in playlist.' })
+  @ThrottlePolicy(60, 60_000)
   removeTrack(
     @CurrentUser('userId') userId: string,
     @Param() params: RemoveTrackFromPlaylistParamsDto,
@@ -271,6 +279,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({ status: 403, description: 'Only playlist owner can reorder tracks.' })
   @ApiResponse({ status: 404, description: 'Playlist not found or some track IDs are invalid.' })
+  @ThrottlePolicy(40, 60_000)
   reorderTracks(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
@@ -319,8 +328,9 @@ export class PlaylistsController {
   getDetails(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
+    @Query() query: PlaylistTracksQueryDto,
   ) {
-    return this.playlistsService.getDetails(params.playlistId, userId);
+    return this.playlistsService.getDetails(params.playlistId, userId, query);
   }
 
   @Patch(':playlistId')
@@ -374,6 +384,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({ status: 403, description: 'Only playlist owner can update this playlist.' })
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  @ThrottlePolicy(30, 60_000)
   update(
     @CurrentUser('userId') userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
@@ -398,6 +409,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({ status: 403, description: 'Only playlist owner can delete this playlist.' })
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  @ThrottlePolicy(20, 60_000)
   remove(@CurrentUser('userId') userId: string, @Param() params: DeletePlaylistParamsDto) {
     this.playlistsService.remove(userId, params.playlistId);
   }
