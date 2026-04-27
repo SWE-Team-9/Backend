@@ -399,7 +399,8 @@ export class AuthController {
   ) {
     // Browser clients send the token via httpOnly cookie (body.refresh_token is absent).
     // Non-browser clients (mobile/desktop) send it in the request body.
-    const refreshTokenRaw = body?.refresh_token ?? req.cookies?.["refresh_token"];
+    const refreshTokenRaw =
+      body?.refresh_token ?? req.cookies?.["refresh_token"];
     if (!refreshTokenRaw) {
       throw new UnauthorizedException({
         statusCode: 401,

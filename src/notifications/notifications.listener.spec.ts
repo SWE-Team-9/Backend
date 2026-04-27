@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { NotificationsListener, TrackLikedEvent, ReportCreatedEvent } from "./notifications.listener";
+import {
+  NotificationsListener,
+  TrackLikedEvent,
+  ReportCreatedEvent,
+} from "./notifications.listener";
 import { NotificationsService } from "./notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -83,7 +87,9 @@ describe("NotificationsListener", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(mockPrisma.user.findMany).toHaveBeenCalled();
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(2);
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(
+      2,
+    );
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ recipientId: "admin-1" }),
     );
@@ -121,7 +127,9 @@ describe("NotificationsListener", () => {
     // Wait for the final 1ms debounce to expire and async handler to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(1);
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(
+      1,
+    );
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         recipientId: "owner-2",

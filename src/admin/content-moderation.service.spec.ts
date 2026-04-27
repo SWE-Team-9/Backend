@@ -35,7 +35,10 @@ describe("ContentModerationService", () => {
   it("moderateTrack: throws 404 when track does not exist", async () => {
     mockPrisma.track.findUnique.mockResolvedValueOnce(null);
     await expect(
-      service.moderateTrack("admin-1", "no-track", { moderationState: "HIDDEN", reason: "test violation reason here" }),
+      service.moderateTrack("admin-1", "no-track", {
+        moderationState: "HIDDEN",
+        reason: "test violation reason here",
+      }),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -48,7 +51,10 @@ describe("ContentModerationService", () => {
       moderationState: "HIDDEN",
     });
     await expect(
-      service.moderateTrack("admin-1", "track-1", { moderationState: "HIDDEN", reason: "test reason no change" }),
+      service.moderateTrack("admin-1", "track-1", {
+        moderationState: "HIDDEN",
+        reason: "test reason no change",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -66,7 +72,9 @@ describe("ContentModerationService", () => {
       actionType: "HIDE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+    mockNotificationsService.createNotification.mockResolvedValueOnce(
+      undefined,
+    );
 
     const result = await service.moderateTrack("admin-1", "track-1", {
       moderationState: "HIDDEN",
@@ -100,7 +108,9 @@ describe("ContentModerationService", () => {
       actionType: "REMOVE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+    mockNotificationsService.createNotification.mockResolvedValueOnce(
+      undefined,
+    );
 
     await service.moderateTrack("admin-1", "track-2", {
       moderationState: "REMOVED",

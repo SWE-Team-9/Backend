@@ -1,20 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
-import {
-  TrackStatus,
-  FileRole,
-  FileStatus,
-} from '@prisma/client';
-import {
-  S3Client,
-  PutObjectCommand,
-} from '@aws-sdk/client-s3';
-import ffmpeg from 'fluent-ffmpeg';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-import { randomUUID } from 'crypto';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "../prisma/prisma.service";
+import { TrackStatus, FileRole, FileStatus } from "@prisma/client";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import ffmpeg from "fluent-ffmpeg";
+import * as path from "path";
+import * as fs from "fs";
+import * as os from "os";
+import { randomUUID } from "crypto";
 
 // Number of amplitude peaks to generate for the waveform visualisation
 const WAVEFORM_PEAKS = 200;
@@ -22,7 +15,7 @@ const WAVEFORM_PEAKS = 200;
 @Injectable()
 export class TranscodingService {
   private readonly logger = new Logger(TranscodingService.name);
-  private readonly storageProvider: 'local' | 's3';
+  private readonly storageProvider: "local" | "s3";
   private readonly localUploadDir: string;
   private readonly s3Client: S3Client | null;
   private readonly s3Bucket: string;
@@ -32,17 +25,26 @@ export class TranscodingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
-    this.localUploadDir = this.config.get<string>('storage.localUploadDir', './uploads');
-    this.s3Bucket = this.config.get<string>('storage.s3Bucket', '');
-    this.s3Region = this.config.get<string>('storage.s3Region', 'us-east-1');
+    this.storageProvider = this.config.get<"local" | "s3">(
+      "storage.provider",
+      "local",
+    );
+    this.localUploadDir = this.config.get<string>(
+      "storage.localUploadDir",
+      "./uploads",
+    );
+    this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
+    this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
 
-    if (this.storageProvider === 's3') {
+    if (this.storageProvider === "s3") {
       this.s3Client = new S3Client({
         region: this.s3Region,
         credentials: {
-          accessKeyId: this.config.get<string>('storage.awsAccessKeyId', ''),
-          secretAccessKey: this.config.get<string>('storage.awsSecretAccessKey', ''),
+          accessKeyId: this.config.get<string>("storage.awsAccessKeyId", ""),
+          secretAccessKey: this.config.get<string>(
+            "storage.awsSecretAccessKey",
+            "",
+          ),
         },
       });
     } else {
@@ -64,10 +66,13 @@ export class TranscodingService {
    *
    * On any error the track is marked FAILED.
    */
-  async processTrack(trackId: string, originalStorageKey: string): Promise<void> {
-    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'iqa3-'));
-    const inputPath = path.join(tmpDir, 'input');
-    const outputPath = path.join(tmpDir, 'output.mp3');
+  async processTrack(
+    trackId: string,
+    originalStorageKey: string,
+  ): Promise<void> {
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "iqa3-"));
+    const inputPath = path.join(tmpDir, "input");
+    const outputPath = path.join(tmpDir, "output.mp3");
 
     try {
       // 1 — Fetch original file to a temp location
@@ -82,7 +87,7 @@ export class TranscodingService {
       // 4 — Upload transcoded file to storage
       const transcodedKey = `tracks/${randomUUID()}.mp3`;
       const transcodedBuffer = await fs.promises.readFile(outputPath);
-      await this.uploadBuffer(transcodedBuffer, transcodedKey, 'audio/mpeg');
+      await this.uploadBuffer(transcodedBuffer, transcodedKey, "audio/mpeg");
 
       const fileSizeBytes = transcodedBuffer.length;
 
@@ -102,8 +107,8 @@ export class TranscodingService {
             trackId,
             fileRole: FileRole.STREAM,
             storageKey: transcodedKey,
-            mimeType: 'audio/mpeg',
-            format: 'mp3',
+            mimeType: "audio/mpeg",
+            format: "mp3",
             bitrateKbps: 128,
             fileSizeBytes: BigInt(fileSizeBytes),
             status: FileStatus.READY,
@@ -124,11 +129,15 @@ export class TranscodingService {
           data: { status: TrackStatus.FAILED },
         })
         .catch((dbErr) =>
-          this.logger.error(`Failed to mark track ${trackId} as FAILED: ${dbErr}`),
+          this.logger.error(
+            `Failed to mark track ${trackId} as FAILED: ${dbErr}`,
+          ),
         );
     } finally {
       // Cleanup temp directory
-      await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      await fs.promises
+        .rm(tmpDir, { recursive: true, force: true })
+        .catch(() => {});
     }
   }
 
@@ -141,13 +150,13 @@ export class TranscodingService {
       let durationMs = 0;
 
       ffmpeg(inputPath)
-        .audioCodec('libmp3lame')
+        .audioCodec("libmp3lame")
         .audioBitrate(128)
-        .format('mp3')
-        .on('codecData', (data: { duration?: string }) => {
+        .format("mp3")
+        .on("codecData", (data: { duration?: string }) => {
           // duration string is "HH:MM:SS.ms"
           if (data.duration) {
-            const parts = data.duration.split(':');
+            const parts = data.duration.split(":");
             if (parts.length === 3) {
               const hours = parseFloat(parts[0]);
               const minutes = parseFloat(parts[1]);
@@ -156,8 +165,8 @@ export class TranscodingService {
             }
           }
         })
-        .on('error', (err: Error) => reject(err))
-        .on('end', () => resolve(durationMs))
+        .on("error", (err: Error) => reject(err))
+        .on("end", () => resolve(durationMs))
         .save(outputPath);
     });
   }
@@ -176,11 +185,11 @@ export class TranscodingService {
       const chunks: Buffer[] = [];
 
       ffmpeg(audioPath)
-        .format('s16le') // raw signed 16-bit little-endian PCM
+        .format("s16le") // raw signed 16-bit little-endian PCM
         .audioChannels(1) // mono
         .audioFrequency(8000) // 8 kHz is enough for peaks
-        .on('error', (err: Error) => reject(err))
-        .on('end', () => {
+        .on("error", (err: Error) => reject(err))
+        .on("end", () => {
           try {
             const pcm = Buffer.concat(chunks);
             const peaks = this.extractPeaks(pcm, WAVEFORM_PEAKS);
@@ -190,7 +199,7 @@ export class TranscodingService {
           }
         })
         .pipe()
-        .on('data', (chunk: Buffer) => chunks.push(chunk));
+        .on("data", (chunk: Buffer) => chunks.push(chunk));
     });
   }
 
@@ -226,9 +235,12 @@ export class TranscodingService {
   // ──────────────────────────────────────────────────────────────────────────
 
   /** Download from S3 or local storage into a temp file */
-  private async downloadToTemp(storageKey: string, destPath: string): Promise<void> {
-    if (this.storageProvider === 's3') {
-      const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+  private async downloadToTemp(
+    storageKey: string,
+    destPath: string,
+  ): Promise<void> {
+    if (this.storageProvider === "s3") {
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
       const response = await this.s3Client!.send(
         new GetObjectCommand({ Bucket: this.s3Bucket, Key: storageKey }),
       );
@@ -236,8 +248,8 @@ export class TranscodingService {
       const fileStream = fs.createWriteStream(destPath);
       await new Promise<void>((resolve, reject) => {
         stream.pipe(fileStream);
-        fileStream.on('finish', resolve);
-        fileStream.on('error', reject);
+        fileStream.on("finish", resolve);
+        fileStream.on("error", reject);
       });
     } else {
       const fullPath = path.join(this.localUploadDir, storageKey);
@@ -251,14 +263,14 @@ export class TranscodingService {
     storageKey: string,
     mimeType: string,
   ): Promise<void> {
-    if (this.storageProvider === 's3') {
+    if (this.storageProvider === "s3") {
       await this.s3Client!.send(
         new PutObjectCommand({
           Bucket: this.s3Bucket,
           Key: storageKey,
           Body: buffer,
           ContentType: mimeType,
-          CacheControl: 'public, max-age=31536000, immutable',
+          CacheControl: "public, max-age=31536000, immutable",
         }),
       );
     } else {
@@ -266,9 +278,11 @@ export class TranscodingService {
       const resolvedUploadDir = path.resolve(this.localUploadDir);
       const resolvedFilePath = path.resolve(fullPath);
       if (!resolvedFilePath.startsWith(resolvedUploadDir)) {
-        throw new Error('Invalid storage path.');
+        throw new Error("Invalid storage path.");
       }
-      await fs.promises.mkdir(path.dirname(resolvedFilePath), { recursive: true });
+      await fs.promises.mkdir(path.dirname(resolvedFilePath), {
+        recursive: true,
+      });
       await fs.promises.writeFile(resolvedFilePath, buffer);
     }
   }

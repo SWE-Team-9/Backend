@@ -193,7 +193,10 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
         .send(body)
         .expect(201);
 
-      expect(reportsServiceMock.createReport).toHaveBeenCalledWith(USER_ID, body);
+      expect(reportsServiceMock.createReport).toHaveBeenCalledWith(
+        USER_ID,
+        body,
+      );
       expect(res.body).toHaveProperty("id");
       expect(res.body).toHaveProperty("status");
     });

@@ -1,12 +1,12 @@
-import { IsEnum } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { TrackVisibility } from '@prisma/client';
+import { IsEnum } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { TrackVisibility } from "@prisma/client";
 
 export class TrackVisibilityDto {
   @ApiProperty({
-    description: 'Track visibility',
+    description: "Track visibility",
     enum: TrackVisibility,
-    example: 'PUBLIC',
+    example: "PUBLIC",
   })
   @IsEnum(TrackVisibility)
   visibility!: TrackVisibility;

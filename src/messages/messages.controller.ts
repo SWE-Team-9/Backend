@@ -35,7 +35,8 @@ export class MessagesController {
   // GET /api/v1/messages/conversations
   @ApiOperation({
     summary: "List conversations",
-    description: "Returns a paginated list of the user's conversations. Use `archived=true` to fetch archived conversations.",
+    description:
+      "Returns a paginated list of the user's conversations. Use `archived=true` to fetch archived conversations.",
   })
   @ApiResponse({ status: 200, description: "Paginated conversations list." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -55,9 +56,13 @@ export class MessagesController {
   // POST /api/v1/messages/conversations/direct
   @ApiOperation({
     summary: "Get or create direct conversation",
-    description: "Finds an existing direct conversation with another user, or creates one if it doesn't exist.",
+    description:
+      "Finds an existing direct conversation with another user, or creates one if it doesn't exist.",
   })
-  @ApiResponse({ status: 200, description: "Conversation returned or created." })
+  @ApiResponse({
+    status: 200,
+    description: "Conversation returned or created.",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Receiver user not found." })
   @Post("conversations/direct")
@@ -66,18 +71,33 @@ export class MessagesController {
     @CurrentUser("userId") userId: string,
     @Body() dto: DirectConversationDto,
   ) {
-    return this.messagesService.getOrCreateDirectConversation(userId, dto.receiverId);
+    return this.messagesService.getOrCreateDirectConversation(
+      userId,
+      dto.receiverId,
+    );
   }
 
   // GET /api/v1/messages/conversations/:id
   @ApiOperation({
     summary: "Get conversation messages",
-    description: "Returns a paginated list of messages within a specific conversation.",
+    description:
+      "Returns a paginated list of messages within a specific conversation.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Conversation UUID." })
-  @ApiResponse({ status: 200, description: "Paginated messages in conversation." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Conversation UUID.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated messages in conversation.",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "User is not a participant in this conversation." })
+  @ApiResponse({
+    status: 403,
+    description: "User is not a participant in this conversation.",
+  })
   @ApiResponse({ status: 404, description: "Conversation not found." })
   @Get("conversations/:id")
   getConversationMessages(
@@ -96,9 +116,15 @@ export class MessagesController {
   // PATCH /api/v1/messages/conversations/:id/read
   @ApiOperation({
     summary: "Mark conversation as read",
-    description: "Marks all messages in a conversation as read for the authenticated user.",
+    description:
+      "Marks all messages in a conversation as read for the authenticated user.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Conversation UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Conversation UUID.",
+  })
   @ApiResponse({ status: 200, description: "Conversation marked as read." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Conversation not found." })
@@ -116,7 +142,12 @@ export class MessagesController {
     summary: "Mark conversation as unread",
     description: "Marks a conversation as unread for the authenticated user.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Conversation UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Conversation UUID.",
+  })
   @ApiResponse({ status: 200, description: "Conversation marked as unread." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Conversation not found." })
@@ -132,9 +163,15 @@ export class MessagesController {
   // PATCH /api/v1/messages/conversations/:id/archive
   @ApiOperation({
     summary: "Archive conversation",
-    description: "Archives a conversation so it no longer appears in the default conversation list.",
+    description:
+      "Archives a conversation so it no longer appears in the default conversation list.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Conversation UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Conversation UUID.",
+  })
   @ApiResponse({ status: 200, description: "Conversation archived." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Conversation not found." })
@@ -150,9 +187,15 @@ export class MessagesController {
   // PATCH /api/v1/messages/conversations/:id/unarchive
   @ApiOperation({
     summary: "Unarchive conversation",
-    description: "Restores an archived conversation back to the active conversation list.",
+    description:
+      "Restores an archived conversation back to the active conversation list.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Conversation UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Conversation UUID.",
+  })
   @ApiResponse({ status: 200, description: "Conversation unarchived." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Conversation not found." })
@@ -168,9 +211,14 @@ export class MessagesController {
   // GET /api/v1/messages/unread-count
   @ApiOperation({
     summary: "Get unread message count",
-    description: "Returns the total number of unread messages across all conversations.",
+    description:
+      "Returns the total number of unread messages across all conversations.",
   })
-  @ApiResponse({ status: 200, description: "Unread count.", schema: { example: { count: 4 } } })
+  @ApiResponse({
+    status: 200,
+    description: "Unread count.",
+    schema: { example: { count: 4 } },
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Get("unread-count")
   async getUnreadCount(@CurrentUser("userId") userId: string) {
@@ -197,7 +245,8 @@ export class MessagesController {
   // POST /api/v1/messages/share/track
   @ApiOperation({
     summary: "Share a track via message",
-    description: "Sends a track share as a message to another user, with an optional text caption.",
+    description:
+      "Sends a track share as a message to another user, with an optional text caption.",
   })
   @ApiResponse({ status: 201, description: "Track share message sent." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -207,13 +256,19 @@ export class MessagesController {
     @CurrentUser("userId") userId: string,
     @Body() dto: ShareTrackDto,
   ) {
-    return this.messagesService.shareTrack(userId, dto.receiverId, dto.trackId, dto.text);
+    return this.messagesService.shareTrack(
+      userId,
+      dto.receiverId,
+      dto.trackId,
+      dto.text,
+    );
   }
 
   // POST /api/v1/messages/share/playlist
   @ApiOperation({
     summary: "Share a playlist via message",
-    description: "Sends a playlist share as a message to another user, with an optional text caption.",
+    description:
+      "Sends a playlist share as a message to another user, with an optional text caption.",
   })
   @ApiResponse({ status: 201, description: "Playlist share message sent." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -223,7 +278,12 @@ export class MessagesController {
     @CurrentUser("userId") userId: string,
     @Body() dto: SharePlaylistDto,
   ) {
-    return this.messagesService.sharePlaylist(userId, dto.receiverId, dto.playlistId, dto.text);
+    return this.messagesService.sharePlaylist(
+      userId,
+      dto.receiverId,
+      dto.playlistId,
+      dto.text,
+    );
   }
 
   // DELETE /api/v1/messages/:id
@@ -231,10 +291,18 @@ export class MessagesController {
     summary: "Delete a message",
     description: "Deletes a message sent by the authenticated user.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Message UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Message UUID.",
+  })
   @ApiResponse({ status: 200, description: "Message deleted." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Cannot delete another user's message." })
+  @ApiResponse({
+    status: 403,
+    description: "Cannot delete another user's message.",
+  })
   @ApiResponse({ status: 404, description: "Message not found." })
   @Delete(":id")
   @HttpCode(200)

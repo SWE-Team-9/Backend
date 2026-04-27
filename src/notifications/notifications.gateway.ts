@@ -7,7 +7,10 @@ import {
 import { Server, Socket } from "socket.io";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
-import { NotificationsService, INotificationsGateway } from "./notifications.service";
+import {
+  NotificationsService,
+  INotificationsGateway,
+} from "./notifications.service";
 
 @WebSocketGateway({
   namespace: "notifications",
@@ -35,10 +38,10 @@ export class NotificationsGateway
   async handleConnection(socket: Socket): Promise<void> {
     try {
       const token =
-        (socket.handshake.headers.cookie
+        socket.handshake.headers.cookie
           ?.split(";")
           .find((c) => c.trim().startsWith("access_token="))
-          ?.split("=")[1]) ??
+          ?.split("=")[1] ??
         (socket.handshake.auth?.token as string | undefined);
 
       if (!token) throw new Error("No token");
@@ -46,7 +49,8 @@ export class NotificationsGateway
       const payload = this.jwtService.verify(token, {
         secret: this.config.get<string>("security.jwtSecret"),
         issuer: this.config.get<string>("security.jwtIssuer") ?? "spotly-api",
-        audience: this.config.get<string>("security.jwtAudience") ?? "spotly-client",
+        audience:
+          this.config.get<string>("security.jwtAudience") ?? "spotly-client",
       });
 
       const userId: string = payload.sub;

@@ -1,9 +1,15 @@
-import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from "class-transformer";
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 
 export class UpdatePlaylistDto {
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   @MinLength(1)
   @MaxLength(100)
@@ -11,7 +17,7 @@ export class UpdatePlaylistDto {
 
   @IsOptional()
   @Transform(({ value }) => {
-    if (typeof value !== 'string') return value;
+    if (typeof value !== "string") return value;
     const trimmed = value.trim();
     return trimmed.length === 0 ? undefined : trimmed;
   })
@@ -20,7 +26,9 @@ export class UpdatePlaylistDto {
   description?: string;
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
-  @IsIn(['PUBLIC', 'SECRET', 'PRIVATE'])
-  visibility?: 'PUBLIC' | 'SECRET' | 'PRIVATE';
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.toUpperCase().trim() : value,
+  )
+  @IsIn(["PUBLIC", "SECRET", "PRIVATE"])
+  visibility?: "PUBLIC" | "SECRET" | "PRIVATE";
 }

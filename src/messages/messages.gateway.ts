@@ -37,10 +37,10 @@ export class MessagesGateway
   async handleConnection(socket: Socket): Promise<void> {
     try {
       const token =
-        (socket.handshake.headers.cookie
+        socket.handshake.headers.cookie
           ?.split(";")
           .find((c) => c.trim().startsWith("access_token="))
-          ?.split("=")[1]) ??
+          ?.split("=")[1] ??
         (socket.handshake.auth?.token as string | undefined);
 
       if (!token) throw new Error("No token");
@@ -48,7 +48,8 @@ export class MessagesGateway
       const payload = this.jwtService.verify(token, {
         secret: this.config.get<string>("security.jwtSecret"),
         issuer: this.config.get<string>("security.jwtIssuer") ?? "spotly-api",
-        audience: this.config.get<string>("security.jwtAudience") ?? "spotly-client",
+        audience:
+          this.config.get<string>("security.jwtAudience") ?? "spotly-client",
       });
 
       const userId: string = payload.sub;
@@ -61,10 +62,12 @@ export class MessagesGateway
       this.socketUserMap.set(socket.id, userId);
 
       // Join rooms for all active conversations
-      const participations = await this.prisma.conversationParticipant.findMany({
-        where: { userId, isArchived: false },
-        select: { conversationId: true },
-      });
+      const participations = await this.prisma.conversationParticipant.findMany(
+        {
+          where: { userId, isArchived: false },
+          select: { conversationId: true },
+        },
+      );
       for (const p of participations) {
         await socket.join(`conversation_${p.conversationId}`);
       }
@@ -87,23 +90,35 @@ export class MessagesGateway
 
   // ─── Emitters ────────────────────────────────────────────────────────────────
 
-  emitNewMessage(conversationId: string, recipientId: string, payload: unknown): void {
-    this.server.to(`conversation_${conversationId}`).emit("new_message", payload);
+  emitNewMessage(
+    conversationId: string,
+    recipientId: string,
+    payload: unknown,
+  ): void {
+    this.server
+      .to(`conversation_${conversationId}`)
+      .emit("new_message", payload);
   }
 
   emitMessageDeleted(conversationId: string, messageId: string): void {
-    this.server.to(`conversation_${conversationId}`).emit("message_deleted", { conversationId, messageId });
+    this.server
+      .to(`conversation_${conversationId}`)
+      .emit("message_deleted", { conversationId, messageId });
   }
 
   emitConversationRead(conversationId: string, userId: string): void {
-    this.server.to(`conversation_${conversationId}`).emit("conversation_read", { conversationId, userId });
+    this.server
+      .to(`conversation_${conversationId}`)
+      .emit("conversation_read", { conversationId, userId });
   }
 
   emitUnreadCountUpdated(userId: string, count: number): void {
     const sockets = this.userSocketMap.get(userId);
     if (!sockets) return;
     for (const socketId of sockets) {
-      this.server.to(socketId).emit("unread_count_updated", { unreadCount: count });
+      this.server
+        .to(socketId)
+        .emit("unread_count_updated", { unreadCount: count });
     }
   }
 

@@ -25,7 +25,8 @@ export class AdminUsersController {
   // GET /api/v1/admin/users
   @ApiOperation({
     summary: "List all users",
-    description: "Returns a paginated, filterable list of all users. Admin only.",
+    description:
+      "Returns a paginated, filterable list of all users. Admin only.",
   })
   @ApiResponse({ status: 200, description: "Paginated user list." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -38,9 +39,15 @@ export class AdminUsersController {
   // GET /api/v1/admin/users/:userId
   @ApiOperation({
     summary: "Get user detail",
-    description: "Returns full profile and account detail for a specific user. Admin only.",
+    description:
+      "Returns full profile and account detail for a specific user. Admin only.",
   })
-  @ApiParam({ name: "userId", type: "string", format: "uuid", description: "Target user UUID." })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
   @ApiResponse({ status: 200, description: "User detail returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
@@ -66,7 +73,8 @@ export class AdminUsersController {
   // GET /api/v1/admin/stats/overview
   @ApiOperation({
     summary: "Get platform overview stats",
-    description: "Returns high-level platform statistics (user counts, track counts, etc.). Admin only.",
+    description:
+      "Returns high-level platform statistics (user counts, track counts, etc.). Admin only.",
   })
   @ApiResponse({ status: 200, description: "Overview stats returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -79,7 +87,8 @@ export class AdminUsersController {
   // GET /api/v1/admin/stats/daily
   @ApiOperation({
     summary: "Get daily stats",
-    description: "Returns daily registration/activity statistics for a given date range. Admin only.",
+    description:
+      "Returns daily registration/activity statistics for a given date range. Admin only.",
   })
   @ApiResponse({ status: 200, description: "Daily stats returned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -92,9 +101,13 @@ export class AdminUsersController {
   // GET /api/v1/admin/stats/most-reported
   @ApiOperation({
     summary: "Get most-reported users",
-    description: "Returns users with the highest number of reports in descending order. Admin only.",
+    description:
+      "Returns users with the highest number of reports in descending order. Admin only.",
   })
-  @ApiResponse({ status: 200, description: "Most-reported users list returned." })
+  @ApiResponse({
+    status: 200,
+    description: "Most-reported users list returned.",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
   @Get("stats/most-reported")

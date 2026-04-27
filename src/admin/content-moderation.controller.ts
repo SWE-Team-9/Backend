@@ -27,17 +27,28 @@ import {
 @Controller("admin")
 @Roles("ADMIN", "MODERATOR")
 export class ContentModerationController {
-  constructor(private readonly contentModerationService: ContentModerationService) {}
+  constructor(
+    private readonly contentModerationService: ContentModerationService,
+  ) {}
 
   // PATCH /api/v1/admin/tracks/:id/moderation
   @ApiOperation({
     summary: "Moderate a track",
-    description: "Approve, remove, or flag a track. Requires ADMIN or MODERATOR role.",
+    description:
+      "Approve, remove, or flag a track. Requires ADMIN or MODERATOR role.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Track UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Track UUID.",
+  })
   @ApiResponse({ status: 200, description: "Track moderation action applied." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — ADMIN or MODERATOR role required." })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden — ADMIN or MODERATOR role required.",
+  })
   @ApiResponse({ status: 404, description: "Track not found." })
   @Patch("tracks/:id/moderation")
   @HttpCode(200)
@@ -52,12 +63,24 @@ export class ContentModerationController {
   // PATCH /api/v1/admin/comments/:id/moderation
   @ApiOperation({
     summary: "Moderate a comment",
-    description: "Approve, remove, or flag a comment. Requires ADMIN or MODERATOR role.",
+    description:
+      "Approve, remove, or flag a comment. Requires ADMIN or MODERATOR role.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Comment UUID." })
-  @ApiResponse({ status: 200, description: "Comment moderation action applied." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Comment UUID.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Comment moderation action applied.",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — ADMIN or MODERATOR role required." })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden — ADMIN or MODERATOR role required.",
+  })
   @ApiResponse({ status: 404, description: "Comment not found." })
   @Patch("comments/:id/moderation")
   @HttpCode(200)
@@ -66,18 +89,34 @@ export class ContentModerationController {
     @Param("id", ParseUUIDPipe) commentId: string,
     @Body() dto: ModerateCommentDto,
   ) {
-    return this.contentModerationService.moderateComment(adminId, commentId, dto);
+    return this.contentModerationService.moderateComment(
+      adminId,
+      commentId,
+      dto,
+    );
   }
 
   // PATCH /api/v1/admin/playlists/:id/moderation
   @ApiOperation({
     summary: "Moderate a playlist",
-    description: "Approve, remove, or flag a playlist. Requires ADMIN or MODERATOR role.",
+    description:
+      "Approve, remove, or flag a playlist. Requires ADMIN or MODERATOR role.",
   })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Playlist UUID." })
-  @ApiResponse({ status: 200, description: "Playlist moderation action applied." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Playlist UUID.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Playlist moderation action applied.",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden — ADMIN or MODERATOR role required." })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden — ADMIN or MODERATOR role required.",
+  })
   @ApiResponse({ status: 404, description: "Playlist not found." })
   @Patch("playlists/:id/moderation")
   @HttpCode(200)
@@ -86,6 +125,10 @@ export class ContentModerationController {
     @Param("id", ParseUUIDPipe) playlistId: string,
     @Body() dto: ModeratePlaylistDto,
   ) {
-    return this.contentModerationService.moderatePlaylist(adminId, playlistId, dto);
+    return this.contentModerationService.moderatePlaylist(
+      adminId,
+      playlistId,
+      dto,
+    );
   }
 }

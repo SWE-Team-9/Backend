@@ -49,7 +49,9 @@ describe("MessagesService", () => {
 
   // 1. sendMessage — blocked users cannot message
   it("sendMessage: throws MESSAGING_BLOCKED when block exists", async () => {
-    mockPrisma.userBlock.findFirst.mockResolvedValueOnce({ blockerId: "userA" });
+    mockPrisma.userBlock.findFirst.mockResolvedValueOnce({
+      blockerId: "userA",
+    });
     await expect(
       service.sendMessage("userA", "userB", "hello"),
     ).rejects.toThrow(ForbiddenException);
@@ -73,7 +75,9 @@ describe("MessagesService", () => {
       deletedAt: null,
       editedAt: null,
       createdAt: new Date(),
-      conversation: { participants: [{ userId: "userA" }, { userId: "userB" }] },
+      conversation: {
+        participants: [{ userId: "userA" }, { userId: "userB" }],
+      },
       share: null,
     });
     await service.sendMessage("userA", "userB", "hello");
@@ -97,7 +101,9 @@ describe("MessagesService", () => {
       deletedAt: null,
       editedAt: null,
       createdAt: new Date(),
-      conversation: { participants: [{ userId: "userA" }, { userId: "userB" }] },
+      conversation: {
+        participants: [{ userId: "userA" }, { userId: "userB" }],
+      },
       share: null,
     });
     await service.sendMessage("userA", "userB", "hey");
@@ -155,9 +161,9 @@ describe("MessagesService", () => {
       conversationId: "conv-1",
       deletedAt: null,
     });
-    await expect(
-      service.deleteMessage("userA", "msg-3"),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.deleteMessage("userA", "msg-3")).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   // 9. getUnreadCount — returns 0 when no conversations
@@ -170,8 +176,8 @@ describe("MessagesService", () => {
   // 10. markAsUnread — non-participant gets NotFoundException
   it("markAsUnread: throws NotFoundException for non-participant", async () => {
     mockPrisma.conversationParticipant.findUnique.mockResolvedValueOnce(null);
-    await expect(
-      service.markAsUnread("userX", "conv-1"),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.markAsUnread("userX", "conv-1")).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

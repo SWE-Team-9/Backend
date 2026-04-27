@@ -13,9 +13,9 @@
   Req,
   UploadedFile,
   UseInterceptors,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { Request } from 'express';
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { Request } from "express";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -25,7 +25,7 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
-} from '@nestjs/swagger';
+} from "@nestjs/swagger";
 
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -41,26 +41,39 @@ import {
 
 // /me and /check-handle must be declared before /:handle so NestJS
 // does not route them as handle parameter matches.
-@ApiTags('Profiles')
+@ApiTags("Profiles")
 @ApiBearerAuth()
-@Controller('profiles')
+@Controller("profiles")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   // GET /profiles/me
-  @ApiOperation({ summary: 'Get my profile', description: 'Returns the full profile of the authenticated user. No privacy gating.' })
-  @ApiResponse({ status: 200, description: 'Full profile object.' })
-  @ApiResponse({ status: 401, description: 'Not authenticated.' })
-  @Get('me')
-  getMyProfile(@CurrentUser('userId') userId: string) {
+  @ApiOperation({
+    summary: "Get my profile",
+    description:
+      "Returns the full profile of the authenticated user. No privacy gating.",
+  })
+  @ApiResponse({ status: 200, description: "Full profile object." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @Get("me")
+  getMyProfile(@CurrentUser("userId") userId: string) {
     return this.usersService.getMyProfile(userId);
   }
 
   // GET /profiles/check-handle?handle=xyz
-  @ApiOperation({ summary: 'Check handle availability', description: 'Returns whether a handle is available. Handles retired within the last 30 days are blocked.' })
-  @ApiQuery({ name: 'handle', description: 'The handle to check (3–30 chars, lowercase letters, numbers, underscores).', example: 'yahia_dev' })
-  @ApiResponse({ status: 200, description: '{ available: boolean }' })
-  @ApiResponse({ status: 400, description: 'Invalid handle format.' })
+  @ApiOperation({
+    summary: "Check handle availability",
+    description:
+      "Returns whether a handle is available. Handles retired within the last 30 days are blocked.",
+  })
+  @ApiQuery({
+    name: "handle",
+    description:
+      "The handle to check (3–30 chars, lowercase letters, numbers, underscores).",
+    example: "yahia_dev",
+  })
+  @ApiResponse({ status: 200, description: "{ available: boolean }" })
+  @ApiResponse({ status: 400, description: "Invalid handle format." })
   @Public()
   @Get("check-handle")
   @ApiOperation({
@@ -89,10 +102,18 @@ Rate Limited: Default (100 req/min).`,
   // GET /profiles/:handle
   // requesterId forwarded when a valid JWT is present; service uses it to
   // bypass privacy gating for the profile owner.
-  @ApiOperation({ summary: 'Get profile by handle', description: 'Public endpoint. Returns reduced shape for private profiles the requester does not own.' })
-  @ApiParam({ name: 'handle', description: 'The user\'s handle.', example: 'yahia_dev' })
-  @ApiResponse({ status: 200, description: 'Full or reduced profile object.' })
-  @ApiResponse({ status: 404, description: 'Profile not found.' })
+  @ApiOperation({
+    summary: "Get profile by handle",
+    description:
+      "Public endpoint. Returns reduced shape for private profiles the requester does not own.",
+  })
+  @ApiParam({
+    name: "handle",
+    description: "The user's handle.",
+    example: "yahia_dev",
+  })
+  @ApiResponse({ status: 200, description: "Full or reduced profile object." })
+  @ApiResponse({ status: 404, description: "Profile not found." })
   @Public()
   @Get(":handle")
   @ApiOperation({
@@ -110,7 +131,10 @@ Note: Tracks, followers, and reposts are fetched separately (pagination endpoint
 Public endpoint: No authentication required, but user ID auto-detected if logged in.
 Rate Limited: Default (100 req/min).`,
   })
-  @ApiResponse({ status: 200, description: "User profile (full or limited based on privacy)" })
+  @ApiResponse({
+    status: 200,
+    description: "User profile (full or limited based on privacy)",
+  })
   @ApiResponse({ status: 404, description: "Handle not found" })
   getProfile(@Param() params: GetProfileParamsDto, @Req() req: Request) {
     const requesterId = (req as any).user?.userId as string | undefined;
@@ -118,11 +142,15 @@ Rate Limited: Default (100 req/min).`,
   }
 
   // PATCH /profiles/me
-  @ApiOperation({ summary: 'Update my profile', description: 'Partial update — only fields present in the body are written. Send favorite_genres: [] to clear all genres.' })
-  @ApiResponse({ status: 200, description: 'Updated profile.' })
-  @ApiResponse({ status: 400, description: 'Validation error.' })
-  @ApiResponse({ status: 401, description: 'Not authenticated.' })
-  @Patch('me')
+  @ApiOperation({
+    summary: "Update my profile",
+    description:
+      "Partial update — only fields present in the body are written. Send favorite_genres: [] to clear all genres.",
+  })
+  @ApiResponse({ status: 200, description: "Updated profile." })
+  @ApiResponse({ status: 400, description: "Validation error." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @Patch("me")
   updateProfile(
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateProfileDto,
@@ -132,11 +160,15 @@ Rate Limited: Default (100 req/min).`,
 
   // PUT /profiles/me/links
   // Full-replace - client sends the complete desired list.
-  @ApiOperation({ summary: 'Update external links', description: 'Full-replace — client sends the complete desired list. Send links: [] to clear all.' })
-  @ApiResponse({ status: 200, description: 'Updated links array.' })
-  @ApiResponse({ status: 400, description: 'Validation or SSRF error.' })
-  @ApiResponse({ status: 401, description: 'Not authenticated.' })
-  @Put('me/links')
+  @ApiOperation({
+    summary: "Update external links",
+    description:
+      "Full-replace — client sends the complete desired list. Send links: [] to clear all.",
+  })
+  @ApiResponse({ status: 200, description: "Updated links array." })
+  @ApiResponse({ status: 400, description: "Validation or SSRF error." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @Put("me/links")
   updateLinks(
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateExternalLinksDto,
@@ -145,28 +177,42 @@ Rate Limited: Default (100 req/min).`,
   }
 
   // DELETE /profiles/me
-  @Delete('me')
+  @Delete("me")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Delete my account',
-    description: 'Permanently deletes the authenticated user account and all associated data (tracks, likes, followers, history, sessions, etc.). This action is irreversible.',
+    summary: "Delete my account",
+    description:
+      "Permanently deletes the authenticated user account and all associated data (tracks, likes, followers, history, sessions, etc.). This action is irreversible.",
   })
-  @ApiResponse({ status: 200, description: 'Account deleted successfully.' })
-  @ApiResponse({ status: 401, description: 'Not authenticated.' })
-  deleteAccount(@CurrentUser('userId') userId: string) {
+  @ApiResponse({ status: 200, description: "Account deleted successfully." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  deleteAccount(@CurrentUser("userId") userId: string) {
     return this.usersService.deleteAccount(userId);
   }
 
   // POST /profiles/me/:type (avatar | cover)
   // Accepts multipart/form-data with a single "file" field.
-  @ApiOperation({ summary: 'Upload avatar or cover photo', description: 'Accepts multipart/form-data with a single "file" field. type must be "avatar" (max 5 MB) or "cover" (max 15 MB). Replaces existing image.' })
-  @ApiParam({ name: 'type', enum: ['avatar', 'cover'], description: 'Image type to upload.' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
-  @ApiResponse({ status: 201, description: '{ url: string }' })
-  @ApiResponse({ status: 400, description: 'Invalid file type or size.' })
-  @ApiResponse({ status: 401, description: 'Not authenticated.' })
-  @Post('me/:type')
+  @ApiOperation({
+    summary: "Upload avatar or cover photo",
+    description:
+      'Accepts multipart/form-data with a single "file" field. type must be "avatar" (max 5 MB) or "cover" (max 15 MB). Replaces existing image.',
+  })
+  @ApiParam({
+    name: "type",
+    enum: ["avatar", "cover"],
+    description: "Image type to upload.",
+  })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: { file: { type: "string", format: "binary" } },
+    },
+  })
+  @ApiResponse({ status: 201, description: "{ url: string }" })
+  @ApiResponse({ status: 400, description: "Invalid file type or size." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @Post("me/:type")
   @ThrottlePolicy(10, 60_000)
   @UseInterceptors(FileInterceptor("file"))
   @ApiOperation({
@@ -196,7 +242,10 @@ Authentication: Requires valid access token.
 Note: Old image kept in storage (cleanup via background job).`,
   })
   @ApiResponse({ status: 200, description: "Image uploaded, URL returned" })
-  @ApiResponse({ status: 400, description: "Validation failed (invalid MIME, too large, etc.)" })
+  @ApiResponse({
+    status: 400,
+    description: "Validation failed (invalid MIME, too large, etc.)",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated" })
   @ApiResponse({
     status: 429,
@@ -231,7 +280,10 @@ Rate Limited: 10 uploads per minute (shared quota with /me/:type).
 Authentication: Requires valid access token.`,
   })
   @ApiResponse({ status: 200, description: "Image uploaded, URL returned" })
-  @ApiResponse({ status: 400, description: "Validation failed (invalid MIME, too large, etc.)" })
+  @ApiResponse({
+    status: 400,
+    description: "Validation failed (invalid MIME, too large, etc.)",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated" })
   @ApiResponse({
     status: 429,

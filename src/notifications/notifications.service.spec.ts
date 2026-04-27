@@ -67,9 +67,9 @@ describe("NotificationsService", () => {
       id: "notif-1",
       recipientId: "other-user",
     });
-    await expect(
-      service.markAsRead("user-1", "notif-1"),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.markAsRead("user-1", "notif-1")).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   // 4. markAllRead — calls updateMany with readAt:null filter + emits WS

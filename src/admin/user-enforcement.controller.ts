@@ -28,14 +28,21 @@ import {
 @Controller("admin/users")
 @Roles("ADMIN")
 export class UserEnforcementController {
-  constructor(private readonly userEnforcementService: UserEnforcementService) {}
+  constructor(
+    private readonly userEnforcementService: UserEnforcementService,
+  ) {}
 
   // POST /api/v1/admin/users/:userId/warn
   @ApiOperation({
     summary: "Warn a user",
     description: "Issues a formal warning to a user. Admin only.",
   })
-  @ApiParam({ name: "userId", type: "string", format: "uuid", description: "Target user UUID." })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
   @ApiResponse({ status: 201, description: "Warning issued." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
@@ -53,9 +60,15 @@ export class UserEnforcementController {
   // POST /api/v1/admin/users/:userId/suspend
   @ApiOperation({
     summary: "Suspend a user",
-    description: "Temporarily suspends a user account for a specified duration. Admin only.",
+    description:
+      "Temporarily suspends a user account for a specified duration. Admin only.",
   })
-  @ApiParam({ name: "userId", type: "string", format: "uuid", description: "Target user UUID." })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
   @ApiResponse({ status: 201, description: "User suspended." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
@@ -75,7 +88,12 @@ export class UserEnforcementController {
     summary: "Ban a user",
     description: "Permanently bans a user account. Admin only.",
   })
-  @ApiParam({ name: "userId", type: "string", format: "uuid", description: "Target user UUID." })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
   @ApiResponse({ status: 201, description: "User banned." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })
@@ -93,9 +111,15 @@ export class UserEnforcementController {
   // POST /api/v1/admin/users/:userId/restore
   @ApiOperation({
     summary: "Restore a user",
-    description: "Lifts a suspension or ban, restoring the user's account access. Admin only.",
+    description:
+      "Lifts a suspension or ban, restoring the user's account access. Admin only.",
   })
-  @ApiParam({ name: "userId", type: "string", format: "uuid", description: "Target user UUID." })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
   @ApiResponse({ status: 200, description: "User restored." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden — Admin role required." })

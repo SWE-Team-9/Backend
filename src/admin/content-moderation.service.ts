@@ -27,7 +27,9 @@ function commentActionType(isHidden: boolean): ModerationActionType {
   return isHidden ? "HIDE_COMMENT" : "RESTORE_CONTENT";
 }
 
-function playlistStateToActionType(state: ModerationState): ModerationActionType {
+function playlistStateToActionType(
+  state: ModerationState,
+): ModerationActionType {
   switch (state) {
     case "HIDDEN":
       return "HIDE_PLAYLIST";
@@ -50,15 +52,26 @@ export class ContentModerationService {
   async moderateTrack(adminId: string, trackId: string, dto: ModerateTrackDto) {
     const track = await this.prisma.track.findUnique({
       where: { id: trackId },
-      select: { id: true, title: true, uploaderId: true, moderationState: true },
+      select: {
+        id: true,
+        title: true,
+        uploaderId: true,
+        moderationState: true,
+      },
     });
 
     if (!track) {
-      throw new NotFoundException({ code: "TRACK_NOT_FOUND", message: "Track not found." });
+      throw new NotFoundException({
+        code: "TRACK_NOT_FOUND",
+        message: "Track not found.",
+      });
     }
 
     if (track.moderationState === dto.moderationState) {
-      throw new BadRequestException({ code: "NO_STATE_CHANGE", message: "Track is already in this moderation state." });
+      throw new BadRequestException({
+        code: "NO_STATE_CHANGE",
+        message: "Track is already in this moderation state.",
+      });
     }
 
     const previousState = track.moderationState;
@@ -106,20 +119,30 @@ export class ContentModerationService {
 
   // ─── Moderate comment ────────────────────────────────────────────────────────
 
-  async moderateComment(adminId: string, commentId: string, dto: ModerateCommentDto) {
+  async moderateComment(
+    adminId: string,
+    commentId: string,
+    dto: ModerateCommentDto,
+  ) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       select: { id: true, userId: true, trackId: true, moderationState: true },
     });
 
     if (!comment) {
-      throw new NotFoundException({ code: "COMMENT_NOT_FOUND", message: "Comment not found." });
+      throw new NotFoundException({
+        code: "COMMENT_NOT_FOUND",
+        message: "Comment not found.",
+      });
     }
 
     const newState: ModerationState = dto.isHidden ? "HIDDEN" : "VISIBLE";
 
     if (comment.moderationState === newState) {
-      throw new BadRequestException({ code: "NO_STATE_CHANGE", message: "Comment is already in this state." });
+      throw new BadRequestException({
+        code: "NO_STATE_CHANGE",
+        message: "Comment is already in this state.",
+      });
     }
 
     const actionType = commentActionType(dto.isHidden);
@@ -165,18 +188,28 @@ export class ContentModerationService {
 
   // ─── Moderate playlist ───────────────────────────────────────────────────────
 
-  async moderatePlaylist(adminId: string, playlistId: string, dto: ModeratePlaylistDto) {
+  async moderatePlaylist(
+    adminId: string,
+    playlistId: string,
+    dto: ModeratePlaylistDto,
+  ) {
     const playlist = await this.prisma.playlist.findUnique({
       where: { id: playlistId },
       select: { id: true, title: true, ownerId: true, moderationState: true },
     });
 
     if (!playlist) {
-      throw new NotFoundException({ code: "PLAYLIST_NOT_FOUND", message: "Playlist not found." });
+      throw new NotFoundException({
+        code: "PLAYLIST_NOT_FOUND",
+        message: "Playlist not found.",
+      });
     }
 
     if (playlist.moderationState === dto.moderationState) {
-      throw new BadRequestException({ code: "NO_STATE_CHANGE", message: "Playlist is already in this moderation state." });
+      throw new BadRequestException({
+        code: "NO_STATE_CHANGE",
+        message: "Playlist is already in this moderation state.",
+      });
     }
 
     const previousState = playlist.moderationState;

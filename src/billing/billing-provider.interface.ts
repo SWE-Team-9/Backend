@@ -122,9 +122,7 @@ export interface IBillingProvider {
    * Resume a subscription that was set to cancel_at_period_end.
    * For real Stripe: stripe.subscriptions.update cancel_at_period_end=false
    */
-  resumeSubscription(params: {
-    providerSubscriptionId: string;
-  }): Promise<void>;
+  resumeSubscription(params: { providerSubscriptionId: string }): Promise<void>;
 
   /**
    * Change the plan on an active subscription (e.g. PRO ↔ GO+).
@@ -162,4 +160,4 @@ export interface IBillingProvider {
 }
 
 /** NestJS injection token for the billing provider */
-export const BILLING_PROVIDER = 'BILLING_PROVIDER';
+export const BILLING_PROVIDER = "BILLING_PROVIDER";

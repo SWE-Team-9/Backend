@@ -51,11 +51,11 @@ describe("PlayerService", () => {
   const configMock = {
     get: jest.fn((key: string, fallback?: any) => {
       const map: Record<string, any> = {
-        'storage.provider': 's3',
-        'storage.localUploadUrl': 'http://localhost:3000/uploads',
-        'storage.s3Bucket': 'test-bucket',
-        'storage.s3Region': 'eu-north-1',
-        'storage.cdnUrl': '',
+        "storage.provider": "s3",
+        "storage.localUploadUrl": "http://localhost:3000/uploads",
+        "storage.s3Bucket": "test-bucket",
+        "storage.s3Region": "eu-north-1",
+        "storage.cdnUrl": "",
       };
       return map[key] ?? fallback;
     }),
@@ -69,7 +69,9 @@ describe("PlayerService", () => {
   // ── getPlaybackSource ─────────────────────────────────────────────────
   describe("getPlaybackSource", () => {
     it("should return stream URL for a playable track", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.trackFile.findFirst as jest.Mock).mockResolvedValue({
         storageKey: "audio/trk_123.mp3",
       });
@@ -143,7 +145,9 @@ describe("PlayerService", () => {
   // ── getPlaybackState ──────────────────────────────────────────────────
   describe("getPlaybackState", () => {
     it("should return PLAYABLE for finished track", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
 
       const result = await service.getPlaybackState("track-uuid");
 
@@ -188,16 +192,18 @@ describe("PlayerService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.getPlaybackState("missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getPlaybackState("missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
   // ── registerProgress ──────────────────────────────────────────────────
   describe("registerProgress", () => {
     it("should save progress successfully", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.playbackProgress.upsert as jest.Mock).mockResolvedValue({});
 
       const result = await service.registerProgress(
@@ -214,8 +220,14 @@ describe("PlayerService", () => {
         positionSeconds: 97,
       });
       expect(prismaMock.playbackProgress.upsert).toHaveBeenCalledWith({
-        where: { userId_trackId: { userId: "user-uuid", trackId: "track-uuid" } },
-        update: { positionSeconds: 97, durationSeconds: 240, isCompleted: false },
+        where: {
+          userId_trackId: { userId: "user-uuid", trackId: "track-uuid" },
+        },
+        update: {
+          positionSeconds: 97,
+          durationSeconds: 240,
+          isCompleted: false,
+        },
         create: {
           userId: "user-uuid",
           trackId: "track-uuid",
@@ -238,7 +250,9 @@ describe("PlayerService", () => {
   // ── markPlayed ────────────────────────────────────────────────────────
   describe("markPlayed", () => {
     it("should record play event and return count", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.playEvent.create as jest.Mock).mockResolvedValue({});
       (prismaMock.playEvent.count as jest.Mock).mockResolvedValue(4821);
 
@@ -374,7 +388,9 @@ describe("PlayerService", () => {
   // ── getResumePosition ─────────────────────────────────────────────────
   describe("getResumePosition", () => {
     it("should return resume position when progress exists", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.playbackProgress.findUnique as jest.Mock).mockResolvedValue({
         positionSeconds: 97,
       });
@@ -388,7 +404,9 @@ describe("PlayerService", () => {
     });
 
     it("should return 0 when no progress exists", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.playbackProgress.findUnique as jest.Mock).mockResolvedValue(
         null,
       );
@@ -410,7 +428,9 @@ describe("PlayerService", () => {
   // ── getSession ────────────────────────────────────────────────────────
   describe("getSession", () => {
     it("should return default session when none exists", async () => {
-      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        null,
+      );
 
       const result = await service.getSession("user-uuid");
 
@@ -502,7 +522,9 @@ describe("PlayerService", () => {
   // ── getTrackPreview ───────────────────────────────────────────────────
   describe("getTrackPreview", () => {
     it("should return preview URL", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.trackFile.findFirst as jest.Mock).mockResolvedValue({
         storageKey: "previews/trk_555.mp3",
       });
@@ -518,7 +540,9 @@ describe("PlayerService", () => {
     });
 
     it("should return null previewUrl when no preview file", async () => {
-      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
       (prismaMock.trackFile.findFirst as jest.Mock).mockResolvedValue(null);
 
       const result = await service.getTrackPreview("track-uuid");
@@ -529,9 +553,9 @@ describe("PlayerService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.getTrackPreview("missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getTrackPreview("missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });

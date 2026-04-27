@@ -27,8 +27,16 @@ export class AdminUsersService {
         ? {
             OR: [
               { email: { contains: query.search, mode: "insensitive" } },
-              { profile: { displayName: { contains: query.search, mode: "insensitive" } } },
-              { profile: { handle: { contains: query.search, mode: "insensitive" } } },
+              {
+                profile: {
+                  displayName: { contains: query.search, mode: "insensitive" },
+                },
+              },
+              {
+                profile: {
+                  handle: { contains: query.search, mode: "insensitive" },
+                },
+              },
             ],
           }
         : {}),
@@ -144,31 +152,35 @@ export class AdminUsersService {
     });
 
     if (!user || user.accountStatus === "DELETED") {
-      throw new NotFoundException({ code: "USER_NOT_FOUND", message: "User not found." });
+      throw new NotFoundException({
+        code: "USER_NOT_FOUND",
+        message: "User not found.",
+      });
     }
 
-    const [moderationHistory, reportsAgainst, reportsSubmitted] = await Promise.all([
-      this.prisma.moderationAction.findMany({
-        where: { targetUserId: userId },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        select: {
-          id: true,
-          actionType: true,
-          notes: true,
-          createdAt: true,
-          admin: { select: { profile: { select: { handle: true } } } },
-        },
-      }),
-      this.prisma.moderationReport.aggregate({
-        where: { reportedUserId: userId },
-        _count: { id: true },
-      }),
-      this.prisma.moderationReport.aggregate({
-        where: { reporterId: userId },
-        _count: { id: true },
-      }),
-    ]);
+    const [moderationHistory, reportsAgainst, reportsSubmitted] =
+      await Promise.all([
+        this.prisma.moderationAction.findMany({
+          where: { targetUserId: userId },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            actionType: true,
+            notes: true,
+            createdAt: true,
+            admin: { select: { profile: { select: { handle: true } } } },
+          },
+        }),
+        this.prisma.moderationReport.aggregate({
+          where: { reportedUserId: userId },
+          _count: { id: true },
+        }),
+        this.prisma.moderationReport.aggregate({
+          where: { reporterId: userId },
+          _count: { id: true },
+        }),
+      ]);
 
     const pendingAgainst = await this.prisma.moderationReport.count({
       where: { reportedUserId: userId, status: "PENDING" },
@@ -233,7 +245,12 @@ export class AdminUsersService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.ModerationActionWhereInput = {
-      ...(query.actionType ? { actionType: query.actionType as Prisma.EnumModerationActionTypeFilter } : {}),
+      ...(query.actionType
+        ? {
+            actionType:
+              query.actionType as Prisma.EnumModerationActionTypeFilter,
+          }
+        : {}),
       ...(query.adminId ? { adminId: query.adminId } : {}),
       ...(query.targetUserId ? { targetUserId: query.targetUserId } : {}),
       ...(query.dateFrom || query.dateTo
@@ -300,7 +317,9 @@ export class AdminUsersService {
           : null,
         target_track: a.track ? { id: a.track.id, title: a.track.title } : null,
         target_comment: a.comment ? { id: a.comment.id } : null,
-        target_playlist: a.playlist ? { id: a.playlist.id, title: a.playlist.title } : null,
+        target_playlist: a.playlist
+          ? { id: a.playlist.id, title: a.playlist.title }
+          : null,
         linked_report_id: a.reportId,
         notes: a.notes,
         created_at: a.createdAt,
@@ -334,12 +353,16 @@ export class AdminUsersService {
       actionsThisWeek,
     ] = await Promise.all([
       this.prisma.user.count({ where: { deletedAt: null } }),
-      this.prisma.user.count({ where: { accountStatus: "ACTIVE", deletedAt: null } }),
+      this.prisma.user.count({
+        where: { accountStatus: "ACTIVE", deletedAt: null },
+      }),
       this.prisma.user.count({ where: { accountStatus: "SUSPENDED" } }),
       this.prisma.user.count({ where: { accountStatus: "BANNED" } }),
       this.prisma.user.count({ where: { isVerified: true, deletedAt: null } }),
       this.prisma.track.count({ where: { deletedAt: null } }),
-      this.prisma.track.count({ where: { moderationState: "VISIBLE", deletedAt: null } }),
+      this.prisma.track.count({
+        where: { moderationState: "VISIBLE", deletedAt: null },
+      }),
       this.prisma.track.count({ where: { moderationState: "HIDDEN" } }),
       this.prisma.track.count({ where: { moderationState: "REMOVED" } }),
       this.prisma.playlist.count({ where: { deletedAt: null } }),
@@ -348,8 +371,12 @@ export class AdminUsersService {
       this.prisma.repost.count(),
       this.prisma.moderationReport.count({ where: { status: "PENDING" } }),
       this.prisma.moderationReport.count({ where: { status: "UNDER_REVIEW" } }),
-      this.prisma.moderationReport.count({ where: { status: "RESOLVED", resolvedAt: { gte: weekAgo } } }),
-      this.prisma.moderationAction.count({ where: { createdAt: { gte: weekAgo } } }),
+      this.prisma.moderationReport.count({
+        where: { status: "RESOLVED", resolvedAt: { gte: weekAgo } },
+      }),
+      this.prisma.moderationAction.count({
+        where: { createdAt: { gte: weekAgo } },
+      }),
     ]);
 
     return {
@@ -385,7 +412,9 @@ export class AdminUsersService {
   // ─── Daily stats ─────────────────────────────────────────────────────────────
 
   async getDailyStats(query: DailyStatsQueryDto) {
-    const dateFrom = query.dateFrom ? new Date(query.dateFrom) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const dateFrom = query.dateFrom
+      ? new Date(query.dateFrom)
+      : new Date(Date.now() - 30 * 24 * 3600 * 1000);
     const dateTo = query.dateTo ? new Date(query.dateTo) : new Date();
 
     const metrics = await this.prisma.dailyPlatformMetric.findMany({

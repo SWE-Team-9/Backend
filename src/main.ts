@@ -129,8 +129,8 @@ async function bootstrap() {
   // Stripe webhook requires the raw body for HMAC signature verification.
   // This middleware captures raw bytes before JSON parsing, for the webhook route.
   app.use(
-    '/api/v1/subscriptions/webhook',
-    require('express').raw({ type: 'application/json', limit: '64kb' }),
+    "/api/v1/subscriptions/webhook",
+    require("express").raw({ type: "application/json", limit: "64kb" }),
     (req: any, _res: any, next: any) => {
       req.rawBody = req.body; // preserve Buffer for signature check
       next();
@@ -147,11 +147,9 @@ async function bootstrap() {
   // ── Local static file serving ────────────────────────────────────────────────
   // Serves uploaded images from /uploads directory when using local storage.
   // Placed before CORS so paths remain /uploads/… (not wrapped in global prefix).
-  if (process.env.STORAGE_PROVIDER !== 's3') {
-    const uploadDir = path.resolve(
-      process.env.LOCAL_UPLOAD_DIR ?? './uploads',
-    );
-    app.use('/uploads', require('express').static(uploadDir));
+  if (process.env.STORAGE_PROVIDER !== "s3") {
+    const uploadDir = path.resolve(process.env.LOCAL_UPLOAD_DIR ?? "./uploads");
+    app.use("/uploads", require("express").static(uploadDir));
   }
 
   // ── CORS ─────────────────────────────────────────────────────────────────────
@@ -176,8 +174,12 @@ async function bootstrap() {
     "http://localhost:8080",
   ];
 
-  const rawOrigins = process.env.ALLOWED_ORIGINS ?? process.env.CLIENT_URL ?? "";
-  const envOrigins = rawOrigins.split(",").map((o) => o.trim()).filter(Boolean);
+  const rawOrigins =
+    process.env.ALLOWED_ORIGINS ?? process.env.CLIENT_URL ?? "";
+  const envOrigins = rawOrigins
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   // Merge env-configured origins with the hardcoded dev defaults (deduplicated)
   const allowedOrigins = [...new Set([...defaultDevOrigins, ...envOrigins])];
@@ -230,9 +232,7 @@ async function bootstrap() {
   if (swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle("IQA3 API")
-      .setDescription(
-        "Social Streaming Platform backend API documentation.",
-      )
+      .setDescription("Social Streaming Platform backend API documentation.")
       .setVersion("1.0")
       .addCookieAuth("access_token", {
         type: "apiKey",

@@ -79,7 +79,7 @@ const enablePaymentFeatures =
     PlaylistsModule, // Module 7 — Sets & Playlists
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
     ...(enablePaymentFeatures ? [StripeModule, PaymentMethodsModule] : []),
-    EntitlementsModule,  // GET /entitlements/me
+    EntitlementsModule, // GET /entitlements/me
   ],
   controllers: [AppController],
   providers: [

@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  MaxLength,
+  IsIn,
+} from "class-validator";
 
 /**
  * OAuth2 Authorization Request DTO (RFC 6749)
@@ -28,8 +34,8 @@ export class AuthorizeDto {
    */
   @IsString()
   @IsNotEmpty()
-  @IsIn(['code'])
-  response_type!: 'code';
+  @IsIn(["code"])
+  response_type!: "code";
 
   /**
    * Space-separated list of scopes (e.g., "read write").
@@ -63,8 +69,8 @@ export class AuthorizeDto {
    */
   @IsOptional()
   @IsString()
-  @IsIn(['S256'])
-  code_challenge_method?: 'S256';
+  @IsIn(["S256"])
+  code_challenge_method?: "S256";
 }
 
 /**

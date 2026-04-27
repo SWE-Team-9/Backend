@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
 
 import {
   BILLING_PROVIDER,
@@ -9,7 +9,7 @@ import {
   PaymentMethodSummary,
   ProviderSubscriptionResult,
   WebhookEvent,
-} from './billing-provider.interface';
+} from "./billing-provider.interface";
 
 // ── Plan catalog (single source of truth) ────────────────────────────────────
 
@@ -23,13 +23,31 @@ const PLAN_CATALOG: Record<
     canDownload: boolean;
   }
 > = {
-  FREE: { priceCents: 0, trialDays: 0, uploadLimit: 3, adsEnabled: true, canDownload: false },
-  PRO: { priceCents: 999, trialDays: 7, uploadLimit: 100, adsEnabled: false, canDownload: true },
-  GO_PLUS: { priceCents: 1999, trialDays: 30, uploadLimit: 1000, adsEnabled: false, canDownload: true },
+  FREE: {
+    priceCents: 0,
+    trialDays: 0,
+    uploadLimit: 3,
+    adsEnabled: true,
+    canDownload: false,
+  },
+  PRO: {
+    priceCents: 999,
+    trialDays: 7,
+    uploadLimit: 100,
+    adsEnabled: false,
+    canDownload: true,
+  },
+  GO_PLUS: {
+    priceCents: 1999,
+    trialDays: 30,
+    uploadLimit: 1000,
+    adsEnabled: false,
+    canDownload: true,
+  },
 };
 
 function mockId(prefix: string): string {
-  return `${prefix}_mock_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  return `${prefix}_mock_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -93,9 +111,11 @@ export class MockStripeBillingProvider implements IBillingProvider {
       return this.customers.get(params.userId)!;
     }
     // TODO(RealStripe): stripe.customers.create({ email, name, metadata: { userId } })
-    const customerId = mockId('cus');
+    const customerId = mockId("cus");
     this.customers.set(params.userId, customerId);
-    this.logger.debug(`[MOCK] Created customer ${customerId} for user ${params.userId}`);
+    this.logger.debug(
+      `[MOCK] Created customer ${customerId} for user ${params.userId}`,
+    );
     return customerId;
   }
 
@@ -124,8 +144,8 @@ export class MockStripeBillingProvider implements IBillingProvider {
     const renewsAt = trialEnd ?? addOneMonth(now);
     const amountDueNow = trialEligible ? 0 : (plan?.priceCents ?? 0);
 
-    const sessionId = mockId('cs');
-    const subId = mockId('sub');
+    const sessionId = mockId("cs");
+    const subId = mockId("sub");
 
     const result: CheckoutSessionResult = {
       checkoutSessionId: sessionId,
@@ -140,13 +160,13 @@ export class MockStripeBillingProvider implements IBillingProvider {
 
     // Store state for later retrieval (mirrors what a real Stripe webhook would deliver)
     this.subscriptions.set(subId, {
-      status: trialEligible ? 'trialing' : 'active',
+      status: trialEligible ? "trialing" : "active",
       currentPeriodStart: now,
       currentPeriodEnd: renewsAt,
       trialStart: trialEligible ? now : undefined,
       trialEnd,
       cancelAtPeriodEnd: false,
-      providerCustomerId: params.providerCustomerId ?? mockId('cus'),
+      providerCustomerId: params.providerCustomerId ?? mockId("cus"),
     });
 
     this.logger.debug(
@@ -164,12 +184,12 @@ export class MockStripeBillingProvider implements IBillingProvider {
     //   customer: params.providerCustomerId,
     //   return_url: params.returnUrl ?? process.env.STRIPE_BILLING_PORTAL_RETURN_URL,
     // })
-    const sessionId = mockId('bps');
+    const sessionId = mockId("bps");
     // Mock payment method: deterministic per-customer safe summary.
     // Real Stripe would populate this from the customer's saved payment methods.
     const mockPaymentMethod: PaymentMethodSummary = {
-      brand: 'visa',
-      last4: '4242',
+      brand: "visa",
+      last4: "4242",
       expiryMonth: 12,
       expiryYear: 2030,
       isDefault: true,
@@ -204,7 +224,7 @@ export class MockStripeBillingProvider implements IBillingProvider {
       if (params.cancelAtPeriodEnd) {
         sub.cancelAtPeriodEnd = true;
       } else {
-        sub.status = 'canceled';
+        sub.status = "canceled";
       }
     }
     this.logger.debug(
@@ -212,13 +232,17 @@ export class MockStripeBillingProvider implements IBillingProvider {
     );
   }
 
-  async resumeSubscription(params: { providerSubscriptionId: string }): Promise<void> {
+  async resumeSubscription(params: {
+    providerSubscriptionId: string;
+  }): Promise<void> {
     // TODO(RealStripe): stripe.subscriptions.update(id, { cancel_at_period_end: false })
     const sub = this.subscriptions.get(params.providerSubscriptionId);
     if (sub) {
       sub.cancelAtPeriodEnd = false;
     }
-    this.logger.debug(`[MOCK] Resumed subscription ${params.providerSubscriptionId}`);
+    this.logger.debug(
+      `[MOCK] Resumed subscription ${params.providerSubscriptionId}`,
+    );
   }
 
   async changePlan(params: {
@@ -240,8 +264,8 @@ export class MockStripeBillingProvider implements IBillingProvider {
 
     return {
       providerSubscriptionId: params.providerSubscriptionId,
-      providerCustomerId: sub?.providerCustomerId ?? mockId('cus'),
-      status: sub?.status ?? 'active',
+      providerCustomerId: sub?.providerCustomerId ?? mockId("cus"),
+      status: sub?.status ?? "active",
       currentPeriodStart: sub?.currentPeriodStart ?? now,
       currentPeriodEnd: periodEnd,
       cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
@@ -256,8 +280,8 @@ export class MockStripeBillingProvider implements IBillingProvider {
     const now = new Date();
     return {
       providerSubscriptionId,
-      providerCustomerId: sub?.providerCustomerId ?? mockId('cus'),
-      status: sub?.status ?? 'active',
+      providerCustomerId: sub?.providerCustomerId ?? mockId("cus"),
+      status: sub?.status ?? "active",
       currentPeriodStart: sub?.currentPeriodStart ?? now,
       currentPeriodEnd: sub?.currentPeriodEnd ?? addOneMonth(now),
       trialStart: sub?.trialStart,
@@ -272,11 +296,11 @@ export class MockStripeBillingProvider implements IBillingProvider {
     try {
       const parsed = JSON.parse(rawBody.toString()) as WebhookEvent;
       if (!parsed.id || !parsed.type) {
-        throw new Error('Invalid webhook payload: missing id or type');
+        throw new Error("Invalid webhook payload: missing id or type");
       }
       return parsed;
     } catch {
-      throw new Error('WEBHOOK_INVALID_SIGNATURE');
+      throw new Error("WEBHOOK_INVALID_SIGNATURE");
     }
   }
 }

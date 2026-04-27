@@ -422,7 +422,8 @@ export class MailService {
     expiryYear: number;
   }): Promise<void> {
     const brandDisplay =
-      params.brand.charAt(0).toUpperCase() + params.brand.slice(1).toLowerCase();
+      params.brand.charAt(0).toUpperCase() +
+      params.brand.slice(1).toLowerCase();
     const expiryDisplay = `${String(params.expiryMonth).padStart(2, "0")}/${params.expiryYear}`;
     const cardDisplay = `${brandDisplay} ending in ${params.last4}`;
 
