@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Stripe from 'stripe';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import Stripe from "stripe";
 
 @Injectable()
 export class StripeService {
@@ -8,9 +8,9 @@ export class StripeService {
   private readonly logger = new Logger(StripeService.name);
 
   constructor(private readonly config: ConfigService) {
-    const secretKey = this.config.get<string>('stripe.secretKey') ?? '';
+    const secretKey = this.config.get<string>("stripe.secretKey") ?? "";
     this.stripe = new Stripe(secretKey, {
-      apiVersion: '2025-08-27.basil',
+      apiVersion: "2025-08-27.basil",
       typescript: true,
     });
   }
@@ -55,7 +55,7 @@ export class StripeService {
   async createSetupIntent(customerId: string): Promise<Stripe.SetupIntent> {
     return this.stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ['card'],
+      payment_method_types: ["card"],
     });
   }
 
@@ -85,7 +85,7 @@ export class StripeService {
   ): Promise<Stripe.PaymentMethod[]> {
     const response = await this.stripe.paymentMethods.list({
       customer: customerId,
-      type: 'card',
+      type: "card",
     });
     return response.data;
   }
@@ -113,7 +113,7 @@ export class StripeService {
       trial_period_days: params.trialPeriodDays,
       metadata: params.metadata ?? {},
       // Expand the latest invoice so we can inspect its payment intent
-      expand: ['latest_invoice.payment_intent'],
+      expand: ["latest_invoice.payment_intent"],
     });
   }
 
@@ -161,6 +161,10 @@ export class StripeService {
     signature: string,
     webhookSecret: string,
   ): Stripe.Event {
-    return this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    return this.stripe.webhooks.constructEvent(
+      payload,
+      signature,
+      webhookSecret,
+    );
   }
 }

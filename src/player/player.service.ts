@@ -21,8 +21,14 @@ export class PlayerService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.storageProvider = this.config.get<"local" | "s3">("storage.provider", "local");
-    this.localUploadUrl = this.config.get<string>("storage.localUploadUrl", "http://localhost:3000/uploads");
+    this.storageProvider = this.config.get<"local" | "s3">(
+      "storage.provider",
+      "local",
+    );
+    this.localUploadUrl = this.config.get<string>(
+      "storage.localUploadUrl",
+      "http://localhost:3000/uploads",
+    );
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
     this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
@@ -127,7 +133,13 @@ export class PlayerService {
     await this.prisma.playbackProgress.upsert({
       where: { userId_trackId: { userId, trackId } },
       update: { positionSeconds, durationSeconds, isCompleted },
-      create: { userId, trackId, positionSeconds, durationSeconds, isCompleted },
+      create: {
+        userId,
+        trackId,
+        positionSeconds,
+        durationSeconds,
+        isCompleted,
+      },
     });
 
     return {
@@ -263,9 +275,7 @@ export class PlayerService {
         isCompleted: true,
       },
     });
-    const progressMap = new Map(
-      progressRecords.map((p) => [p.trackId, p]),
-    );
+    const progressMap = new Map(progressRecords.map((p) => [p.trackId, p]));
 
     return {
       page,
@@ -355,7 +365,10 @@ export class PlayerService {
 
     return {
       currentTrack: session.currentTrack
-        ? { trackId: session.currentTrack.id, title: session.currentTrack.title }
+        ? {
+            trackId: session.currentTrack.id,
+            title: session.currentTrack.title,
+          }
         : null,
       positionSeconds: session.positionSeconds,
       isPlaying: session.isPlaying,
@@ -394,7 +407,9 @@ export class PlayerService {
           queueTrackIds: body.queueTrackIds,
         }),
         ...(body.shuffle !== undefined && { shuffle: body.shuffle }),
-        ...(body.repeatMode !== undefined && { repeatMode: body.repeatMode as any }),
+        ...(body.repeatMode !== undefined && {
+          repeatMode: body.repeatMode as any,
+        }),
       },
       create: {
         userId,

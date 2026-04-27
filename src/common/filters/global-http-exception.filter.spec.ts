@@ -180,7 +180,7 @@ describe("GlobalHttpExceptionFilter", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Message parsing — string body
+  // Message parsing - string body
   // -------------------------------------------------------------------------
 
   describe("string exception body", () => {
@@ -195,10 +195,10 @@ describe("GlobalHttpExceptionFilter", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Message parsing — object body with string message
+  // Message parsing - object body with string message
   // -------------------------------------------------------------------------
 
-  describe("object exception body — single string message", () => {
+  describe("object exception body - single string message", () => {
     it("should use message string from the exception response object", () => {
       const host = buildHost();
       filter.catch(
@@ -246,10 +246,10 @@ describe("GlobalHttpExceptionFilter", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Message parsing — array of messages (ValidationPipe output)
+  // Message parsing - array of messages (ValidationPipe output)
   // -------------------------------------------------------------------------
 
-  describe("object exception body — array of messages", () => {
+  describe("object exception body - array of messages", () => {
     it("should join array messages into a single comma-separated string", () => {
       const host = buildHost();
       filter.catch(
@@ -287,14 +287,14 @@ describe("GlobalHttpExceptionFilter", () => {
         new HttpException({ message: [] }, HttpStatus.BAD_REQUEST),
         host,
       );
-      // An empty join produces an empty string — the filter should still not crash
+      // An empty join produces an empty string - the filter should still not crash
       const payload = getJsonPayload(host)!;
       expect(payload).toHaveProperty("message");
     });
   });
 
   // -------------------------------------------------------------------------
-  // Non-HTTP exceptions — fallback behaviour
+  // Non-HTTP exceptions - fallback behaviour
   // -------------------------------------------------------------------------
 
   describe("non-HTTP exceptions", () => {
@@ -317,7 +317,7 @@ describe("GlobalHttpExceptionFilter", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Guard integration scenario — simulating guard-thrown exceptions
+  // Guard integration scenario - simulating guard-thrown exceptions
   // -------------------------------------------------------------------------
 
   describe("guard-thrown exception scenarios", () => {

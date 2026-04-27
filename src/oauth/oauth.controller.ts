@@ -10,16 +10,22 @@ import {
   UnauthorizedException,
   Req,
   Res,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiConsumes } from '@nestjs/swagger';
-import { OAuthService } from './oauth.service';
-import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
-import { CallbackDto } from './dto/callback.dto';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
-import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
-import { Request, Response } from 'express';
-import { CookieService } from '../auth/services/cookie.service';
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiConsumes,
+} from "@nestjs/swagger";
+import { OAuthService } from "./oauth.service";
+import { AuthorizeDto, TokenDto, RevokeDto } from "./dto";
+import { CallbackDto } from "./dto/callback.dto";
+import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { Public } from "../common/decorators/public.decorator";
+import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
+import { Request, Response } from "express";
+import { CookieService } from "../auth/services/cookie.service";
 
 /**
  * OAuth2 Provider Controller (RFC 6749, RFC 7009, RFC 7636)
@@ -40,8 +46,8 @@ import { CookieService } from '../auth/services/cookie.service';
  * - PKCE support for public clients (mobile apps, SPAs)
  * - Token and revoke endpoints are rate-limited to stop brute-force attacks
  */
-@ApiTags('OAuth2 Provider')
-@Controller('oauth')
+@ApiTags("OAuth2 Provider")
+@Controller("oauth")
 export class OAuthController {
   constructor(
     private readonly oauthService: OAuthService,
@@ -53,7 +59,7 @@ export class OAuthController {
   // ---------------------------------------------------------------------------
 
   @ApiOperation({
-    summary: '[RFC 6749] OAuth2 authorization request',
+    summary: "[RFC 6749] OAuth2 authorization request",
     description: `
 **Purpose:** First step of OAuth2 authorization code flow. User's browser is redirected here by third-party app. User sees consent screen ("App X wants access to your account"). After approval, redirect back to the third-party app with authorization code.
 
@@ -80,8 +86,8 @@ export class OAuthController {
 - Code is single-use (consuming same code twice returns error)
 
 **Permissions Model:** Scopes define what the third-party app can do:
-- "read" — Read access to user profile, library
-- "write" — Write access to playlists, reposts, likes
+- "read" - Read access to user profile, library
+- "write" - Write access to playlists, reposts, likes
 - Third-party app cannot request scopes beyond what your admin allowed
 
 **Error Behavior:**
@@ -93,63 +99,84 @@ export class OAuthController {
   @ApiResponse({
     status: 302,
     description:
-      'Redirect to redirect_uri with authorization code. Format: {redirect_uri}?code={code}&state={state}',
+      "Redirect to redirect_uri with authorization code. Format: {redirect_uri}?code={code}&state={state}",
     schema: {
-      type: 'object',
+      type: "object",
       properties: {
-        code: { type: 'string', description: 'Single-use authorization code (60-second TTL)' },
-        state: { type: 'string', description: 'Original state parameter (unchanged)' },
+        code: {
+          type: "string",
+          description: "Single-use authorization code (60-second TTL)",
+        },
+        state: {
+          type: "string",
+          description: "Original state parameter (unchanged)",
+        },
       },
     },
   })
   @ApiResponse({
     status: 400,
     description:
-      'Invalid request (missing params, invalid client, mismatched redirect_uri, unsupported response_type)',
+      "Invalid request (missing params, invalid client, mismatched redirect_uri, unsupported response_type)",
   })
   @ApiResponse({
     status: 302,
-    description: 'User denied. Redirect: {redirect_uri}?error=access_denied&state={state}',
+    description:
+      "User denied. Redirect: {redirect_uri}?error=access_denied&state={state}",
   })
-  @ApiQuery({ name: 'client_id', required: true, description: 'Third-party app client ID' })
-  @ApiQuery({ name: 'redirect_uri', required: true, description: 'Must match registered URI' })
   @ApiQuery({
-    name: 'response_type',
+    name: "client_id",
+    required: true,
+    description: "Third-party app client ID",
+  })
+  @ApiQuery({
+    name: "redirect_uri",
+    required: true,
+    description: "Must match registered URI",
+  })
+  @ApiQuery({
+    name: "response_type",
     required: true,
     description: 'Must be "code"',
-    enum: ['code'],
+    enum: ["code"],
   })
-  @ApiQuery({ name: 'scope', required: true, description: 'Space-separated list (e.g., "read write")' })
   @ApiQuery({
-    name: 'state',
+    name: "scope",
     required: true,
-    description: 'CSRF protection token generated by client',
+    description: 'Space-separated list (e.g., "read write")',
   })
   @ApiQuery({
-    name: 'code_challenge',
+    name: "state",
+    required: true,
+    description: "CSRF protection token generated by client",
+  })
+  @ApiQuery({
+    name: "code_challenge",
     required: false,
-    description: 'PKCE: BASE64-URL(SHA256(code_verifier))',
+    description: "PKCE: BASE64-URL(SHA256(code_verifier))",
   })
   @ApiQuery({
-    name: 'code_challenge_method',
+    name: "code_challenge_method",
     required: false,
     description: 'PKCE: Must be "S256"',
   })
-  @Get('authorize')
+  @Get("authorize")
   @Public()
   @Redirect()
   async authorize(
     @Query() query: AuthorizeDto,
-    @CurrentUser('userId') userId?: string,
+    @CurrentUser("userId") userId?: string,
   ) {
-    if (query.response_type !== 'code') {
-      throw new BadRequestException('unsupported_response_type');
+    if (query.response_type !== "code") {
+      throw new BadRequestException("unsupported_response_type");
     }
 
     // Native PKCE clients initiate auth without an existing app session.
     if (this.oauthService.isNativeClient(query.client_id)) {
-      if (!query.code_challenge || query.code_challenge_method !== 'S256') {
-        throw new BadRequestException('code_challenge and S256 are required for native clients.');
+      if (!query.code_challenge || query.code_challenge_method !== "S256") {
+        throw new BadRequestException(
+          "code_challenge and S256 are required for native clients.",
+        );
       }
 
       return {
@@ -158,13 +185,13 @@ export class OAuthController {
     }
 
     // Validate code_challenge_method if code_challenge is present
-    if (query.code_challenge && query.code_challenge_method !== 'S256') {
-      throw new BadRequestException('unsupported_code_challenge_method');
+    if (query.code_challenge && query.code_challenge_method !== "S256") {
+      throw new BadRequestException("unsupported_code_challenge_method");
     }
 
     if (!userId) {
       throw new UnauthorizedException(
-        'Authentication is required to access this resource',
+        "Authentication is required to access this resource",
       );
     }
 
@@ -176,7 +203,7 @@ export class OAuthController {
       query.scope,
       query.state,
       query.code_challenge
-        ? { challenge: query.code_challenge, method: 'S256' }
+        ? { challenge: query.code_challenge, method: "S256" }
         : undefined,
     );
 
@@ -194,7 +221,7 @@ export class OAuthController {
   // ---------------------------------------------------------------------------
 
   @ApiOperation({
-    summary: '[RFC 6749] OAuth2 token exchange',
+    summary: "[RFC 6749] OAuth2 token exchange",
     description: `
 **Purpose:** Second step of OAuth2 flow. Third-party app's backend calls this endpoint (server-to-server) to exchange the authorization code for access+refresh tokens.
 
@@ -224,7 +251,7 @@ export class OAuthController {
 
 **Token Format:** Both access and refresh tokens are:
 - Cryptographically random (32 bytes = 256 bits)
-- Opaque (not JWTs) — no structure the third-party app can parse
+- Opaque (not JWTs) - no structure the third-party app can parse
 - Hashed with SHA256 before storage (database breaches don't leak raw tokens)
 - Subject to rate limiting by client (default 1000 reqs/hour)
 
@@ -243,53 +270,56 @@ export class OAuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Token exchange successful',
+    description: "Token exchange successful",
     schema: {
-      type: 'object',
+      type: "object",
       properties: {
         access_token: {
-          type: 'string',
-          description: 'Opaque access token (1 hour TTL)',
+          type: "string",
+          description: "Opaque access token (1 hour TTL)",
         },
         refresh_token: {
-          type: 'string',
-          description: 'Opaque refresh token (30 day TTL)',
+          type: "string",
+          description: "Opaque refresh token (30 day TTL)",
         },
         token_type: {
-          type: 'string',
-          default: 'Bearer',
+          type: "string",
+          default: "Bearer",
         },
         expires_in: {
-          type: 'number',
-          description: 'Access token lifetime in seconds (3600)',
+          type: "number",
+          description: "Access token lifetime in seconds (3600)",
         },
         scope: {
-          type: 'string',
-          description: 'Authorized scopes',
+          type: "string",
+          description: "Authorized scopes",
         },
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description: 'invalid_grant (code expired/not found) or invalid_pkce',
+    description: "invalid_grant (code expired/not found) or invalid_pkce",
   })
   @ApiResponse({
     status: 401,
-    description: 'invalid_client (bad credentials)',
+    description: "invalid_client (bad credentials)",
   })
   // Rate limit: 20 attempts per minute per IP.
   // This stops attackers from brute-forcing client secrets.
-  @Post('token')
-  @ApiConsumes('application/json', 'application/x-www-form-urlencoded')
+  @Post("token")
+  @ApiConsumes("application/json", "application/x-www-form-urlencoded")
   @Public()
   @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
-  async token(@Body() body: TokenDto, @Res({ passthrough: true }) res: Response) {
+  async token(
+    @Body() body: TokenDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     let tokens:
       | {
           access_token: string;
-          token_type: 'Bearer';
+          token_type: "Bearer";
           refresh_token: string;
           expires_in: number;
           scope: string;
@@ -297,9 +327,9 @@ export class OAuthController {
         }
       | undefined;
 
-    if (body.grant_type === 'authorization_code') {
+    if (body.grant_type === "authorization_code") {
       if (!body.code || !body.redirect_uri) {
-        throw new BadRequestException('invalid_request');
+        throw new BadRequestException("invalid_request");
       }
 
       tokens = await this.oauthService.exchangeAuthorizationCode(
@@ -309,13 +339,13 @@ export class OAuthController {
         body.redirect_uri,
         body.code_verifier,
       );
-    } else if (body.grant_type === 'refresh_token') {
+    } else if (body.grant_type === "refresh_token") {
       if (!body.refresh_token) {
-        throw new BadRequestException('invalid_request');
+        throw new BadRequestException("invalid_request");
       }
 
       if (!body.client_secret) {
-        throw new BadRequestException('invalid_client');
+        throw new BadRequestException("invalid_client");
       }
 
       tokens = await this.oauthService.refreshAccessToken(
@@ -324,7 +354,7 @@ export class OAuthController {
         body.refresh_token,
       );
     } else {
-      throw new BadRequestException('unsupported_grant_type');
+      throw new BadRequestException("unsupported_grant_type");
     }
 
     this.cookieService.setNativeOAuthCookies(
@@ -341,7 +371,7 @@ export class OAuthController {
   // ---------------------------------------------------------------------------
 
   @ApiOperation({
-    summary: '[RFC 7009] OAuth2 token revocation',
+    summary: "[RFC 7009] OAuth2 token revocation",
     description: `
 **Purpose:** Allow third-party app to revoke access/refresh tokens when they're no longer needed. Used when:
 - User disconnects the app from their account
@@ -364,8 +394,8 @@ RFC 7009 states that to prevent information leakage about token existence, the e
 This prevents attackers from enumerating valid tokens.
 
 **Token Type Hints:** (optional, helps with performance)
-- "access_token" — search access_token_hash first
-- "refresh_token" — search refresh_token_hash first
+- "access_token" - search access_token_hash first
+- "refresh_token" - search refresh_token_hash first
 - Without hint, search both (slower)
 
 **Security:**
@@ -376,23 +406,24 @@ This prevents attackers from enumerating valid tokens.
   })
   @ApiResponse({
     status: 200,
-    description: 'Token revocations (successful or was already revoked—same response)',
+    description:
+      "Token revocations (successful or was already revoked-same response)",
     schema: {
-      type: 'object',
+      type: "object",
       properties: {
         message: {
-          type: 'string',
-          default: 'Token revoked successfully',
+          type: "string",
+          default: "Token revoked successfully",
         },
       },
     },
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized (invalid client credentials)',
+    description: "Unauthorized (invalid client credentials)",
   })
   // Rate limit: 20 attempts per minute per IP.
-  @Post('revoke')
+  @Post("revoke")
   @Public()
   @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
@@ -409,23 +440,24 @@ This prevents attackers from enumerating valid tokens.
   // ---------------------------------------------------------------------------
 
   @ApiOperation({
-    summary: 'Google OAuth callback for native apps',
+    summary: "Google OAuth callback for native apps",
     description:
-      'Google redirects the user here after authentication. The backend exchanges ' +
-      'the Google code for user info, generates an internal authorization code, ' +
-      'and redirects to the native app custom scheme URI.',
+      "Google redirects the user here after authentication. The backend exchanges " +
+      "the Google code for user info, generates an internal authorization code, " +
+      "and redirects to the native app custom scheme URI.",
   })
   @ApiResponse({
     status: 302,
-    description: 'Redirects to the native app with an internal authorization code.',
+    description:
+      "Redirects to the native app with an internal authorization code.",
   })
-  @ApiResponse({ status: 400, description: 'Missing or invalid code/state.' })
-  @Get('google/callback')
+  @ApiResponse({ status: 400, description: "Missing or invalid code/state." })
+  @Get("google/callback")
   @Public()
   async googleNativeCallback(
-    @Query('code') code: string,
-    @Query('state') state: string,
-    @Query('error') error: string,
+    @Query("code") code: string,
+    @Query("state") state: string,
+    @Query("error") error: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -433,11 +465,11 @@ This prevents attackers from enumerating valid tokens.
       throw new BadRequestException(`Google OAuth error: ${error}`);
     }
     if (!code || !state) {
-      throw new BadRequestException('Missing code or state from Google.');
+      throw new BadRequestException("Missing code or state from Google.");
     }
 
-    const ip = req.ip ?? 'unknown';
-    const userAgent = String(req.headers['user-agent'] ?? 'unknown');
+    const ip = req.ip ?? "unknown";
+    const userAgent = String(req.headers["user-agent"] ?? "unknown");
 
     const result = await this.oauthService.processGoogleNativeCallback(
       code,
@@ -454,20 +486,20 @@ This prevents attackers from enumerating valid tokens.
   // ---------------------------------------------------------------------------
 
   @ApiOperation({
-    summary: 'Native OAuth callback exchange and cookie bridge',
+    summary: "Native OAuth callback exchange and cookie bridge",
     description:
-      'App sends the internal authorization code + PKCE code_verifier. ' +
-      'Backend validates PKCE, sets httpOnly auth cookies, and returns user profile.',
+      "App sends the internal authorization code + PKCE code_verifier. " +
+      "Backend validates PKCE, sets httpOnly auth cookies, and returns user profile.",
   })
   @ApiResponse({
     status: 200,
-    description: 'OAuth callback successful. Cookies set and user returned.',
+    description: "OAuth callback successful. Cookies set and user returned.",
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid/expired code or PKCE verification failed.',
+    description: "Invalid/expired code or PKCE verification failed.",
   })
-  @Post('callback')
+  @Post("callback")
   @Public()
   @HttpCode(200)
   async callback(
@@ -475,8 +507,8 @@ This prevents attackers from enumerating valid tokens.
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const ip = req.ip ?? 'unknown';
-    const userAgent = String(req.headers['user-agent'] ?? 'unknown');
+    const ip = req.ip ?? "unknown";
+    const userAgent = String(req.headers["user-agent"] ?? "unknown");
 
     const result = await this.oauthService.handleCallback(dto, ip, userAgent);
 
@@ -487,7 +519,7 @@ This prevents attackers from enumerating valid tokens.
     );
 
     return {
-      message: 'OAuth login successful',
+      message: "OAuth login successful",
       user: result.user,
     };
   }

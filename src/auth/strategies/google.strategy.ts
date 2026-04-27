@@ -18,7 +18,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     const callbackUrl = configService.get<string>("GOOGLE_CALLBACK_URL");
 
     if (!callbackUrl) {
-      throw new InternalServerErrorException("GOOGLE_CALLBACK_URL is not configured.");
+      throw new InternalServerErrorException(
+        "GOOGLE_CALLBACK_URL is not configured.",
+      );
     }
 
     return callbackUrl;

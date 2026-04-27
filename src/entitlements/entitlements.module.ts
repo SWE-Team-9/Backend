@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module } from "@nestjs/common";
 
-import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
-import { EntitlementsController } from './entitlements.controller';
-import { EntitlementsService } from './entitlements.service';
+import { SubscriptionsModule } from "../subscriptions/subscriptions.module";
+import { EntitlementsController } from "./entitlements.controller";
+import { EntitlementsService } from "./entitlements.service";
 
 @Module({
   imports: [SubscriptionsModule],

@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { NotificationsListener, TrackLikedEvent, ReportCreatedEvent } from "./notifications.listener";
+import {
+  NotificationsListener,
+  TrackLikedEvent,
+  ReportCreatedEvent,
+} from "./notifications.listener";
 import { NotificationsService } from "./notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -39,7 +43,7 @@ describe("NotificationsListener", () => {
     jest.useRealTimers();
   });
 
-  // 1. handleTrackLiked — skips notification when prefs.likes = false
+  // 1. handleTrackLiked - skips notification when prefs.likes = false
   it("handleTrackLiked: skips notification when owner disabled likes preference", async () => {
     mockPrisma.userNotificationPreference.findUnique.mockResolvedValueOnce({
       userId: "owner-1",
@@ -62,7 +66,7 @@ describe("NotificationsListener", () => {
     expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
   });
 
-  // 2. handleReportCreated — notifies ADMIN and MODERATOR users after debounce
+  // 2. handleReportCreated - notifies ADMIN and MODERATOR users after debounce
   it("handleReportCreated: notifies all ADMIN and MODERATOR users after timer fires", async () => {
     mockPrisma.user.findMany.mockResolvedValue([
       { id: "admin-1" },
@@ -83,7 +87,9 @@ describe("NotificationsListener", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(mockPrisma.user.findMany).toHaveBeenCalled();
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(2);
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(
+      2,
+    );
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ recipientId: "admin-1" }),
     );
@@ -92,7 +98,7 @@ describe("NotificationsListener", () => {
     );
   });
 
-  // 3. Debounce — 5 rapid likes result in one notification with count=5 after timer fires
+  // 3. Debounce - 5 rapid likes result in one notification with count=5 after timer fires
   it("handleTrackLiked: fires single notification with count=5 after 5 events debounce", async () => {
     // All prefs enabled
     mockPrisma.userNotificationPreference.findUnique.mockResolvedValue({
@@ -115,13 +121,15 @@ describe("NotificationsListener", () => {
       await listener.handleTrackLiked({ ...event, actorId: `user-${i}` });
     }
 
-    // No notification yet (debounced — timer resets on each call)
+    // No notification yet (debounced - timer resets on each call)
     expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
 
     // Wait for the final 1ms debounce to expire and async handler to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(1);
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(
+      1,
+    );
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         recipientId: "owner-2",

@@ -1,4 +1,4 @@
-import { Exclude, Expose, Type } from 'class-transformer';
+import { Exclude, Expose, Type } from "class-transformer";
 
 @Exclude()
 export class PlaylistOwnerEntity {
@@ -32,7 +32,7 @@ export class PlaylistEntity {
   @Expose()
   visibility!: string;
 
-  @Expose({ groups: ['owner'] })
+  @Expose({ groups: ["owner"] })
   secretToken!: string | null;
 
   @Expose()

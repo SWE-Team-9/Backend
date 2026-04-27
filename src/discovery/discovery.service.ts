@@ -118,16 +118,18 @@ export class DiscoveryService {
   }
 
   async trending(limit = 20, windowDays = 7) {
-    const rawRows = await this.prisma.$queryRaw<Array<{
-      id: string;
-      title: string;
-      slug: string;
-      cover_art_url: string | null;
-      uploader_id: string;
-      recent_plays: bigint;
-      recent_likes: bigint;
-      velocity_score: number;
-    }>>`
+    const rawRows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        slug: string;
+        cover_art_url: string | null;
+        uploader_id: string;
+        recent_plays: bigint;
+        recent_likes: bigint;
+        velocity_score: number;
+      }>
+    >`
       SELECT
         t.id,
         t.title,
@@ -153,7 +155,9 @@ export class DiscoveryService {
       LIMIT ${limit}
     `;
 
-    const uploaderIds = Array.from(new Set(rawRows.map((row) => row.uploader_id)));
+    const uploaderIds = Array.from(
+      new Set(rawRows.map((row) => row.uploader_id)),
+    );
 
     const uploaderProfiles = uploaderIds.length
       ? await this.prisma.userProfile.findMany({
@@ -166,7 +170,9 @@ export class DiscoveryService {
         })
       : [];
 
-    const profileMap = new Map(uploaderProfiles.map((profile) => [profile.userId, profile]));
+    const profileMap = new Map(
+      uploaderProfiles.map((profile) => [profile.userId, profile]),
+    );
 
     return {
       windowDays,

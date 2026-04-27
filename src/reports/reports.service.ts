@@ -160,7 +160,8 @@ export class ReportsService {
 
     const now = new Date();
     const shouldResolve =
-      dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
+      dto.status === ReportStatus.RESOLVED ||
+      dto.status === ReportStatus.REJECTED;
 
     const updatedReport = await this.prisma.report.update({
       where: { id: reportId },
@@ -197,7 +198,8 @@ export class ReportsService {
   async bulkUpdateReports(adminId: string, dto: BulkUpdateReportsDto) {
     const now = new Date();
     const shouldResolve =
-      dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
+      dto.status === ReportStatus.RESOLVED ||
+      dto.status === ReportStatus.REJECTED;
 
     const [reportResult, appealResult] = await this.prisma.$transaction([
       this.prisma.report.updateMany({
@@ -213,14 +215,18 @@ export class ReportsService {
             data: {
               resolutionNotes: dto.resolutionNotes,
               status: dto.status,
-              ...(shouldResolve ? { resolvedAt: now, resolvedBy: adminId } : {}),
+              ...(shouldResolve
+                ? { resolvedAt: now, resolvedBy: adminId }
+                : {}),
             },
           })
         : this.prisma.appeal.updateMany({
             where: { reportId: { in: dto.reportIds } },
             data: {
               status: dto.status,
-              ...(shouldResolve ? { resolvedAt: now, resolvedBy: adminId } : {}),
+              ...(shouldResolve
+                ? { resolvedAt: now, resolvedBy: adminId }
+                : {}),
             },
           }),
     ]);

@@ -89,7 +89,8 @@ export class DailyStatsQueryDto {
 export class MostReportedQueryDto {
   @IsOptional()
   @IsString()
-  period?: "last_7_days" | "last_30_days" | "last_90_days" | "all_time" = "last_30_days";
+  period?: "last_7_days" | "last_30_days" | "last_90_days" | "all_time" =
+    "last_30_days";
 
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))

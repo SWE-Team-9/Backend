@@ -31,15 +31,18 @@ describe("ContentModerationService", () => {
     jest.clearAllMocks();
   });
 
-  // 1. moderateTrack — 404 when track not found
+  // 1. moderateTrack - 404 when track not found
   it("moderateTrack: throws 404 when track does not exist", async () => {
     mockPrisma.track.findUnique.mockResolvedValueOnce(null);
     await expect(
-      service.moderateTrack("admin-1", "no-track", { moderationState: "HIDDEN", reason: "test violation reason here" }),
+      service.moderateTrack("admin-1", "no-track", {
+        moderationState: "HIDDEN",
+        reason: "test violation reason here",
+      }),
     ).rejects.toThrow(NotFoundException);
   });
 
-  // 2. moderateTrack — 400 NO_STATE_CHANGE when state is unchanged
+  // 2. moderateTrack - 400 NO_STATE_CHANGE when state is unchanged
   it("moderateTrack: throws 400 NO_STATE_CHANGE when state is already the same", async () => {
     mockPrisma.track.findUnique.mockResolvedValueOnce({
       id: "track-1",
@@ -48,11 +51,14 @@ describe("ContentModerationService", () => {
       moderationState: "HIDDEN",
     });
     await expect(
-      service.moderateTrack("admin-1", "track-1", { moderationState: "HIDDEN", reason: "test reason no change" }),
+      service.moderateTrack("admin-1", "track-1", {
+        moderationState: "HIDDEN",
+        reason: "test reason no change",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
-  // 3. moderateTrack — inserts ModerationAction on success
+  // 3. moderateTrack - inserts ModerationAction on success
   it("moderateTrack: inserts ModerationAction when state changes", async () => {
     mockPrisma.track.findUnique.mockResolvedValueOnce({
       id: "track-1",
@@ -66,7 +72,9 @@ describe("ContentModerationService", () => {
       actionType: "HIDE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+    mockNotificationsService.createNotification.mockResolvedValueOnce(
+      undefined,
+    );
 
     const result = await service.moderateTrack("admin-1", "track-1", {
       moderationState: "HIDDEN",
@@ -85,7 +93,7 @@ describe("ContentModerationService", () => {
     expect(result.action_type).toBe("HIDE_TRACK");
   });
 
-  // 4. moderateTrack — emits notification to uploader
+  // 4. moderateTrack - emits notification to uploader
   it("moderateTrack: emits REPORT_RESOLVED notification to track uploader", async () => {
     const uploaderId = "uploader-X";
     mockPrisma.track.findUnique.mockResolvedValueOnce({
@@ -100,7 +108,9 @@ describe("ContentModerationService", () => {
       actionType: "REMOVE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+    mockNotificationsService.createNotification.mockResolvedValueOnce(
+      undefined,
+    );
 
     await service.moderateTrack("admin-1", "track-2", {
       moderationState: "REMOVED",

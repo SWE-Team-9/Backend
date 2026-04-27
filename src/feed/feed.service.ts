@@ -65,10 +65,7 @@ export class FeedService {
             },
           },
         },
-        orderBy: [
-          { publishedAt: "desc" },
-          { createdAt: "desc" },
-        ],
+        orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
         skip: computedOffset,
         take: limit,
       }),
