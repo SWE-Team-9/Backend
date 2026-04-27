@@ -45,6 +45,10 @@ function buildPrismaMock() {
       updateMany: jest.fn(),
       delete: jest.fn(),
     },
+    playlistLike: {
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   };
 
   return prismaMock;
@@ -361,6 +365,63 @@ describe('PlaylistsService', () => {
       prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_x' });
       await expect(service.remove('usr_1', 'pl_101')).rejects.toBeInstanceOf(
         ForbiddenException,
+      );
+    });
+  });
+
+  describe('likePlaylist', () => {
+    it('likes a playlist', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101' });
+      prisma.playlistLike.upsert.mockResolvedValue({});
+
+      const result = await service.likePlaylist('usr_1', 'pl_101');
+
+      expect(prisma.playlistLike.upsert).toHaveBeenCalledWith({
+        where: {
+          userId_playlistId: {
+            userId: 'usr_1',
+            playlistId: 'pl_101',
+          },
+        },
+        update: {},
+        create: {
+          userId: 'usr_1',
+          playlistId: 'pl_101',
+        },
+      });
+      expect(result).toEqual({ message: 'Playlist liked successfully' });
+    });
+
+    it('throws when playlist is missing', async () => {
+      prisma.playlist.findFirst.mockResolvedValue(null);
+
+      await expect(service.likePlaylist('usr_1', 'missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('unlikePlaylist', () => {
+    it('unlikes a playlist', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101' });
+      prisma.playlistLike.deleteMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.unlikePlaylist('usr_1', 'pl_101');
+
+      expect(prisma.playlistLike.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'usr_1',
+          playlistId: 'pl_101',
+        },
+      });
+      expect(result).toEqual({ message: 'Playlist unliked successfully' });
+    });
+
+    it('throws when playlist is missing', async () => {
+      prisma.playlist.findFirst.mockResolvedValue(null);
+
+      await expect(service.unlikePlaylist('usr_1', 'missing')).rejects.toBeInstanceOf(
+        NotFoundException,
       );
     });
   });

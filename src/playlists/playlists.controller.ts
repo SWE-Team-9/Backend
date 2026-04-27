@@ -133,6 +133,62 @@ export class PlaylistsController {
     return this.playlistsService.resolveSecret(params.secretToken);
   }
 
+  @Post(':playlistId/like')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Like playlist',
+    description: 'Adds the playlist to the authenticated user\'s liked playlists.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Playlist liked successfully.',
+    schema: {
+      example: {
+        message: 'Playlist liked successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  @ThrottlePolicy(60, 60_000)
+  likePlaylist(@CurrentUser('userId') userId: string, @Param() params: GetPlaylistDetailsParamsDto) {
+    return this.playlistsService.likePlaylist(userId, params.playlistId);
+  }
+
+  @Delete(':playlistId/like')
+  @ApiOperation({
+    summary: 'Unlike playlist',
+    description: 'Removes the playlist from the authenticated user\'s liked playlists.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playlist unliked successfully.',
+    schema: {
+      example: {
+        message: 'Playlist unliked successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  @ThrottlePolicy(60, 60_000)
+  unlikePlaylist(
+    @CurrentUser('userId') userId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
+  ) {
+    return this.playlistsService.unlikePlaylist(userId, params.playlistId);
+  }
+
   @Get(':playlistId/embed')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({

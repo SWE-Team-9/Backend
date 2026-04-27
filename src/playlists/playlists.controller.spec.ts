@@ -31,6 +31,12 @@ function buildServiceMock() {
       visibility: "PRIVATE",
       message: "Access granted via secret token",
     }),
+    likePlaylist: jest.fn().mockResolvedValue({
+      message: "Playlist liked successfully",
+    }),
+    unlikePlaylist: jest.fn().mockResolvedValue({
+      message: "Playlist unliked successfully",
+    }),
     getEmbedCode: jest.fn().mockResolvedValue({
       playlistId: "pl_101",
       embedCode:
@@ -166,6 +172,26 @@ describe("PlaylistsController", () => {
         .expect(200);
 
       expect(service.resolveSecret).toHaveBeenCalledWith("sec_abc");
+    });
+  });
+
+  describe("POST /playlists/:playlistId/like", () => {
+    it("likes playlist", async () => {
+      await request(app.getHttpServer())
+        .post("/playlists/pl_101/like")
+        .expect(201);
+
+      expect(service.likePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
+    });
+  });
+
+  describe("DELETE /playlists/:playlistId/like", () => {
+    it("unlikes playlist", async () => {
+      await request(app.getHttpServer())
+        .delete("/playlists/pl_101/like")
+        .expect(200);
+
+      expect(service.unlikePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
     });
   });
 

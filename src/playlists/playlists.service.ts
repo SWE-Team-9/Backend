@@ -460,6 +460,71 @@ export class PlaylistsService {
     this.logAudit('playlist.delete', userId, playlist.id);
   }
 
+  async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!playlist) {
+      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+    }
+
+    await this.prisma.playlistLike.upsert({
+      where: {
+        userId_playlistId: {
+          userId,
+          playlistId: playlist.id,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        playlistId: playlist.id,
+      },
+    });
+
+    this.logAudit('playlist.like', userId, playlist.id);
+
+    return {
+      message: 'Playlist liked successfully',
+    };
+  }
+
+  async unlikePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!playlist) {
+      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+    }
+
+    await this.prisma.playlistLike.deleteMany({
+      where: {
+        userId,
+        playlistId: playlist.id,
+      },
+    });
+
+    this.logAudit('playlist.unlike', userId, playlist.id);
+
+    return {
+      message: 'Playlist unliked successfully',
+    };
+  }
+
   async addTrack(
     userId: string,
     playlistId: string,
