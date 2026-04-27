@@ -281,6 +281,17 @@ export class PlayerController {
     return this.playerService.updateSession(userId, body);
   }
 
+  // POST alias for PUT /player/session - used by navigator.sendBeacon on page unload
+  @Post("session")
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  updateSessionBeacon(
+    @CurrentUser("userId") userId: string,
+    @Body() body: UpdateSessionDto,
+  ) {
+    return this.playerService.updateSession(userId, body);
+  }
+
   // 11. GET /player/tracks/:trackId/preview
   @Get("tracks/:trackId/preview")
   @Public()
