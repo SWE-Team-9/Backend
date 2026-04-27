@@ -186,11 +186,18 @@ describe('TracksService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
   let config: ReturnType<typeof buildConfigMock>;
   let transcodingService: { processTrack: jest.Mock };
+  let subscriptionsServiceMock: { getUploadQuota: jest.Mock };
+  let storageServiceMock: { upload: jest.Mock; delete: jest.Mock };
 
   beforeEach(async () => {
     prisma = buildPrismaMock();
     config = buildConfigMock();
     transcodingService = { processTrack: jest.fn().mockResolvedValue(undefined) };
+    subscriptionsServiceMock = { getUploadQuota: jest.fn().mockResolvedValue({ uploadLimit: 100, uploadedCount: 0 }) };
+    storageServiceMock = {
+      upload: jest.fn().mockResolvedValue({ url: 'https://cdn.example.com/cover/test.jpg', key: 'cover/test.jpg' }),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -198,8 +205,8 @@ describe('TracksService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: config },
         { provide: TranscodingService, useValue: transcodingService },
-        { provide: StorageService, useValue: { upload: jest.fn().mockResolvedValue({ url: 'https://cdn.example.com/cover/test.jpg', key: 'cover/test.jpg' }), delete: jest.fn().mockResolvedValue(undefined) } },
-        { provide: SubscriptionsService, useValue: { getUploadQuota: jest.fn().mockResolvedValue({ uploadLimit: 100, uploadedCount: 0 }) } },
+        { provide: StorageService, useValue: storageServiceMock },
+        { provide: SubscriptionsService, useValue: subscriptionsServiceMock },
       ],
     }).compile();
 
@@ -362,6 +369,81 @@ describe('TracksService', () => {
       const file = buildMulterFile({ mimetype: 'application/octet-stream' });
       const result = await service.uploadTrack(USER_ID, { title: 'Unknown Mime' }, file);
       expect(result.trackId).toBe(TRACK_ID);
+    });
+
+    // ── Upload quota enforcement ─────────────────────────────────────────────
+
+    it('should throw ForbiddenException when free user has reached the 3-track limit', async () => {
+      subscriptionsServiceMock.getUploadQuota.mockResolvedValue({ uploadLimit: 3, uploadedCount: 3 });
+      const file = buildMulterFile();
+
+      await expect(
+        service.uploadTrack(USER_ID, { title: 'Over Limit' }, file),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow upload when free user still has quota remaining (2 of 3 used)', async () => {
+      subscriptionsServiceMock.getUploadQuota.mockResolvedValue({ uploadLimit: 3, uploadedCount: 2 });
+      const file = buildMulterFile();
+
+      const result = await service.uploadTrack(USER_ID, { title: 'Under Limit' }, file);
+      expect(result.trackId).toBe(TRACK_ID);
+    });
+
+    it('should allow PRO user to upload beyond 3 tracks (uploadLimit=100, uploadedCount=50)', async () => {
+      subscriptionsServiceMock.getUploadQuota.mockResolvedValue({ uploadLimit: 100, uploadedCount: 50 });
+      const file = buildMulterFile();
+
+      const result = await service.uploadTrack(USER_ID, { title: 'PRO Track 51' }, file);
+      expect(result.trackId).toBe(TRACK_ID);
+    });
+
+    it('should allow GO+ user with high track count (uploadLimit=1000, uploadedCount=500)', async () => {
+      subscriptionsServiceMock.getUploadQuota.mockResolvedValue({ uploadLimit: 1000, uploadedCount: 500 });
+      const file = buildMulterFile();
+
+      const result = await service.uploadTrack(USER_ID, { title: 'GO+ Track' }, file);
+      expect(result.trackId).toBe(TRACK_ID);
+    });
+
+    // ── Cover art upload ─────────────────────────────────────────────────────
+
+    it('should upload with cover art and set coverArtUrl on the track', async () => {
+      const file = buildMulterFile();
+      const coverArtFile = buildMulterFile({
+        fieldname: 'coverArt',
+        originalname: 'cover.jpg',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.alloc(1024, 0xff),
+      });
+
+      prisma.track.create.mockResolvedValue({
+        id: TRACK_ID,
+        uploaderId: USER_ID,
+        title: 'With Cover',
+        slug: 'with-cover',
+        status: TrackStatus.PROCESSING,
+        visibility: TrackVisibility.PRIVATE,
+        coverArtUrl: 'https://cdn.example.com/cover/test.jpg',
+      });
+
+      const result = await service.uploadTrack(USER_ID, { title: 'With Cover' }, file, coverArtFile);
+
+      expect(storageServiceMock.upload).toHaveBeenCalledTimes(1);
+      expect(storageServiceMock.upload).toHaveBeenCalledWith(
+        coverArtFile.buffer,
+        expect.objectContaining({ type: 'cover', mimeType: 'image/jpeg' }),
+      );
+      expect(result.coverArtUrl).toBe('https://cdn.example.com/cover/test.jpg');
+    });
+
+    it('should upload without cover art and have null coverArtUrl', async () => {
+      const file = buildMulterFile();
+
+      const result = await service.uploadTrack(USER_ID, { title: 'No Cover' }, file);
+
+      expect(storageServiceMock.upload).not.toHaveBeenCalled();
+      expect(result.coverArtUrl).toBeNull();
     });
   });
 
