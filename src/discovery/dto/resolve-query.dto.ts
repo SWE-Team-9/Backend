@@ -3,7 +3,8 @@ import { IsNotEmpty, IsString, MaxLength } from "class-validator";
 
 export class ResolveQueryDto {
   @ApiProperty({
-    description: "Public URL or path to resolve (for example /username/track-slug)",
+    description:
+      "Public URL or path to resolve (for example /username/track-slug)",
     example: "/john-doe/night-drive",
   })
   @IsString()

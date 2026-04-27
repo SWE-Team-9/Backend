@@ -94,14 +94,17 @@ export class SessionService {
 
   // Rotate the refresh token (revoke old session, create new one)
   // This keeps the old hash in the DB so we can detect token reuse
-  async rotateRefreshToken(oldSession: {
-    id: string;
-    userId: string;
-    deviceId: string;
-    ipAddress: string | null;
-    userAgent: string | null;
-    expiresAt: Date;
-  }, newHash: string): Promise<string> {
+  async rotateRefreshToken(
+    oldSession: {
+      id: string;
+      userId: string;
+      deviceId: string;
+      ipAddress: string | null;
+      userAgent: string | null;
+      expiresAt: Date;
+    },
+    newHash: string,
+  ): Promise<string> {
     // Revoke the old session (keeps old hash in DB for reuse detection)
     await this.prisma.userSession.update({
       where: { id: oldSession.id },
@@ -141,7 +144,10 @@ export class SessionService {
   }
 
   // Revoke all sessions EXCEPT a specific one
-  async revokeOtherSessions(userId: string, keepSessionId: string): Promise<void> {
+  async revokeOtherSessions(
+    userId: string,
+    keepSessionId: string,
+  ): Promise<void> {
     await this.prisma.userSession.updateMany({
       where: {
         userId,

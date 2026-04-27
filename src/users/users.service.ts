@@ -78,29 +78,30 @@ export class UsersService {
         is_private: true,
       };
     }
-//Menna
-    const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
-      this.prisma.userFavoriteGenre.findMany({
-        where: { userId: profile.userId },
-        include: { genre: true },
-      }),
-      this.prisma.userSocialLink.findMany({
-        where: { userId: profile.userId },
-        orderBy: { createdAt: "asc" },
-      }),
-      profile.accountType === "ARTIST"
-        ? this.prisma.track.count({
-            where: { uploaderId: profile.userId, deletedAt: null },
-          })
-        : Promise.resolve(0), //Menna
-      this.prisma.userFollow.count({
-        where: { followingId: profile.userId },
-      }),
-      this.prisma.userFollow.count({
-        where: { followerId: profile.userId },
-      }),
-    ]);
-//Menna
+    //Menna
+    const [genres, socialLinks, trackCount, followersCount, followingCount] =
+      await Promise.all([
+        this.prisma.userFavoriteGenre.findMany({
+          where: { userId: profile.userId },
+          include: { genre: true },
+        }),
+        this.prisma.userSocialLink.findMany({
+          where: { userId: profile.userId },
+          orderBy: { createdAt: "asc" },
+        }),
+        profile.accountType === "ARTIST"
+          ? this.prisma.track.count({
+              where: { uploaderId: profile.userId, deletedAt: null },
+            })
+          : Promise.resolve(0), //Menna
+        this.prisma.userFollow.count({
+          where: { followingId: profile.userId },
+        }),
+        this.prisma.userFollow.count({
+          where: { followerId: profile.userId },
+        }),
+      ]);
+    //Menna
     return this.formatFullProfile(
       profile,
       genres,
@@ -120,29 +121,30 @@ export class UsersService {
     if (!profile) {
       throw new NotFoundException("Profile not found.");
     }
-//Menna
-    const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
-      this.prisma.userFavoriteGenre.findMany({
-        where: { userId },
-        include: { genre: true },
-      }),
-      this.prisma.userSocialLink.findMany({
-        where: { userId },
-        orderBy: { createdAt: "asc" },
-      }),
-      profile.accountType === "ARTIST"
-        ? this.prisma.track.count({
-            where: { uploaderId: userId, deletedAt: null },
-          })
-        : Promise.resolve(0),
+    //Menna
+    const [genres, socialLinks, trackCount, followersCount, followingCount] =
+      await Promise.all([
+        this.prisma.userFavoriteGenre.findMany({
+          where: { userId },
+          include: { genre: true },
+        }),
+        this.prisma.userSocialLink.findMany({
+          where: { userId },
+          orderBy: { createdAt: "asc" },
+        }),
+        profile.accountType === "ARTIST"
+          ? this.prisma.track.count({
+              where: { uploaderId: userId, deletedAt: null },
+            })
+          : Promise.resolve(0),
         // Menna
-      this.prisma.userFollow.count({
-        where: { followingId: userId },
-      }),
-      this.prisma.userFollow.count({
-        where: { followerId: userId },
-      }),
-    ]);
+        this.prisma.userFollow.count({
+          where: { followingId: userId },
+        }),
+        this.prisma.userFollow.count({
+          where: { followerId: userId },
+        }),
+      ]);
 
     return this.formatFullProfile(
       profile,
@@ -197,7 +199,7 @@ export class UsersService {
     // playlists, play events, sessions, etc.) is removed automatically via
     // the onDelete: Cascade constraints defined in schema.prisma.
     await this.prisma.user.delete({ where: { id: userId } });
-    return { message: 'Account deleted successfully.' };
+    return { message: "Account deleted successfully." };
   }
 
   async checkHandleAvailability(handle: string) {

@@ -6,6 +6,13 @@ import {
   ParseUUIDPipe,
   Post,
 } from "@nestjs/common";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { UserEnforcementService } from "./user-enforcement.service";
@@ -16,12 +23,30 @@ import {
   RestoreUserDto,
 } from "./dto/user-enforcement.dto";
 
+@ApiTags("Admin - User Enforcement")
+@ApiCookieAuth("access_token")
 @Controller("admin/users")
 @Roles("ADMIN")
 export class UserEnforcementController {
-  constructor(private readonly userEnforcementService: UserEnforcementService) {}
+  constructor(
+    private readonly userEnforcementService: UserEnforcementService,
+  ) {}
 
   // POST /api/v1/admin/users/:userId/warn
+  @ApiOperation({
+    summary: "Warn a user",
+    description: "Issues a formal warning to a user. Admin only.",
+  })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
+  @ApiResponse({ status: 201, description: "Warning issued." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 404, description: "User not found." })
   @Post(":userId/warn")
   @HttpCode(201)
   warnUser(
@@ -33,6 +58,21 @@ export class UserEnforcementController {
   }
 
   // POST /api/v1/admin/users/:userId/suspend
+  @ApiOperation({
+    summary: "Suspend a user",
+    description:
+      "Temporarily suspends a user account for a specified duration. Admin only.",
+  })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
+  @ApiResponse({ status: 201, description: "User suspended." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 404, description: "User not found." })
   @Post(":userId/suspend")
   @HttpCode(201)
   suspendUser(
@@ -44,6 +84,20 @@ export class UserEnforcementController {
   }
 
   // POST /api/v1/admin/users/:userId/ban
+  @ApiOperation({
+    summary: "Ban a user",
+    description: "Permanently bans a user account. Admin only.",
+  })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
+  @ApiResponse({ status: 201, description: "User banned." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 404, description: "User not found." })
   @Post(":userId/ban")
   @HttpCode(201)
   banUser(
@@ -55,6 +109,21 @@ export class UserEnforcementController {
   }
 
   // POST /api/v1/admin/users/:userId/restore
+  @ApiOperation({
+    summary: "Restore a user",
+    description:
+      "Lifts a suspension or ban, restoring the user's account access. Admin only.",
+  })
+  @ApiParam({
+    name: "userId",
+    type: "string",
+    format: "uuid",
+    description: "Target user UUID.",
+  })
+  @ApiResponse({ status: 200, description: "User restored." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 404, description: "User not found." })
   @Post(":userId/restore")
   @HttpCode(200)
   restoreUser(

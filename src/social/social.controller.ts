@@ -28,10 +28,13 @@ export class SocialController {
 
   @ApiOperation({
     summary: "Follow user",
-    description:
-      "Allows the authenticated user to follow another user.",
+    description: "Allows the authenticated user to follow another user.",
   })
-  @ApiParam({ name: "userId", description: "Target user ID", example: "usr_456" })
+  @ApiParam({
+    name: "userId",
+    description: "Target user ID",
+    example: "usr_456",
+  })
   @ApiResponse({
     status: 201,
     description: "User followed successfully.",
@@ -65,7 +68,11 @@ export class SocialController {
     description:
       "Removes a follow relationship between the authenticated user and the target user.",
   })
-  @ApiParam({ name: "userId", description: "Target user ID", example: "usr_456" })
+  @ApiParam({
+    name: "userId",
+    description: "Target user ID",
+    example: "usr_456",
+  })
   @ApiResponse({
     status: 200,
     description: "User unfollowed successfully.",
@@ -197,9 +204,14 @@ export class SocialController {
 
   @ApiOperation({
     summary: "Block user",
-    description: "Blocks a specific user and prevents direct social interaction.",
+    description:
+      "Blocks a specific user and prevents direct social interaction.",
   })
-  @ApiParam({ name: "userId", description: "User ID to block", example: "usr_999" })
+  @ApiParam({
+    name: "userId",
+    description: "User ID to block",
+    example: "usr_999",
+  })
   @ApiResponse({
     status: 201,
     description: "User blocked successfully.",
@@ -230,7 +242,11 @@ export class SocialController {
     summary: "Unblock user",
     description: "Removes a user from the authenticated user's blocked list.",
   })
-  @ApiParam({ name: "userId", description: "User ID to unblock", example: "usr_999" })
+  @ApiParam({
+    name: "userId",
+    description: "User ID to unblock",
+    example: "usr_999",
+  })
   @ApiResponse({
     status: 200,
     description: "User unblocked successfully.",

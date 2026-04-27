@@ -38,17 +38,26 @@ export class UserEnforcementService {
     }
   }
 
-  private async verifyAdminPassword(adminId: string, password: string): Promise<void> {
+  private async verifyAdminPassword(
+    adminId: string,
+    password: string,
+  ): Promise<void> {
     const admin = await this.prisma.user.findUnique({
       where: { id: adminId },
       select: { passwordHash: true },
     });
     if (!admin?.passwordHash) {
-      throw new UnauthorizedException({ code: "INCORRECT_PASSWORD", message: "Cannot verify password." });
+      throw new UnauthorizedException({
+        code: "INCORRECT_PASSWORD",
+        message: "Cannot verify password.",
+      });
     }
     const valid = await argon2.verify(admin.passwordHash, password);
     if (!valid) {
-      throw new UnauthorizedException({ code: "INCORRECT_PASSWORD", message: "Incorrect password." });
+      throw new UnauthorizedException({
+        code: "INCORRECT_PASSWORD",
+        message: "Incorrect password.",
+      });
     }
   }
 
@@ -63,7 +72,10 @@ export class UserEnforcementService {
       },
     });
     if (!user || user.accountStatus === "DELETED") {
-      throw new NotFoundException({ code: "USER_NOT_FOUND", message: "User not found." });
+      throw new NotFoundException({
+        code: "USER_NOT_FOUND",
+        message: "User not found.",
+      });
     }
     return user;
   }
@@ -74,7 +86,10 @@ export class UserEnforcementService {
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -114,14 +129,24 @@ export class UserEnforcementService {
 
   // ─── Suspend ─────────────────────────────────────────────────────────────────
 
-  async suspendUser(adminId: string, targetUserId: string, dto: SuspendUserDto) {
+  async suspendUser(
+    adminId: string,
+    targetUserId: string,
+    dto: SuspendUserDto,
+  ) {
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.systemRole === "ADMIN" || target.systemRole === "MODERATOR") {
-      throw new ForbiddenException({ code: "CANNOT_SUSPEND_ADMIN", message: "Cannot suspend an admin or moderator." });
+      throw new ForbiddenException({
+        code: "CANNOT_SUSPEND_ADMIN",
+        message: "Cannot suspend an admin or moderator.",
+      });
     }
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -179,10 +204,16 @@ export class UserEnforcementService {
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.systemRole === "ADMIN") {
-      throw new ForbiddenException({ code: "CANNOT_BAN_ADMIN", message: "Cannot ban an admin." });
+      throw new ForbiddenException({
+        code: "CANNOT_BAN_ADMIN",
+        message: "Cannot ban an admin.",
+      });
     }
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -244,11 +275,21 @@ export class UserEnforcementService {
 
   // ─── Restore ─────────────────────────────────────────────────────────────────
 
-  async restoreUser(adminId: string, targetUserId: string, dto: RestoreUserDto) {
+  async restoreUser(
+    adminId: string,
+    targetUserId: string,
+    dto: RestoreUserDto,
+  ) {
     const target = await this.ensureTargetUser(targetUserId);
 
-    if (target.accountStatus !== "SUSPENDED" && target.accountStatus !== "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_ACTIVE", message: "User is already active." });
+    if (
+      target.accountStatus !== "SUSPENDED" &&
+      target.accountStatus !== "BANNED"
+    ) {
+      throw new ConflictException({
+        code: "USER_ALREADY_ACTIVE",
+        message: "User is already active.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);

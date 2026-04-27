@@ -133,3 +133,8 @@ lib-cov
 .tern-port
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+########################################
+# Copilot / AI tooling (local only)
+########################################
+.github/copilot-instructions.md

@@ -1,9 +1,15 @@
-import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsIn,
+  MaxLength,
+} from "class-validator";
 
 /**
  * OAuth2 Token Request DTO (RFC 6749)
  * POST /api/v1/oauth/token body
- * 
+ *
  * Supports two grant types:
  * 1. grant_type=authorization_code (exchange code for tokens)
  * 2. grant_type=refresh_token (exchange refresh token for new access token)
@@ -16,8 +22,8 @@ export class TokenDto {
    */
   @IsString()
   @IsNotEmpty()
-  @IsIn(['authorization_code', 'refresh_token'])
-  grant_type!: 'authorization_code' | 'refresh_token';
+  @IsIn(["authorization_code", "refresh_token"])
+  grant_type!: "authorization_code" | "refresh_token";
 
   /**
    * REQUIRED. Client identifier (issued during client registration).
@@ -28,13 +34,13 @@ export class TokenDto {
   client_id!: string;
 
   /**
-    * OPTIONAL for public clients using PKCE authorization code flow.
-    * REQUIRED for confidential clients and refresh token grant.
+   * OPTIONAL for public clients using PKCE authorization code flow.
+   * REQUIRED for confidential clients and refresh token grant.
    */
-    @IsOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(512)
-    client_secret?: string;
+  client_secret?: string;
 
   /**
    * REQUIRED for grant_type=authorization_code.
@@ -88,7 +94,7 @@ export class TokenResponseDto {
   /**
    * Access token type. Always "Bearer" per RFC 6749.
    */
-  token_type!: 'Bearer';
+  token_type!: "Bearer";
 
   /**
    * Lifetime of the access token in seconds.

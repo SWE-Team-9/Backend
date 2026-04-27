@@ -10,18 +10,18 @@ import {
 } from "./security.utils";
 
 // =============================================================================
-// Security Utils — Unit Tests
+// Security Utils - Unit Tests
 // Member 1 (Backend Lead + Security Owner)
 //
 // OWASP coverage:
-//   A01 — Broken Access Control    : IP extraction for audit / rate-limit keys
-//   A03 — Injection                : handle sanitisation, URL allow-list
-//   A07 — Auth Failures            : timing-safe comparison
-//   A10 — SSRF                     : isSafeExternalUrl
+//   A01 - Broken Access Control    : IP extraction for audit / rate-limit keys
+//   A03 - Injection                : handle sanitisation, URL allow-list
+//   A07 - Auth Failures            : timing-safe comparison
+//   A10 - SSRF                     : isSafeExternalUrl
 // =============================================================================
 
 // ---------------------------------------------------------------------------
-// Helper — build a minimal Express-like Request object
+// Helper - build a minimal Express-like Request object
 // ---------------------------------------------------------------------------
 
 function buildRequest(
@@ -72,7 +72,7 @@ describe("extractClientIp", () => {
         headers: { "x-forwarded-for": "not-an-ip" },
         ip: "10.0.0.1",
       });
-      // Garbage first entry — should fall through to req.ip
+      // Garbage first entry - should fall through to req.ip
       const ip = extractClientIp(req);
       expect(ip).toBeTruthy();
       expect(typeof ip).toBe("string");
@@ -303,7 +303,7 @@ describe("isValidHandle", () => {
 });
 
 // =============================================================================
-// isSafeExternalUrl  (OWASP A10 — SSRF prevention)
+// isSafeExternalUrl  (OWASP A10 - SSRF prevention)
 // =============================================================================
 
 describe("isSafeExternalUrl", () => {
@@ -367,9 +367,9 @@ describe("isSafeExternalUrl", () => {
     });
   });
 
-  // ── SSRF — internal / private hostnames ──────────────────────────────────────
+  // ── SSRF - internal / private hostnames ──────────────────────────────────────
 
-  describe("SSRF — blocked internal hostnames", () => {
+  describe("SSRF - blocked internal hostnames", () => {
     it("should return false for localhost", () => {
       expect(isSafeExternalUrl("https://localhost/admin")).toBe(false);
     });
@@ -454,7 +454,7 @@ describe("isSafeExternalUrl", () => {
 });
 
 // =============================================================================
-// timingSafeStringEqual  (OWASP A07 — timing attack prevention)
+// timingSafeStringEqual  (OWASP A07 - timing attack prevention)
 // =============================================================================
 
 describe("timingSafeStringEqual", () => {

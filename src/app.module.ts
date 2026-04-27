@@ -53,9 +53,9 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
     ]),
 
     // ── Shared infrastructure (global modules) ────────────────────────────────
-    PrismaModule, // @Global — PrismaService available everywhere
-    StorageModule, // @Global — StorageService available everywhere (Member 5)
-    MailModule, // shared — MailService used by AuthModule
+    PrismaModule, // @Global - PrismaService available everywhere
+    StorageModule, // @Global - StorageService available everywhere (Member 5)
+    MailModule, // shared - MailService used by AuthModule
     EventEmitterModule.forRoot(), // global event bus for decoupled notifications
     ScheduleModule.forRoot(), // enables cron jobs (e.g. trial auto-renew)
 
@@ -80,7 +80,7 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
   ],
   controllers: [AppController],
   providers: [
-    // Guard execution order: throttle → JWT auth → roles
+    // Guard execution order: throttle -> JWT auth -> roles
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

@@ -1,8 +1,8 @@
-import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { Transform } from "class-transformer";
+import { IsNotEmpty, IsString } from "class-validator";
 
 export class AddTrackToPlaylistDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   trackId!: string;

@@ -1,6 +1,6 @@
 type Env = Record<string, string | undefined>;
 
-// Always required — the server cannot function without these.
+// Always required - the server cannot function without these.
 const REQUIRED_ENV_KEYS = ["JWT_SECRET", "CLIENT_URL", "DATABASE_URL"] as const;
 
 // Optional keys that, when present, must pass a format check.
@@ -86,7 +86,7 @@ export function validateEnvironment(config: Env): Env {
     );
   }
 
-  // ── S3 — require bucket credentials when provider is s3 ───────────────────
+  // ── S3 - require bucket credentials when provider is s3 ───────────────────
   if (storageProvider === "s3") {
     const s3Keys = [
       "AWS_S3_BUCKET",
@@ -101,7 +101,7 @@ export function validateEnvironment(config: Env): Env {
     }
   }
 
-  // ── Stripe — warn in production if keys are missing ───────────────────────
+  // ── Stripe - warn in production if keys are missing ───────────────────────
   // Not a hard failure (allows local dev without Stripe keys), but Stripe
   // features will not work without them.
   const nodeEnvForStripe = config["NODE_ENV"];
@@ -117,7 +117,7 @@ export function validateEnvironment(config: Env): Env {
   // ── Fail fast ──────────────────────────────────────────────────────────────
   if (errors.length > 0) {
     throw new Error(
-      `Environment validation failed:\n  • ${errors.join("\n  • ")}`,
+      `Environment validation failed:\n  - ${errors.join("\n  - ")}`,
     );
   }
 

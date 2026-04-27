@@ -823,10 +823,7 @@ export class InteractionsService {
     }
   }
 
-  private handlePrismaWriteError(
-    error: unknown,
-    conflictCode: string,
-  ): never {
+  private handlePrismaWriteError(error: unknown, conflictCode: string): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         throw new ConflictException({
