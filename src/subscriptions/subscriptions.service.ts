@@ -119,7 +119,6 @@ function planTierToCode(tier: SubscriptionTier | string): 'FREE' | 'PRO' | 'GO_P
 @Injectable()
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
-  private readonly paymentFeaturesEnabled: boolean;
   private readonly s3Client: S3Client | null;
   private readonly s3Bucket: string;
   private readonly s3Region: string;
@@ -133,10 +132,6 @@ export class SubscriptionsService {
     private readonly mailService: MailService,
     @Inject(BILLING_PROVIDER) private readonly billing: IBillingProvider,
   ) {
-    this.paymentFeaturesEnabled =
-      (process.env.ENABLE_PAYMENT_FEATURES ??
-        (process.env.NODE_ENV === 'test' ? 'true' : 'false')) === 'true';
-
     this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
     this.localUploadUrl = this.config.get<string>(
       'storage.localUploadUrl',
@@ -163,40 +158,9 @@ export class SubscriptionsService {
     }
   }
 
-  private ensurePaymentFeaturesEnabled(): void {
-    if (!this.paymentFeaturesEnabled) {
-      throw new BadRequestException({
-        code: 'PAYMENT_FEATURES_DISABLED',
-        message: 'Subscription and payment features are disabled in this environment.',
-      });
-    }
-  }
-
   // ── GET /subscriptions/plans ──────────────────────────────────────────────
 
   async getPlans() {
-    if (!this.paymentFeaturesEnabled) {
-      return [
-        {
-          id: 'free-local',
-          code: 'free-monthly',
-          name: 'Free',
-          tier: 'FREE',
-          priceCents: 0,
-          priceDisplay: 'Free',
-          billingInterval: 'MONTH',
-          uploadLimit: FREE_UPLOAD_LIMIT,
-          uploadLimitDisplay: String(FREE_UPLOAD_LIMIT),
-          isUnlimited: false,
-          trialDays: 0,
-          adsEnabled: true,
-          canDownload: false,
-          supportLevel: 'community',
-          highlightedFeatures: buildPlanFeatures(PLAN_CONFIG.FREE, FREE_UPLOAD_LIMIT),
-        },
-      ];
-    }
-
     const plans = await this.prisma.subscriptionPlan.findMany({
       where: { isActive: true },
       select: {
@@ -234,27 +198,6 @@ export class SubscriptionsService {
   // ── GET /subscriptions/me ─────────────────────────────────────────────────
 
   async getMySubscription(userId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      const uploadedTracks = await this.prisma.track.count({
-        where: { uploaderId: userId, deletedAt: null },
-      });
-
-      return this.buildSubscriptionResponse({
-        userId,
-        tier: 'FREE',
-        planName: 'Free',
-        uploadLimit: FREE_UPLOAD_LIMIT,
-        uploadedTracks,
-        currentPeriodEnd: null,
-        subscriptionStatus: null,
-        cancelAtPeriodEnd: false,
-        trialStart: null,
-        trialEnd: null,
-        paymentMethodSummary: null,
-        latestInvoice: null,
-      });
-    }
-
     const sub = await this.findActiveSubscription(userId);
     const uploadedTracks = await this.prisma.track.count({
       where: { uploaderId: userId, deletedAt: null },
@@ -295,8 +238,6 @@ export class SubscriptionsService {
   // POST /subscriptions/subscribe is preserved as a backward-compat alias.
 
   async checkout(userId: string, dto: CheckoutDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { isVerified: true, email: true, profile: { select: { displayName: true } } },
@@ -430,8 +371,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/portal ────────────────────────────────────────────
 
   async createBillingPortal(userId: string, dto?: PaymentMethodPortalDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { email: true, profile: { select: { displayName: true } } },
@@ -460,8 +399,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/cancel ────────────────────────────────────────────
 
   async cancelSubscription(userId: string, _dto: CancelSubscriptionDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const sub = await this.findActiveSubscription(userId);
     if (!sub) {
       throw new ConflictException({ code: 'SUBSCRIPTION_NOT_FOUND', message: 'No active subscription to cancel.' });
@@ -497,8 +434,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/resume ────────────────────────────────────────────
 
   async resumeSubscription(userId: string) {
-    this.ensurePaymentFeaturesEnabled();
-
     const sub = await this.findActiveSubscription(userId);
     if (!sub) throw new NotFoundException({ code: 'SUBSCRIPTION_NOT_FOUND', message: 'No active subscription found.' });
     if (!sub.cancelAtPeriodEnd) {
@@ -513,8 +448,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/change-plan ──────────────────────────────────────
 
   async changePlan(userId: string, dto: ChangePlanDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const sub = await this.findActiveSubscription(userId);
     if (!sub) throw new NotFoundException({ code: 'SUBSCRIPTION_NOT_FOUND', message: 'No active paid subscription found.' });
     const currentTier = sub.plan.tier;
@@ -546,10 +479,6 @@ export class SubscriptionsService {
   // ── GET /subscriptions/invoices ───────────────────────────────────────────
 
   async getInvoices(userId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      return [];
-    }
-
     const subs = await this.prisma.userSubscription.findMany({ where: { userId }, select: { id: true } });
     if (!subs.length) return [];
     const invoices = await this.prisma.billingInvoice.findMany({
@@ -575,10 +504,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/webhook ───────────────────────────────────────────
 
   async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<{ received: boolean }> {
-    if (!this.paymentFeaturesEnabled) {
-      return { received: true };
-    }
-
     let event: ReturnType<IBillingProvider['constructWebhookEvent']>;
     try {
       event = this.billing.constructWebhookEvent(rawBody, signature);
@@ -757,13 +682,6 @@ export class SubscriptionsService {
   // ── GET /subscriptions/offline/:trackId ───────────────────────────────────
 
   async getOfflineTrack(userId: string, trackId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      throw new ForbiddenException({
-        code: 'DOWNLOAD_NOT_ALLOWED',
-        message: 'Offline downloads are unavailable in this environment.',
-      });
-    }
-
     const sub = await this.findActiveSubscription(userId);
     const planCode = sub ? planTierToCode(sub.plan.tier) : 'FREE';
     const canDownload = sub !== null && PLAN_CONFIG[planCode].canDownload;
@@ -891,10 +809,6 @@ export class SubscriptionsService {
   // ── findActiveSubscription ────────────────────────────────────────────────
 
   async findActiveSubscription(userId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      return null;
-    }
-
     return this.prisma.userSubscription.findFirst({
       where: {
         userId,
