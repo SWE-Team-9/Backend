@@ -3,10 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  NotificationEntityType,
-  NotificationEventType,
-} from "@prisma/client";
+import { NotificationEntityType, NotificationEventType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsQueryDto } from "./dto/notifications-query.dto";
 import { NotificationPreferencesDto } from "./dto/notification-preferences.dto";
@@ -51,7 +48,9 @@ export class NotificationsService {
         playlistId: data.playlistId ?? null,
         commentId: data.commentId ?? null,
         messageId: data.messageId ?? null,
-        metadata: data.metadata ? (data.metadata as import("@prisma/client").Prisma.InputJsonValue) : undefined,
+        metadata: data.metadata
+          ? (data.metadata as import("@prisma/client").Prisma.InputJsonValue)
+          : undefined,
       },
       select: { id: true, eventType: true, entityType: true, createdAt: true },
     });
@@ -103,7 +102,9 @@ export class NotificationsService {
           actor: {
             select: {
               id: true,
-              profile: { select: { displayName: true, handle: true, avatarUrl: true } },
+              profile: {
+                select: { displayName: true, handle: true, avatarUrl: true },
+              },
             },
           },
         },
@@ -119,8 +120,12 @@ export class NotificationsService {
         type: n.eventType.toLowerCase(),
         message: this.buildMessage(n),
         actorId: n.actorId,
+        actorDisplayName: n.actor?.profile?.displayName ?? null,
+        actorHandle: n.actor?.profile?.handle ?? null,
+        actorAvatarUrl: n.actor?.profile?.avatarUrl ?? null,
         entityType: n.entityType.toLowerCase(),
-        entityId: n.trackId ?? n.playlistId ?? n.commentId ?? n.messageId ?? null,
+        entityId:
+          n.trackId ?? n.playlistId ?? n.commentId ?? n.messageId ?? null,
         isRead: n.readAt !== null,
         createdAt: n.createdAt,
       })),
@@ -129,21 +134,37 @@ export class NotificationsService {
 
   private buildMessage(n: {
     eventType: NotificationEventType;
-    actor: { id: string; profile: { displayName: string; handle: string; avatarUrl: string | null } | null } | null;
+    actor: {
+      id: string;
+      profile: {
+        displayName: string;
+        handle: string;
+        avatarUrl: string | null;
+      } | null;
+    } | null;
     metadata?: unknown;
   }): string {
     const name = n.actor?.profile?.displayName ?? "Someone";
     const meta = n.metadata as Record<string, unknown> | null | undefined;
     switch (n.eventType) {
-      case "LIKE": return `${name} liked your track`;
-      case "REPOST": return `${name} reposted your track`;
-      case "COMMENT": return `${name} commented on your track`;
-      case "FOLLOW": return `${name} started following you`;
-      case "MESSAGE": return `${name} sent you a message`;
-      case "REPORT_RESOLVED": return "Your report has been resolved";
-      case "SUBSCRIPTION": return "Your subscription was updated";
+      case "LIKE":
+        return `${name} liked your track`;
+      case "REPOST":
+        return `${name} reposted your track`;
+      case "COMMENT":
+        return `${name} commented on your track`;
+      case "FOLLOW":
+        return `${name} started following you`;
+      case "MESSAGE":
+        return `${name} sent you a message`;
+      case "REPORT_RESOLVED":
+        return "Your report has been resolved";
+      case "SUBSCRIPTION":
+        return "Your subscription was updated";
       default:
-        return meta?.["batchMessage"] as string ?? "You have a new notification";
+        return (
+          (meta?.["batchMessage"] as string) ?? "You have a new notification"
+        );
     }
   }
 
@@ -169,11 +190,17 @@ export class NotificationsService {
     });
 
     if (!notification) {
-      throw new NotFoundException({ code: "NOTIFICATION_NOT_FOUND", message: "Notification not found." });
+      throw new NotFoundException({
+        code: "NOTIFICATION_NOT_FOUND",
+        message: "Notification not found.",
+      });
     }
 
     if (notification.recipientId !== userId) {
-      throw new ForbiddenException({ code: "FORBIDDEN", message: "Not your notification." });
+      throw new ForbiddenException({
+        code: "FORBIDDEN",
+        message: "Not your notification.",
+      });
     }
 
     await this.prisma.notification.update({
@@ -195,7 +222,9 @@ export class NotificationsService {
       data: { readAt: new Date() },
     });
 
-    this.gateway?.emitToUser(userId, "unread_count_updated", { unreadCount: 0 });
+    this.gateway?.emitToUser(userId, "unread_count_updated", {
+      unreadCount: 0,
+    });
 
     return { message: "All notifications marked as read" };
   }
@@ -209,11 +238,17 @@ export class NotificationsService {
     });
 
     if (!notification) {
-      throw new NotFoundException({ code: "NOTIFICATION_NOT_FOUND", message: "Notification not found." });
+      throw new NotFoundException({
+        code: "NOTIFICATION_NOT_FOUND",
+        message: "Notification not found.",
+      });
     }
 
     if (notification.recipientId !== userId) {
-      throw new ForbiddenException({ code: "FORBIDDEN", message: "Not your notification." });
+      throw new ForbiddenException({
+        code: "FORBIDDEN",
+        message: "Not your notification.",
+      });
     }
 
     await this.prisma.notification.delete({ where: { id: notificationId } });
@@ -228,7 +263,9 @@ export class NotificationsService {
       select: { likes: true, comments: true, follows: true, reposts: true },
     });
 
-    return prefs ?? { likes: true, comments: true, follows: true, reposts: true };
+    return (
+      prefs ?? { likes: true, comments: true, follows: true, reposts: true }
+    );
   }
 
   async updatePreferences(userId: string, dto: NotificationPreferencesDto) {
@@ -288,7 +325,10 @@ export class NotificationsService {
     });
 
     if (!device || device.userId !== userId) {
-      throw new NotFoundException({ code: "DEVICE_NOT_FOUND", message: "Device not found." });
+      throw new NotFoundException({
+        code: "DEVICE_NOT_FOUND",
+        message: "Device not found.",
+      });
     }
 
     await this.prisma.userDevice.update({
