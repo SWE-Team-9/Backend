@@ -280,11 +280,15 @@ export class SocialService {
 
     const limit = query.limit ?? 10;
 
-    const [followingRows, blocksByMe, blocksAgainstMe, myGenres] =
+    const [followingRows, followerRows, blocksByMe, blocksAgainstMe, myGenres] =
       await this.prisma.$transaction([
         this.prisma.userFollow.findMany({
           where: { followerId: userId },
           select: { followingId: true },
+        }),
+        this.prisma.userFollow.findMany({
+          where: { followingId: userId },
+          select: { followerId: true },
         }),
         this.prisma.userBlock.findMany({
           where: { blockerId: userId },
@@ -306,16 +310,20 @@ export class SocialService {
     for (const row of blocksAgainstMe) excludedUserIds.add(row.blockerId);
 
     const myGenreIds = myGenres.map((g) => g.genreId);
+    const myFollowingIds = followingRows.map((row) => row.followingId);
+    const myFollowerIds = followerRows.map((row) => row.followerId);
 
     const candidates = await this.prisma.user.findMany({
       where: {
         id: { notIn: Array.from(excludedUserIds) },
         deletedAt: null,
       },
-      take: Math.max(limit * 3, limit),
+      take: Math.max(limit * 5, limit),
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        createdAt: true,
+        lastLoginAt: true,
         profile: {
           select: {
             displayName: true,
@@ -324,25 +332,218 @@ export class SocialService {
           },
         },
         favoriteGenres: {
-          where:
-            myGenreIds.length > 0 ? { genreId: { in: myGenreIds } } : undefined,
           select: { genreId: true },
+        },
+        _count: {
+          select: {
+            tracks: true,
+            likes: true,
+            reposts: true,
+            comments: true,
+          },
         },
       },
     });
 
+    const candidateIds = candidates.map((candidate) => candidate.id);
+
+    const [sharedFollowingEdges, sharedFollowerEdges] = await this.prisma.$transaction([
+      this.prisma.userFollow.findMany({
+        where: {
+          followerId: { in: candidateIds },
+          followingId: { in: myFollowingIds },
+        },
+        select: { followerId: true },
+      }),
+      this.prisma.userFollow.findMany({
+        where: {
+          followingId: { in: candidateIds },
+          followerId: { in: myFollowerIds },
+        },
+        select: { followingId: true },
+      }),
+    ]);
+
+    const sharedFollowingCountByUser = new Map<string, number>();
+    for (const edge of sharedFollowingEdges) {
+      sharedFollowingCountByUser.set(
+        edge.followerId,
+        (sharedFollowingCountByUser.get(edge.followerId) ?? 0) + 1,
+      );
+    }
+
+    const sharedFollowerCountByUser = new Map<string, number>();
+    for (const edge of sharedFollowerEdges) {
+      sharedFollowerCountByUser.set(
+        edge.followingId,
+        (sharedFollowerCountByUser.get(edge.followingId) ?? 0) + 1,
+      );
+    }
+
+    const now = Date.now();
+    const myGenreSet = new Set(myGenreIds);
+    const rawCandidates = candidates.map((candidate) => {
+      const candidateGenreIds = candidate.favoriteGenres.map((genre) => genre.genreId);
+      const candidateGenreSet = new Set(candidateGenreIds);
+
+      const sharedGenresCount = candidateGenreIds.filter((genreId) =>
+        myGenreSet.has(genreId),
+      ).length;
+      const tasteScore =
+        myGenreIds.length > 0
+          ? this.normalizeScore(sharedGenresCount, myGenreIds.length)
+          : 0;
+
+      const graphRaw =
+        (sharedFollowingCountByUser.get(candidate.id) ?? 0) +
+        (sharedFollowerCountByUser.get(candidate.id) ?? 0);
+
+      const engagementRaw =
+        (candidate._count?.tracks ?? 0) +
+        (candidate._count?.likes ?? 0) +
+        (candidate._count?.reposts ?? 0) +
+        (candidate._count?.comments ?? 0);
+
+      const activityRecency = this.recencyScore(
+        candidate.lastLoginAt ?? candidate.createdAt,
+        now,
+        30,
+      );
+      const freshnessScore = this.recencyScore(candidate.createdAt, now, 90);
+
+      return {
+        ...candidate,
+        candidateGenreSet,
+        sharedGenresCount,
+        tasteScore,
+        graphRaw,
+        engagementRaw,
+        activityRecency,
+        freshnessScore,
+      };
+    });
+
+    const maxGraphRaw = rawCandidates.reduce(
+      (max, candidate) => Math.max(max, candidate.graphRaw),
+      0,
+    );
+    const maxEngagementRaw = rawCandidates.reduce(
+      (max, candidate) => Math.max(max, candidate.engagementRaw),
+      0,
+    );
+
+    const scoredCandidates = rawCandidates.map((candidate) => {
+      const graphScore = this.normalizeScore(candidate.graphRaw, maxGraphRaw);
+      const engagementScore = this.normalizeScore(
+        candidate.engagementRaw,
+        maxEngagementRaw,
+      );
+      const activityScore = 0.6 * engagementScore + 0.4 * candidate.activityRecency;
+
+      const baseScore =
+        0.4 * candidate.tasteScore +
+        0.3 * graphScore +
+        0.15 * activityScore +
+        0.1 * candidate.freshnessScore;
+
+      return {
+        ...candidate,
+        graphScore,
+        activityScore,
+        baseScore,
+      };
+    });
+
+    const selected: typeof scoredCandidates = [];
+    const remaining = [...scoredCandidates];
+
+    while (selected.length < limit && remaining.length > 0) {
+      let bestIndex = 0;
+      let bestScore = Number.NEGATIVE_INFINITY;
+
+      for (let index = 0; index < remaining.length; index++) {
+        const candidate = remaining[index];
+        const diversityScore = this.computeDiversityScore(
+          candidate.candidateGenreSet,
+          selected.map((item) => item.candidateGenreSet),
+        );
+        const finalScore = candidate.baseScore + 0.05 * diversityScore;
+
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
+          bestIndex = index;
+        }
+      }
+
+      selected.push(remaining.splice(bestIndex, 1)[0]);
+    }
+
     return {
-      suggestions: candidates.slice(0, limit).map((candidate) => ({
+      suggestions: selected.map((candidate) => ({
         id: candidate.id,
         display_name: candidate.profile?.displayName ?? "",
         handle: candidate.profile?.handle ?? "",
         avatar_url: candidate.profile?.avatarUrl ?? null,
         reason:
-          candidate.favoriteGenres.length > 0
+          candidate.sharedGenresCount > 0
             ? "Shared genres"
             : "Suggested for you",
       })),
     };
+  }
+
+  private normalizeScore(value: number, maxValue: number): number {
+    if (maxValue <= 0) {
+      return 0;
+    }
+
+    return Math.min(value / maxValue, 1);
+  }
+
+  private recencyScore(date: Date, nowMs: number, halfLifeDays: number): number {
+    const ageMs = Math.max(nowMs - date.getTime(), 0);
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    return Math.exp(-ageDays / halfLifeDays);
+  }
+
+  private computeDiversityScore(
+    candidateGenres: Set<number>,
+    selectedGenreSets: Set<number>[],
+  ): number {
+    if (selectedGenreSets.length === 0) {
+      return 1;
+    }
+
+    let maxSimilarity = 0;
+
+    for (const selectedGenres of selectedGenreSets) {
+      const similarity = this.genreJaccardSimilarity(candidateGenres, selectedGenres);
+      if (similarity > maxSimilarity) {
+        maxSimilarity = similarity;
+      }
+    }
+
+    return 1 - maxSimilarity;
+  }
+
+  private genreJaccardSimilarity(left: Set<number>, right: Set<number>): number {
+    if (left.size === 0 && right.size === 0) {
+      return 0;
+    }
+
+    let intersection = 0;
+    for (const value of left) {
+      if (right.has(value)) {
+        intersection += 1;
+      }
+    }
+
+    const union = left.size + right.size - intersection;
+    if (union === 0) {
+      return 0;
+    }
+
+    return intersection / union;
   }
 
   async blockUser(blockerId: string, blockedId: string) {
