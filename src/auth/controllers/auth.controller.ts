@@ -45,6 +45,7 @@ import {
   RequestEmailChangeDto,
   ConfirmEmailChangeDto,
   RevokeSessionParamsDto,
+  RefreshTokenDto,
 } from "../dto/auth.dto";
 
 @ApiTags("Auth")
@@ -394,8 +395,11 @@ export class AuthController {
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
+    @Body() body: RefreshTokenDto,
   ) {
-    const refreshTokenRaw = req.cookies?.["refresh_token"];
+    // Browser clients send the token via httpOnly cookie (body.refresh_token is absent).
+    // Non-browser clients (mobile/desktop) send it in the request body.
+    const refreshTokenRaw = body?.refresh_token ?? req.cookies?.["refresh_token"];
     if (!refreshTokenRaw) {
       throw new UnauthorizedException({
         statusCode: 401,
