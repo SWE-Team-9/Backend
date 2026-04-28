@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -26,6 +27,23 @@ export class ReportsService {
 
   async createReport(reporterId: string, dto: CreateReportDto) {
     await this.ensureTargetExists(dto.targetType, dto.targetId);
+
+    // Prevent duplicate reports from same user on same content
+    const existing = await this.prisma.report.findFirst({
+      where: {
+        reporterId,
+        targetType: dto.targetType,
+        targetId: dto.targetId,
+        status: { not: ReportStatus.REJECTED },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException({
+        code: "DUPLICATE_REPORT",
+        message: "You have already reported this content.",
+      });
+    }
 
     const report = await this.prisma.report.create({
       data: {
@@ -318,16 +336,24 @@ export class ReportsService {
       return;
     }
 
-    const playlist = await this.prisma.playlist.findUnique({
-      where: { id: targetId },
-      select: { id: true },
-    });
-
-    if (!playlist) {
-      throw new NotFoundException({
-        code: "PLAYLIST_NOT_FOUND",
-        message: "Playlist not found.",
+    if (targetType === ReportTargetType.PLAYLIST) {
+      const playlist = await this.prisma.playlist.findUnique({
+        where: { id: targetId },
+        select: { id: true },
       });
+
+      if (!playlist) {
+        throw new NotFoundException({
+          code: "PLAYLIST_NOT_FOUND",
+          message: "Playlist not found.",
+        });
+      }
+      return;
     }
+
+    throw new BadRequestException({
+      code: "INVALID_TARGET_TYPE",
+      message: "Unsupported report target type.",
+    });
   }
 }

@@ -83,7 +83,21 @@ export class UserEnforcementService {
   // ─── Warn ────────────────────────────────────────────────────────────────────
 
   async warnUser(adminId: string, targetUserId: string, dto: WarnUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
+
+    if (target.systemRole === "ADMIN") {
+      throw new ForbiddenException({
+        code: "CANNOT_WARN_ADMIN",
+        message: "Cannot warn an admin.",
+      });
+    }
 
     if (target.accountStatus === "BANNED") {
       throw new ConflictException({
@@ -134,12 +148,19 @@ export class UserEnforcementService {
     targetUserId: string,
     dto: SuspendUserDto,
   ) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
-    if (target.systemRole === "ADMIN" || target.systemRole === "MODERATOR") {
+    if (target.systemRole === "ADMIN") {
       throw new ForbiddenException({
         code: "CANNOT_SUSPEND_ADMIN",
-        message: "Cannot suspend an admin or moderator.",
+        message: "Cannot suspend an admin.",
       });
     }
     if (target.accountStatus === "BANNED") {
@@ -160,8 +181,11 @@ export class UserEnforcementService {
         where: { id: targetUserId },
         data: { accountStatus: "SUSPENDED", suspendedUntil },
       }),
-      // Revoke all active sessions
-      this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
+      // Revoke all active sessions (preserve records for audit trail)
+      this.prisma.userSession.updateMany({
+        where: { userId: targetUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
 
     const action = await this.prisma.moderationAction.create({
@@ -201,6 +225,13 @@ export class UserEnforcementService {
   // ─── Ban ─────────────────────────────────────────────────────────────────────
 
   async banUser(adminId: string, targetUserId: string, dto: BanUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.systemRole === "ADMIN") {
@@ -233,7 +264,11 @@ export class UserEnforcementService {
         where: { id: targetUserId },
         data: { accountStatus: "BANNED" },
       }),
-      this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
+      // Revoke all active sessions (preserve records for audit trail)
+      this.prisma.userSession.updateMany({
+        where: { userId: targetUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
     const tracksResult = txResults[0] as { count: number };
     const playlistsResult = txResults[1] as { count: number };
@@ -280,6 +315,13 @@ export class UserEnforcementService {
     targetUserId: string,
     dto: RestoreUserDto,
   ) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
     if (
