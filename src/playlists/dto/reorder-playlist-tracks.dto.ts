@@ -1,4 +1,4 @@
-import { IsArray, IsNotEmpty, IsString } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsNotEmpty, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ReorderPlaylistTracksDto {
@@ -8,6 +8,7 @@ export class ReorderPlaylistTracksDto {
     type: [String],
   })
   @IsArray()
+  @ArrayMaxSize(5000)
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
   orderedTrackIds!: string[];

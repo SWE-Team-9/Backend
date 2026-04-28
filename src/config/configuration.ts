@@ -20,8 +20,10 @@ export default () => ({
     recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
     recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,
     // Per-platform Enterprise site keys
-    recaptchaEnterpriseAndroidSiteKey: process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
-    recaptchaEnterpriseWebSiteKey: process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
+    recaptchaEnterpriseAndroidSiteKey:
+      process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
+    recaptchaEnterpriseWebSiteKey:
+      process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
     authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? "false") === "true",
   },
   database: {
@@ -56,5 +58,16 @@ export default () => ({
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY ?? "",
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+  },
+  billing: {
+    // "mock_stripe" (default) = no real Stripe calls
+    // "stripe"                = live/test Stripe API
+    provider: process.env.BILLING_PROVIDER ?? "mock_stripe",
+    // Stripe Hosted Checkout redirect URLs.
+    // {CHECKOUT_SESSION_ID} in success_url is replaced by Stripe automatically.
+    checkoutSuccessUrl: process.env.STRIPE_CHECKOUT_SUCCESS_URL ?? "",
+    checkoutCancelUrl: process.env.STRIPE_CHECKOUT_CANCEL_URL ?? "",
+    // Stripe Customer Portal return URL (where user lands after managing billing)
+    portalReturnUrl: process.env.STRIPE_BILLING_PORTAL_RETURN_URL ?? "",
   },
 });

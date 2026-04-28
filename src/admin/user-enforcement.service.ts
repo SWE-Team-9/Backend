@@ -38,17 +38,26 @@ export class UserEnforcementService {
     }
   }
 
-  private async verifyAdminPassword(adminId: string, password: string): Promise<void> {
+  private async verifyAdminPassword(
+    adminId: string,
+    password: string,
+  ): Promise<void> {
     const admin = await this.prisma.user.findUnique({
       where: { id: adminId },
       select: { passwordHash: true },
     });
     if (!admin?.passwordHash) {
-      throw new UnauthorizedException({ code: "INCORRECT_PASSWORD", message: "Cannot verify password." });
+      throw new UnauthorizedException({
+        code: "INCORRECT_PASSWORD",
+        message: "Cannot verify password.",
+      });
     }
     const valid = await argon2.verify(admin.passwordHash, password);
     if (!valid) {
-      throw new UnauthorizedException({ code: "INCORRECT_PASSWORD", message: "Incorrect password." });
+      throw new UnauthorizedException({
+        code: "INCORRECT_PASSWORD",
+        message: "Incorrect password.",
+      });
     }
   }
 
@@ -63,7 +72,10 @@ export class UserEnforcementService {
       },
     });
     if (!user || user.accountStatus === "DELETED") {
-      throw new NotFoundException({ code: "USER_NOT_FOUND", message: "User not found." });
+      throw new NotFoundException({
+        code: "USER_NOT_FOUND",
+        message: "User not found.",
+      });
     }
     return user;
   }
@@ -71,10 +83,27 @@ export class UserEnforcementService {
   // ─── Warn ────────────────────────────────────────────────────────────────────
 
   async warnUser(adminId: string, targetUserId: string, dto: WarnUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
+    if (target.systemRole === "ADMIN") {
+      throw new ForbiddenException({
+        code: "CANNOT_WARN_ADMIN",
+        message: "Cannot warn an admin.",
+      });
+    }
+
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -114,14 +143,31 @@ export class UserEnforcementService {
 
   // ─── Suspend ─────────────────────────────────────────────────────────────────
 
-  async suspendUser(adminId: string, targetUserId: string, dto: SuspendUserDto) {
+  async suspendUser(
+    adminId: string,
+    targetUserId: string,
+    dto: SuspendUserDto,
+  ) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
-    if (target.systemRole === "ADMIN" || target.systemRole === "MODERATOR") {
-      throw new ForbiddenException({ code: "CANNOT_SUSPEND_ADMIN", message: "Cannot suspend an admin or moderator." });
+    if (target.systemRole === "ADMIN") {
+      throw new ForbiddenException({
+        code: "CANNOT_SUSPEND_ADMIN",
+        message: "Cannot suspend an admin.",
+      });
     }
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -135,8 +181,11 @@ export class UserEnforcementService {
         where: { id: targetUserId },
         data: { accountStatus: "SUSPENDED", suspendedUntil },
       }),
-      // Revoke all active sessions
-      this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
+      // Revoke all active sessions (preserve records for audit trail)
+      this.prisma.userSession.updateMany({
+        where: { userId: targetUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
 
     const action = await this.prisma.moderationAction.create({
@@ -176,13 +225,26 @@ export class UserEnforcementService {
   // ─── Ban ─────────────────────────────────────────────────────────────────────
 
   async banUser(adminId: string, targetUserId: string, dto: BanUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.systemRole === "ADMIN") {
-      throw new ForbiddenException({ code: "CANNOT_BAN_ADMIN", message: "Cannot ban an admin." });
+      throw new ForbiddenException({
+        code: "CANNOT_BAN_ADMIN",
+        message: "Cannot ban an admin.",
+      });
     }
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -202,7 +264,11 @@ export class UserEnforcementService {
         where: { id: targetUserId },
         data: { accountStatus: "BANNED" },
       }),
-      this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
+      // Revoke all active sessions (preserve records for audit trail)
+      this.prisma.userSession.updateMany({
+        where: { userId: targetUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
     const tracksResult = txResults[0] as { count: number };
     const playlistsResult = txResults[1] as { count: number };
@@ -244,11 +310,28 @@ export class UserEnforcementService {
 
   // ─── Restore ─────────────────────────────────────────────────────────────────
 
-  async restoreUser(adminId: string, targetUserId: string, dto: RestoreUserDto) {
+  async restoreUser(
+    adminId: string,
+    targetUserId: string,
+    dto: RestoreUserDto,
+  ) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
-    if (target.accountStatus !== "SUSPENDED" && target.accountStatus !== "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_ACTIVE", message: "User is already active." });
+    if (
+      target.accountStatus !== "SUSPENDED" &&
+      target.accountStatus !== "BANNED"
+    ) {
+      throw new ConflictException({
+        code: "USER_ALREADY_ACTIVE",
+        message: "User is already active.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);

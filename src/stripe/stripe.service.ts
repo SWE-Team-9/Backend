@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Stripe from 'stripe';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import Stripe from "stripe";
 
 @Injectable()
 export class StripeService {
@@ -8,9 +8,9 @@ export class StripeService {
   private readonly logger = new Logger(StripeService.name);
 
   constructor(private readonly config: ConfigService) {
-    const secretKey = this.config.get<string>('stripe.secretKey') ?? '';
+    const secretKey = this.config.get<string>("stripe.secretKey") ?? "";
     this.stripe = new Stripe(secretKey, {
-      apiVersion: '2025-08-27.basil',
+      apiVersion: "2025-08-27.basil",
       typescript: true,
     });
   }
@@ -55,7 +55,7 @@ export class StripeService {
   async createSetupIntent(customerId: string): Promise<Stripe.SetupIntent> {
     return this.stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ['card'],
+      payment_method_types: ["card"],
     });
   }
 
@@ -85,7 +85,7 @@ export class StripeService {
   ): Promise<Stripe.PaymentMethod[]> {
     const response = await this.stripe.paymentMethods.list({
       customer: customerId,
-      type: 'card',
+      type: "card",
     });
     return response.data;
   }
@@ -113,7 +113,7 @@ export class StripeService {
       trial_period_days: params.trialPeriodDays,
       metadata: params.metadata ?? {},
       // Expand the latest invoice so we can inspect its payment intent
-      expand: ['latest_invoice.payment_intent'],
+      expand: ["latest_invoice.payment_intent"],
     });
   }
 
@@ -152,6 +152,38 @@ export class StripeService {
     return this.stripe.subscriptions.update(stripeSubscriptionId, params);
   }
 
+  // ── Customer Search ───────────────────────────────────────────────────────
+  // Find an existing Stripe customer by the userId stored in their metadata.
+  // Returns the Stripe customer ID or null if not found.
+
+  async searchCustomersByUserId(userId: string): Promise<string | null> {
+    const result = await this.stripe.customers.search({
+      query: `metadata['userId']:'${userId}'`,
+      limit: 1,
+    });
+    return result.data[0]?.id ?? null;
+  }
+
+  // ── Checkout Session ──────────────────────────────────────────────────────
+  // Creates a Stripe Hosted Checkout session.
+  // The user is redirected to session.url to enter payment details on Stripe.
+
+  async createCheckoutSession(
+    params: Stripe.Checkout.SessionCreateParams,
+  ): Promise<Stripe.Checkout.Session> {
+    return this.stripe.checkout.sessions.create(params);
+  }
+
+  // ── Billing Portal ────────────────────────────────────────────────────────
+  // Creates a Stripe Customer Portal session so the user can manage their
+  // payment methods, view invoices, and cancel or change plans.
+
+  async createBillingPortalSession(
+    params: Stripe.BillingPortal.SessionCreateParams,
+  ): Promise<Stripe.BillingPortal.Session> {
+    return this.stripe.billingPortal.sessions.create(params);
+  }
+
   // ── Webhook ───────────────────────────────────────────────────────────────
   // Verifies the Stripe-Signature header and parses the raw body.
   // Throws if the signature is invalid.
@@ -161,6 +193,10 @@ export class StripeService {
     signature: string,
     webhookSecret: string,
   ): Stripe.Event {
-    return this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    return this.stripe.webhooks.constructEvent(
+      payload,
+      signature,
+      webhookSecret,
+    );
   }
 }

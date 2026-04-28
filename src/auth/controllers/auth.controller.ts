@@ -69,7 +69,7 @@ export class AuthController {
   @ApiBody({ type: RegisterDto })
   @ApiResponse({
     status: 201,
-    description: "Account created — verification email sent.",
+    description: "Account created - verification email sent.",
     schema: {
       example: {
         message:
@@ -142,7 +142,7 @@ export class AuthController {
   @ApiBody({ type: VerifyEmailDto })
   @ApiResponse({
     status: 200,
-    description: "Email verified — account is now active.",
+    description: "Email verified - account is now active.",
     schema: { example: { message: "Email verified successfully." } },
   })
   @ApiResponse({ status: 400, description: "Token missing or malformed." })
@@ -173,7 +173,7 @@ export class AuthController {
     summary: "Resend verification email",
     description:
       "Sends a fresh verification link if the original expired or was not received. " +
-      "Always returns 200 to prevent email enumeration — even if the email is not registered.",
+      "Always returns 200 to prevent email enumeration - even if the email is not registered.",
   })
   @ApiBody({ type: ResendVerificationDto })
   @ApiResponse({
@@ -210,7 +210,7 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
-    description: "Login successful — auth cookies set.",
+    description: "Login successful - auth cookies set.",
     schema: {
       example: {
         message: "Login successful",
@@ -288,7 +288,7 @@ export class AuthController {
     summary: "Initiate Google OAuth login",
     description:
       "Redirects the browser to Google's OAuth consent page. " +
-      "This endpoint is not testable via Swagger — open it directly in a browser tab.",
+      "This endpoint is not testable via Swagger - open it directly in a browser tab.",
   })
   @ApiResponse({
     status: 302,
@@ -298,11 +298,11 @@ export class AuthController {
   @UseGuards(GoogleAuthGuard)
   @Get("google")
   googleRedirect(@Query("redirect_uri") _redirectUri?: string) {
-    // Passport redirects to Google — this method body is never reached
+    // Passport redirects to Google - this method body is never reached
   }
 
   // ─── Endpoint 6: GET /auth/google/callback ─────────────────────────────
-  @ApiExcludeEndpoint() // Google redirects here — not callable from Swagger
+  @ApiExcludeEndpoint() // Google redirects here - not callable from Swagger
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get("google/callback")
@@ -366,11 +366,11 @@ export class AuthController {
       "Uses the `refresh_token` httpOnly cookie to issue a new rotated pair of " +
       "`access_token` + `refresh_token` cookies. " +
       "The frontend axios interceptor calls this automatically on 401 responses. " +
-      "Token reuse detection is active — a reused refresh token invalidates all sessions.",
+      "Token reuse detection is active - a reused refresh token invalidates all sessions.",
   })
   @ApiResponse({
     status: 200,
-    description: "New tokens issued — cookies updated.",
+    description: "New tokens issued - cookies updated.",
     schema: { example: { message: "Token refreshed successfully" } },
   })
   @ApiResponse({
@@ -399,7 +399,8 @@ export class AuthController {
   ) {
     // Browser clients send the token via httpOnly cookie (body.refresh_token is absent).
     // Non-browser clients (mobile/desktop) send it in the request body.
-    const refreshTokenRaw = body?.refresh_token ?? req.cookies?.["refresh_token"];
+    const refreshTokenRaw =
+      body?.refresh_token ?? req.cookies?.["refresh_token"];
     if (!refreshTokenRaw) {
       throw new UnauthorizedException({
         statusCode: 401,
@@ -430,11 +431,11 @@ export class AuthController {
     summary: "Logout from current session",
     description:
       "Revokes the current session's refresh token and clears both auth cookies. " +
-      "Does NOT require authentication — anyone can call this (idempotent).",
+      "Does NOT require authentication - anyone can call this (idempotent).",
   })
   @ApiResponse({
     status: 200,
-    description: "Logged out — cookies cleared.",
+    description: "Logged out - cookies cleared.",
     schema: { example: { message: "Logged out successfully" } },
   })
   @Public()
@@ -457,7 +458,7 @@ export class AuthController {
   @ApiCookieAuth("access_token")
   @ApiResponse({
     status: 200,
-    description: "All sessions revoked — cookies cleared.",
+    description: "All sessions revoked - cookies cleared.",
     schema: { example: { message: "All sessions revoked", revokedCount: 3 } },
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -557,7 +558,7 @@ export class AuthController {
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({
     status: 200,
-    description: "Password changed — other sessions revoked.",
+    description: "Password changed - other sessions revoked.",
     schema: { example: { message: "Password changed successfully." } },
   })
   @ApiResponse({
@@ -649,7 +650,7 @@ export class AuthController {
   @ApiBody({ type: ConfirmEmailChangeDto })
   @ApiResponse({
     status: 200,
-    description: "Email changed — all sessions revoked.",
+    description: "Email changed - all sessions revoked.",
     schema: { example: { message: "Email address updated successfully." } },
   })
   @ApiResponse({ status: 410, description: "Token expired or already used." })

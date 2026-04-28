@@ -123,10 +123,16 @@ export class PlayerController {
       },
     },
   })
+  @ApiQuery({ name: "playlistId", required: false, description: "Optional playlist context" })
   markPlayed(
     @CurrentUser("userId") userId: string,
     @Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string,
+    @Query("playlistId") playlistId?: string,
   ) {
+    if (playlistId) {
+      return this.playerService.markPlayed(userId, trackId, playlistId);
+    }
+
     return this.playerService.markPlayed(userId, trackId);
   }
 
@@ -275,6 +281,17 @@ export class PlayerController {
   })
   @HttpCode(HttpStatus.OK)
   updateSession(
+    @CurrentUser("userId") userId: string,
+    @Body() body: UpdateSessionDto,
+  ) {
+    return this.playerService.updateSession(userId, body);
+  }
+
+  // POST alias for PUT /player/session - used by navigator.sendBeacon on page unload
+  @Post("session")
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  updateSessionBeacon(
     @CurrentUser("userId") userId: string,
     @Body() body: UpdateSessionDto,
   ) {

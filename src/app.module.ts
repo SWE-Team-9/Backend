@@ -31,10 +31,6 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { AdminModule } from "./admin/admin.module";
 import { EntitlementsModule } from "./entitlements/entitlements.module";
 
-const enablePaymentFeatures =
-  (process.env.ENABLE_PAYMENT_FEATURES ??
-    (process.env.NODE_ENV === "test" ? "true" : "false")) === "true";
-
 @Module({
   imports: [
     // ── Config ───────────────────────────────────────────────────────────────
@@ -57,9 +53,9 @@ const enablePaymentFeatures =
     ]),
 
     // ── Shared infrastructure (global modules) ────────────────────────────────
-    PrismaModule, // @Global — PrismaService available everywhere
-    StorageModule, // @Global — StorageService available everywhere (Member 5)
-    MailModule, // shared — MailService used by AuthModule
+    PrismaModule, // @Global - PrismaService available everywhere
+    StorageModule, // @Global - StorageService available everywhere (Member 5)
+    MailModule, // shared - MailService used by AuthModule
     EventEmitterModule.forRoot(), // global event bus for decoupled notifications
     ScheduleModule.forRoot(), // enables cron jobs (e.g. trial auto-renew)
 
@@ -78,12 +74,13 @@ const enablePaymentFeatures =
     AdminModule, // Module 11 — Admin: User Enforcement + Content Moderation + Stats
     PlaylistsModule, // Module 7 — Sets & Playlists
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
-    ...(enablePaymentFeatures ? [StripeModule, PaymentMethodsModule] : []),
+    StripeModule,
+    PaymentMethodsModule,
     EntitlementsModule,  // GET /entitlements/me
   ],
   controllers: [AppController],
   providers: [
-    // Guard execution order: throttle → JWT auth → roles
+    // Guard execution order: throttle -> JWT auth -> roles
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

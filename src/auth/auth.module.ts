@@ -26,7 +26,7 @@ import { AuthController } from "./controllers/auth.controller";
       useFactory: (config: ConfigService) => ({
         secret: config.get("security.jwtSecret"),
         signOptions: {
-          expiresIn: "15m",
+          expiresIn: "30d",
           issuer: config.get("security.jwtIssuer") ?? "spotly-api",
           audience: config.get("security.jwtAudience") ?? "spotly-client",
         },

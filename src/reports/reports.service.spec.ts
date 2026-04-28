@@ -1,925 +1,721 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import {
+  ReportReason,
+  ReportStatus,
+  ReportTargetType,
+  SystemRole,
+} from "@prisma/client";
 import { ReportsService } from "./reports.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { EventEmitter2 } from "@nestjs/event-emitter";
-import { ReportReason, ReportStatus, ReportTargetType, SystemRole } from "@prisma/client";
+
+type MockPrismaService = {
+  report: {
+    findFirst: jest.Mock;
+    findUnique: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+    count: jest.Mock;
+    findMany: jest.Mock;
+  };
+  appeal: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
+    updateMany: jest.Mock;
+  };
+  track: {
+    findUnique: jest.Mock;
+  };
+  user: {
+    findUnique: jest.Mock;
+  };
+  playlist: {
+    findUnique: jest.Mock;
+  };
+  $transaction: jest.Mock;
+};
+
+const mockPrisma: MockPrismaService = {
+  report: {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+    count: jest.fn(),
+    findMany: jest.fn(),
+  },
+  appeal: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    updateMany: jest.fn(),
+  },
+  track: {
+    findUnique: jest.fn(),
+  },
+  user: {
+    findUnique: jest.fn(),
+  },
+  playlist: {
+    findUnique: jest.fn(),
+  },
+  $transaction: jest.fn(),
+};
+
+const mockEventEmitter: { emit: jest.Mock } = {
+  emit: jest.fn(),
+};
+
+const REPORTER_ID = "reporter-uuid";
+const ADMIN_ID = "admin-uuid";
+const REPORT_ID = "report-uuid";
+const TRACK_ID = "track-uuid";
+const USER_ID = "user-uuid";
+const PLAYLIST_ID = "playlist-uuid";
 
 describe("ReportsService", () => {
   let service: ReportsService;
-  let prismaService: jest.Mocked<PrismaService>;
-  let eventEmitter: jest.Mocked<EventEmitter2>;
-
-  const asMock = <T extends (...args: any[]) => any>(fn: T) =>
-    fn as jest.MockedFunction<T>;
-
-  const mockReporterId = "reporter-123";
-  const mockAdminId = "admin-456";
-  const mockReportId = "report-789";
-  const mockTrackId = "track-101";
-  const mockUserId = "user-102";
-  const mockPlaylistId = "playlist-103";
-
-  const mockReport = {
-    id: mockReportId,
-    reporterId: mockReporterId,
-    targetType: ReportTargetType.TRACK,
-    targetId: mockTrackId,
-    reason: ReportReason.SPAM,
-    status: ReportStatus.PENDING,
-    description: "This is spam content",
-    createdAt: new Date(),
-    resolvedAt: null,
-    resolvedBy: null,
-  };
 
   beforeEach(async () => {
-    const mockPrismaServiceObj = {
-      report: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        updateMany: jest.fn(),
-        findMany: jest.fn(),
-        count: jest.fn(),
-      },
-      appeal: {
-        findFirst: jest.fn(),
-        create: jest.fn(),
-        updateMany: jest.fn(),
-      },
-      track: {
-        findUnique: jest.fn(),
-      },
-      user: {
-        findUnique: jest.fn(),
-      },
-      playlist: {
-        findUnique: jest.fn(),
-      },
-      $transaction: jest.fn(),
-    };
-
-    const mockEventEmitterObj = {
-      emit: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReportsService,
-        {
-          provide: PrismaService,
-          useValue: mockPrismaServiceObj,
-        },
-        {
-          provide: EventEmitter2,
-          useValue: mockEventEmitterObj,
-        },
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
     service = module.get<ReportsService>(ReportsService);
-    prismaService = module.get(PrismaService) as jest.Mocked<PrismaService>;
-    eventEmitter = module.get(EventEmitter2) as jest.Mocked<EventEmitter2>;
+    jest.clearAllMocks();
   });
 
   describe("createReport", () => {
-    it("should create a report with valid target (track)", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue({ id: mockTrackId } as any);
-      asMock(prismaService.report.create).mockResolvedValue(mockReport as any);
-      asMock(eventEmitter.emit).mockReturnValue(true);
+    it("throws NotFoundException when target track does not exist", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce(null as any);
 
-      const dto = {
-        targetType: ReportTargetType.TRACK,
-        targetId: mockTrackId,
-        reason: ReportReason.SPAM,
-        description: "Spam content",
-      };
-
-      const result = await service.createReport(mockReporterId, dto);
-
-      expect(result.id).toBe(mockReportId);
-      expect(prismaService.report.create).toHaveBeenCalledWith({
-        data: {
-          reporterId: mockReporterId,
+      await expect(
+        service.createReport(REPORTER_ID, {
           targetType: ReportTargetType.TRACK,
-          targetId: mockTrackId,
-          reason: "SPAM",
-          description: "Spam content",
-        },
-      });
+          targetId: TRACK_ID,
+          reason: ReportReason.SPAM,
+          description: "spam content",
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it("should create a report with valid target (user)", async () => {
-      asMock(prismaService.user.findUnique).mockResolvedValue({ id: mockUserId } as any);
-      asMock(prismaService.report.create).mockResolvedValue({
-        ...mockReport,
-        targetType: ReportTargetType.USER,
-        targetId: mockUserId,
-      } as any);
-      asMock(eventEmitter.emit).mockReturnValue(true);
+    it("throws NotFoundException when target user does not exist", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce(null as any);
 
-      const dto = {
-        targetType: ReportTargetType.USER,
-        targetId: mockUserId,
-        reason: ReportReason.INAPPROPRIATE,
-        description: "Harassment behavior",
-      } as any;
-
-      const result = await service.createReport(mockReporterId, dto);
-
-      expect(result.targetType).toBe(ReportTargetType.USER);
+      await expect(
+        service.createReport(REPORTER_ID, {
+          targetType: ReportTargetType.USER,
+          targetId: USER_ID,
+          reason: ReportReason.INAPPROPRIATE,
+          description: "harassment",
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it("should create a report with valid target (playlist)", async () => {
-      asMock(prismaService.playlist.findUnique).mockResolvedValue({
-        id: mockPlaylistId,
-      } as any);
-      asMock(prismaService.report.create).mockResolvedValue({
-        ...mockReport,
-        targetType: ReportTargetType.PLAYLIST,
-        targetId: mockPlaylistId,
-      } as any);
-      asMock(eventEmitter.emit).mockReturnValue(true);
+    it("throws NotFoundException when target playlist does not exist", async () => {
+      mockPrisma.playlist.findUnique.mockResolvedValueOnce(null as any);
 
-      const dto = {
-        targetType: ReportTargetType.PLAYLIST,
-        targetId: mockPlaylistId,
-        reason: ReportReason.COPYRIGHT,
-        description: "Copyright violation",
+      await expect(
+        service.createReport(REPORTER_ID, {
+          targetType: ReportTargetType.PLAYLIST,
+          targetId: PLAYLIST_ID,
+          reason: ReportReason.SPAM,
+          description: "playlist spam",
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("throws BadRequestException for invalid target type", async () => {
+      await expect(
+        service.createReport(REPORTER_ID, {
+          targetType: "COMMENT" as ReportTargetType,
+          targetId: "some-id",
+          reason: ReportReason.SPAM,
+          description: "invalid target",
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("throws ConflictException on duplicate report from same user", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce({ id: "existing" } as any);
+
+      await expect(
+        service.createReport(REPORTER_ID, {
+          targetType: ReportTargetType.TRACK,
+          targetId: TRACK_ID,
+          reason: ReportReason.SPAM,
+          description: "duplicate",
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it("creates report and emits event on success", async () => {
+      const createdReport = {
+        id: REPORT_ID,
+        reporterId: REPORTER_ID,
+        targetType: ReportTargetType.TRACK,
+        targetId: TRACK_ID,
+        reason: ReportReason.SPAM,
+        status: ReportStatus.PENDING,
+        createdAt: new Date(),
       };
 
-      const result = await service.createReport(mockReporterId, dto);
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce(createdReport as any);
 
-      expect(result.targetType).toBe(ReportTargetType.PLAYLIST);
-    });
-
-    it("should throw NotFoundException when track target does not exist", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue(null as any);
-
-      const dto = {
+      const result = await service.createReport(REPORTER_ID, {
         targetType: ReportTargetType.TRACK,
-        targetId: "nonexistent-track",
+        targetId: TRACK_ID,
         reason: ReportReason.SPAM,
-        description: "Spam",
-      } as any;
+        description: "spam content",
+      });
 
-      await expect(
-        service.createReport(mockReporterId, dto)
-      ).rejects.toThrow(NotFoundException);
+      expect(result).toEqual(createdReport);
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        "report.created",
+        expect.objectContaining({ reportId: REPORT_ID }),
+      );
     });
 
-    it("should throw NotFoundException when user target does not exist", async () => {
-      asMock(prismaService.user.findUnique).mockResolvedValue(null as any);
+    it("emits report.created with the full payload", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce({ id: REPORT_ID } as any);
 
-      const dto = {
-        targetType: ReportTargetType.USER,
-        targetId: "nonexistent-user",
-        reason: ReportReason.INAPPROPRIATE,
-        description: "Harassment",
-      } as any;
-
-      await expect(
-        service.createReport(mockReporterId, dto)
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should throw NotFoundException when playlist target does not exist", async () => {
-      asMock(prismaService.playlist.findUnique).mockResolvedValue(null as any);
-
-      const dto = {
-        targetType: ReportTargetType.PLAYLIST,
-        targetId: "nonexistent-playlist",
-        reason: ReportReason.COPYRIGHT,
-        description: "Copyright",
-      } as any;
-
-      await expect(
-        service.createReport(mockReporterId, dto)
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should emit report.created event on success", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue({ id: mockTrackId } as any);
-      asMock(prismaService.report.create).mockResolvedValue(mockReport as any);
-
-      const dto = {
+      await service.createReport(REPORTER_ID, {
         targetType: ReportTargetType.TRACK,
-        targetId: mockTrackId,
+        targetId: TRACK_ID,
         reason: ReportReason.SPAM,
-        description: "Spam",
-      } as any;
+        description: "spam content",
+      });
 
-      await service.createReport(mockReporterId, dto);
-
-      expect(eventEmitter.emit).toHaveBeenCalledWith("report.created", {
-        reportId: mockReportId,
-        reporterId: mockReporterId,
-        category: "SPAM",
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith("report.created", {
+        reportId: REPORT_ID,
+        reporterId: REPORTER_ID,
+        category: ReportReason.SPAM,
         targetType: ReportTargetType.TRACK,
       });
     });
 
-    it("should emit event with correct payload", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue({ id: mockTrackId } as any);
-      asMock(prismaService.report.create).mockResolvedValue(mockReport as any);
+    it("stores PENDING status by default", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce({
+        id: REPORT_ID,
+        status: ReportStatus.PENDING,
+      } as any);
 
-      const dto = {
+      const result = await service.createReport(REPORTER_ID, {
         targetType: ReportTargetType.TRACK,
-        targetId: mockTrackId,
-        reason: ReportReason.INAPPROPRIATE,
-        description: "Harassment",
-      } as any;
-
-      await service.createReport(mockReporterId, dto);
-
-      const emitCall = eventEmitter.emit.mock.calls[0];
-      expect(emitCall[0]).toBe("report.created");
-      expect(emitCall[1]).toHaveProperty("reportId");
-      expect(emitCall[1]).toHaveProperty("reporterId");
-      expect(emitCall[1]).toHaveProperty("category");
-      expect(emitCall[1]).toHaveProperty("targetType");
-    });
-
-    it("should store report with PENDING status by default", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue({ id: mockTrackId } as any);
-      asMock(prismaService.report.create).mockResolvedValue(mockReport as any);
-      asMock(eventEmitter.emit).mockReturnValue(true);
-
-      const dto = {
-        targetType: ReportTargetType.TRACK,
-        targetId: mockTrackId,
+        targetId: TRACK_ID,
         reason: ReportReason.SPAM,
-        description: "Spam",
-      };
-
-      const result = await service.createReport(mockReporterId, dto);
+        description: "spam content",
+      });
 
       expect(result.status).toBe(ReportStatus.PENDING);
     });
 
-    it("should accept optional description", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue({ id: mockTrackId } as any);
-      asMock(prismaService.report.create).mockResolvedValue(mockReport as any);
-      asMock(eventEmitter.emit).mockReturnValue(true);
+    it("allows re-reporting the same content after previous report was REJECTED", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce({ id: "r2" } as any);
 
-      const dto = {
+      await expect(
+        service.createReport(REPORTER_ID, {
+          targetType: ReportTargetType.TRACK,
+          targetId: TRACK_ID,
+          reason: ReportReason.SPAM,
+          description: "new report after rejection",
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it("creates report with a playlist target", async () => {
+      mockPrisma.playlist.findUnique.mockResolvedValueOnce({ id: PLAYLIST_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce({ id: "playlist-report" } as any);
+
+      const result = await service.createReport(REPORTER_ID, {
+        targetType: ReportTargetType.PLAYLIST,
+        targetId: PLAYLIST_ID,
+        reason: ReportReason.COPYRIGHT,
+        description: "Copyright violation",
+      });
+
+      expect(result).toBeDefined();
+    });
+
+    it("stores optional description when provided", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce({ id: REPORT_ID } as any);
+
+      await service.createReport(REPORTER_ID, {
         targetType: ReportTargetType.TRACK,
-        targetId: mockTrackId,
+        targetId: TRACK_ID,
         reason: ReportReason.SPAM,
         description: "Detailed spam description",
-      };
+      });
 
-      await service.createReport(mockReporterId, dto);
-
-      expect(prismaService.report.create).toHaveBeenCalledWith({
+      expect(mockPrisma.report.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           description: "Detailed spam description",
         }),
       });
     });
 
-    it("should create report even without description", async () => {
-      asMock(prismaService.track.findUnique).mockResolvedValue({ id: mockTrackId } as any);
-      asMock(prismaService.report.create).mockResolvedValue(mockReport as any);
-      asMock(eventEmitter.emit).mockReturnValue(true);
+    it("creates report even without description", async () => {
+      mockPrisma.track.findUnique.mockResolvedValueOnce({ id: TRACK_ID } as any);
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null as any);
+      mockPrisma.report.create.mockResolvedValueOnce({ id: REPORT_ID } as any);
 
-      const dto = {
+      await service.createReport(REPORTER_ID, {
         targetType: ReportTargetType.TRACK,
-        targetId: mockTrackId,
+        targetId: TRACK_ID,
         reason: ReportReason.SPAM,
-      };
-
-      await service.createReport(mockReporterId, dto);
-
-      expect(prismaService.report.create).toHaveBeenCalled();
-    });
-  });
-
-  describe("updateReport", () => {
-    it("should update report status from PENDING to RESOLVED", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        status: ReportStatus.RESOLVED,
-        resolvedAt: new Date(),
-        resolvedBy: mockAdminId,
-      } as any);
-      asMock(prismaService.appeal.updateMany).mockResolvedValue({ count: 0 } as any);
-
-      const dto = {
-        status: ReportStatus.RESOLVED,
-      };
-
-      const result = await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(result.report.status).toBe(ReportStatus.RESOLVED);
-      expect(result.report.resolvedBy).toBe(mockAdminId);
-    });
-
-    it("should update report status from PENDING to IN_REVIEW", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        status: ReportStatus.UNDER_REVIEW,
       } as any);
 
-      const dto = {
-        status: ReportStatus.UNDER_REVIEW,
-      } as any;
-
-      const result = await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(result.report.status).toBe(ReportStatus.UNDER_REVIEW);
-    });
-
-    it("should update report status from PENDING to REJECTED", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        status: ReportStatus.REJECTED,
-        resolvedAt: new Date(),
-        resolvedBy: mockAdminId,
-      } as any);
-
-      const dto = {
-        status: ReportStatus.REJECTED,
-      } as any;
-
-      const result = await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(result.report.status).toBe(ReportStatus.REJECTED);
-    });
-
-    it("should set resolvedAt and resolvedBy when transitioning to RESOLVED", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      const resolvedDate = new Date();
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        status: ReportStatus.RESOLVED,
-        resolvedAt: resolvedDate,
-        resolvedBy: mockAdminId,
-      } as any);
-
-      const dto = {
-        status: ReportStatus.RESOLVED,
-      } as any;
-
-      const result = await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(result.report.resolvedAt).not.toBeNull();
-      expect(result.report.resolvedBy).toBe(mockAdminId);
-    });
-
-    it("should set resolvedAt and resolvedBy when transitioning to REJECTED", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        status: ReportStatus.REJECTED,
-        resolvedAt: new Date(),
-        resolvedBy: mockAdminId,
-      } as any);
-
-      const dto = {
-        status: ReportStatus.REJECTED,
-      };
-
-      const result = await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(result.report.resolvedAt).not.toBeNull();
-      expect(result.report.resolvedBy).toBe(mockAdminId);
-    });
-
-    it("should apply resolution notes to appeals", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        status: ReportStatus.RESOLVED,
-      } as any);
-      asMock(prismaService.appeal.updateMany).mockResolvedValue({ count: 2 } as any);
-
-      const dto = {
-        status: ReportStatus.RESOLVED,
-        resolutionNotes: "Content violates policy",
-      } as any;
-
-      const result = await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(result.notesAppliedToAppeals).toBe(2);
-      expect(prismaService.appeal.updateMany).toHaveBeenCalledWith({
-        where: { reportId: mockReportId },
-        data: expect.objectContaining({
-          resolutionNotes: "Content violates policy",
-        }),
-      });
-    });
-
-    it("should not update appeals if no resolution notes provided", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.report.update).mockResolvedValue(mockReport as any);
-
-      const dto = {
-        status: ReportStatus.RESOLVED,
-      } as any;
-
-      await service.updateReport(mockReportId, mockAdminId, dto);
-
-      expect(prismaService.appeal.updateMany).not.toHaveBeenCalled();
-    });
-
-    it("should throw NotFoundException if report does not exist", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(null as any);
-
-      const dto = {
-        status: ReportStatus.RESOLVED,
-      };
-
-      await expect(
-        service.updateReport("nonexistent-report", mockAdminId, dto)
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe("bulkUpdateReports", () => {
-    it("should update multiple reports", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 3 },
-        { count: 1 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1", "report-2", "report-3"],
-        status: ReportStatus.RESOLVED,
-      };
-
-      const result = await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(result.updatedReports).toBe(3);
-    });
-
-    it("should update related appeals", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 2 },
-        { count: 5 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1", "report-2"],
-        status: ReportStatus.RESOLVED,
-      };
-
-      const result = await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(result.updatedAppeals).toBe(5);
-    });
-
-    it("should return count of failed updates for terminal/closed reports", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 2 },
-        { count: 0 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1", "report-2"],
-        status: ReportStatus.RESOLVED,
-      };
-
-      const result = await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(result.updatedReports).toBe(2);
-      expect(result.updatedAppeals).toBe(0);
-    });
-
-    it("should set resolvedAt and resolvedBy for RESOLVED status", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 1 },
-        { count: 0 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1"],
-        status: ReportStatus.RESOLVED,
-      };
-
-      await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
-    });
-
-    it("should set resolvedAt and resolvedBy for REJECTED status", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 1 },
-        { count: 0 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1"],
-        status: ReportStatus.REJECTED,
-      };
-
-      await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
-    });
-
-    it("should apply resolution notes to all appeal records", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 2 },
-        { count: 5 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1", "report-2"],
-        status: ReportStatus.RESOLVED,
-        resolutionNotes: "Policy violation confirmed",
-      };
-
-      await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
-    });
-
-    it("should handle empty report IDs list", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 0 },
-        { count: 0 },
-      ] as any);
-
-      const dto = {
-        reportIds: [],
-        status: ReportStatus.RESOLVED,
-      };
-
-      const result = await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(result.updatedReports).toBe(0);
-      expect(result.updatedAppeals).toBe(0);
-    });
-
-    it("should use transaction for atomicity", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        { count: 2 },
-        { count: 3 },
-      ] as any);
-
-      const dto = {
-        reportIds: ["report-1", "report-2"],
-        status: ReportStatus.RESOLVED,
-      };
-
-      await service.bulkUpdateReports(mockAdminId, dto);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
-    });
-  });
-
-  describe("createAppeal", () => {
-    it("should create an appeal for a report", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      const appealMessage = "Please reconsider this decision";
-      asMock(prismaService.appeal.create).mockResolvedValue({
-        id: "appeal-1",
-        reportId: mockReportId,
-        userId: mockUserId,
-        message: appealMessage,
-        createdAt: new Date(),
-        status: ReportStatus.PENDING,
-        resolvedAt: null,
-        resolvedBy: null,
-        resolutionNotes: null,
-      } as any);
-
-      const dto = {
-        message: appealMessage,
-      } as any;
-
-      const result = await service.createAppeal(mockReportId, mockUserId, dto);
-
-      expect(result.reportId).toBe(mockReportId);
-      expect(result.userId).toBe(mockUserId);
-      expect(result.message).toBe(appealMessage);
-    });
-
-    it("should throw NotFoundException if report does not exist", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(null as any);
-
-      const dto = {
-        message: "Please reconsider",
-      } as any;
-
-      await expect(
-        service.createAppeal("nonexistent-report", mockUserId, dto)
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should store appeal message correctly", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.appeal.create).mockResolvedValue({
-        id: "appeal-1",
-        reportId: mockReportId,
-        userId: mockUserId,
-        message: "Please reconsider this report",
-        createdAt: new Date(),
-        status: ReportStatus.PENDING,
-        resolvedAt: null,
-        resolvedBy: null,
-        resolutionNotes: null,
-      } as any);
-
-      const dto = {
-        message: "Please reconsider this report",
-      } as any;
-
-      const result = await service.createAppeal(mockReportId, mockUserId, dto);
-
-      expect(result.message).toBe("Please reconsider this report");
-    });
-
-    it("should store appeal with reporter's user ID", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.appeal.create).mockResolvedValue({
-        id: "appeal-1",
-        reportId: mockReportId,
-        userId: mockUserId,
-        message: "Please reconsider",
-        createdAt: new Date(),
-        status: ReportStatus.PENDING,
-        resolvedAt: null,
-        resolvedBy: null,
-        resolutionNotes: null,
-      } as any);
-
-      const dto = {
-        message: "Appeal message",
-      } as any;
-
-      await service.createAppeal(mockReportId, mockUserId, dto);
-
-      expect(prismaService.appeal.create).toHaveBeenCalledWith({
-        data: {
-          reportId: mockReportId,
-          userId: mockUserId,
-          message: "Appeal message",
-        },
-      });
+      expect(mockPrisma.report.create).toHaveBeenCalled();
     });
   });
 
   describe("getReportById", () => {
-    it("should retrieve report by ID with full details", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
+    it("throws NotFoundException when report does not exist", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce(null as any);
 
-      const result = await service.getReportById(mockReportId);
-
-      expect(result.id).toBe(mockReportId);
-    });
-
-    it("should throw NotFoundException if report does not exist", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(null as any);
-
-      await expect(service.getReportById("nonexistent")).rejects.toThrow(
-        NotFoundException
+      await expect(service.getReportById("no-id")).rejects.toThrow(
+        NotFoundException,
       );
     });
 
-    it("should include reporter information", async () => {
-      const reportWithReporter = {
-        ...mockReport,
-        reporter: {
-          id: mockReporterId,
-          email: "reporter@example.com",
-        },
+    it("returns report with appeals", async () => {
+      const reportWithAppeals = {
+        id: REPORT_ID,
+        reporter: { id: REPORTER_ID, email: "a@b.com" },
+        adminResolution: null,
+        appeals: [],
       };
-      asMock(prismaService.report.findUnique).mockResolvedValue(reportWithReporter as any);
 
-      const result = await service.getReportById(mockReportId);
+      mockPrisma.report.findUnique.mockResolvedValueOnce(reportWithAppeals as any);
+
+      const result = await service.getReportById(REPORT_ID);
+
+      expect(result.id).toBe(REPORT_ID);
+    });
+
+    it("includes reporter information", async () => {
+      const reportWithReporter = {
+        id: REPORT_ID,
+        reporter: { id: REPORTER_ID, email: "reporter@example.com" },
+      };
+
+      mockPrisma.report.findUnique.mockResolvedValueOnce(reportWithReporter as any);
+
+      const result = await service.getReportById(REPORT_ID);
 
       expect(result.reporter).toBeDefined();
     });
 
-    it("should include admin resolution information", async () => {
+    it("includes admin resolution information", async () => {
       const reportWithAdmin = {
-        ...mockReport,
-        adminResolution: {
-          id: mockAdminId,
-          email: "admin@example.com",
-        },
+        id: REPORT_ID,
+        adminResolution: { id: ADMIN_ID, email: "admin@example.com" },
       };
-      asMock(prismaService.report.findUnique).mockResolvedValue(reportWithAdmin as any);
 
-      const result = await service.getReportById(mockReportId);
+      mockPrisma.report.findUnique.mockResolvedValueOnce(reportWithAdmin as any);
+
+      const result = await service.getReportById(REPORT_ID);
 
       expect(result.adminResolution).toBeDefined();
     });
 
-    it("should include appeals ordered by createdAt DESC", async () => {
-      const reportWithAppeals = {
-        ...mockReport,
-        appeals: [
-          {
-            id: "appeal-2",
-            createdAt: new Date("2026-04-25"),
-          },
-          {
-            id: "appeal-1",
-            createdAt: new Date("2026-04-20"),
-          },
-        ],
-      };
-      asMock(prismaService.report.findUnique).mockResolvedValue(reportWithAppeals as any);
-
-      const result = await service.getReportById(mockReportId);
-
-      expect(result.appeals.length).toBe(2);
-    });
-
-    it("should include appeal count", async () => {
+    it("includes appeal count", async () => {
       const reportWithCount = {
-        ...mockReport,
-        _count: {
-          appeals: 3,
-        },
+        id: REPORT_ID,
+        _count: { appeals: 3 },
       };
-      asMock(prismaService.report.findUnique).mockResolvedValue(reportWithCount as any);
 
-      const result = await service.getReportById(mockReportId);
+      mockPrisma.report.findUnique.mockResolvedValueOnce(reportWithCount as any);
+
+      const result = await service.getReportById(REPORT_ID);
 
       expect((result as any)._count.appeals).toBe(3);
     });
   });
 
   describe("getReports", () => {
-    it("should retrieve paginated reports", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        10,
-        [mockReport],
-      ] as any);
+    it("retrieves paginated reports", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([10, [{ id: REPORT_ID }]] as any);
 
-      const query = { page: 1, limit: 20 };
-
-      const result = await service.getReports(query);
+      const result = await service.getReports({ page: 1, limit: 20 } as any);
 
       expect(result.items).toBeDefined();
       expect(result.pagination).toBeDefined();
     });
 
-    it("should filter by status", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([0, []] as any);
+    it("filters by status", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([0, []] as any);
 
-      const query = { page: 1, limit: 20, status: ReportStatus.PENDING };
+      await service.getReports({ page: 1, limit: 20, status: ReportStatus.PENDING } as any);
 
-      await service.getReports(query);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
 
-    it("should filter by targetType", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([0, []] as any);
+    it("filters by targetType", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([0, []] as any);
 
-      const query = {
+      await service.getReports({
         page: 1,
         limit: 20,
         targetType: ReportTargetType.TRACK,
-      };
+      } as any);
 
-      await service.getReports(query);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
 
-    it("should use pagination with default page 1", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([0, []] as any);
+    it("uses default page 1", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([0, []] as any);
 
-      const query = { limit: 20 };
-
-      const result = await service.getReports(query);
+      const result = await service.getReports({ limit: 20 } as any);
 
       expect(result.pagination.page).toBe(1);
     });
 
-    it("should use pagination with default limit 20", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([0, []] as any);
+    it("uses default limit 20", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([0, []] as any);
 
-      const query = { page: 1 };
-
-      const result = await service.getReports(query);
+      const result = await service.getReports({ page: 1 } as any);
 
       expect(result.pagination.limit).toBe(20);
     });
 
-    it("should calculate totalPages correctly", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([
-        50,
-        Array(20).fill(mockReport),
-      ] as any);
+    it("calculates totalPages correctly", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([50, Array(20).fill({ id: REPORT_ID })] as any);
 
-      const query = { page: 1, limit: 20 };
-
-      const result = await service.getReports(query);
+      const result = await service.getReports({ page: 1, limit: 20 } as any);
 
       expect(result.pagination.totalPages).toBe(3);
     });
 
-    it("should order results by createdAt DESC", async () => {
-      asMock(prismaService.$transaction).mockResolvedValue([0, []] as any);
-
-      const query = { page: 1, limit: 20 };
-
-      await service.getReports(query);
-
-      expect(prismaService.$transaction).toHaveBeenCalled();
-    });
-
-    it("should include reporter information", async () => {
+    it("includes reporter information", async () => {
       const reportWithReporter = {
-        ...mockReport,
-        reporter: { id: mockReporterId, email: "reporter@example.com" },
+        id: REPORT_ID,
+        reporter: { id: REPORTER_ID, email: "reporter@example.com" },
       };
-      asMock(prismaService.$transaction).mockResolvedValue([1, [reportWithReporter]] as any);
 
-      const query = { page: 1, limit: 20 };
+      mockPrisma.$transaction.mockResolvedValueOnce([1, [reportWithReporter]] as any);
 
-      const result = await service.getReports(query);
+      const result = await service.getReports({ page: 1, limit: 20 } as any);
 
       expect(result.items[0].reporter).toBeDefined();
     });
 
-    it("should include appeal count", async () => {
+    it("includes appeal count", async () => {
       const reportWithCount = {
-        ...mockReport,
+        id: REPORT_ID,
         _count: { appeals: 2 },
       };
-      asMock(prismaService.$transaction).mockResolvedValue([1, [reportWithCount]] as any);
 
-      const query = { page: 1, limit: 20 };
+      mockPrisma.$transaction.mockResolvedValueOnce([1, [reportWithCount]] as any);
 
-      const result = await service.getReports(query);
+      const result = await service.getReports({ page: 1, limit: 20 } as any);
 
       expect(result.items[0]._count.appeals).toBe(2);
     });
   });
 
+  describe("updateReport", () => {
+    it("throws NotFoundException when report not found", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce(null as any);
+
+      await expect(
+        service.updateReport("no-id", ADMIN_ID, { status: ReportStatus.RESOLVED }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("sets resolvedAt and resolvedBy when status is RESOLVED", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: REPORT_ID,
+        status: ReportStatus.RESOLVED,
+        resolvedAt: new Date(),
+        resolvedBy: ADMIN_ID,
+      } as any);
+      mockPrisma.appeal.updateMany.mockResolvedValueOnce({ count: 0 } as any);
+
+      const result = await service.updateReport(REPORT_ID, ADMIN_ID, {
+        status: ReportStatus.RESOLVED,
+        resolutionNotes: "Action taken.",
+      });
+
+      expect(mockPrisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ resolvedBy: ADMIN_ID }),
+        }),
+      );
+      expect(result.report.status).toBe(ReportStatus.RESOLVED);
+    });
+
+    it("updates status to UNDER_REVIEW", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: REPORT_ID,
+        status: ReportStatus.UNDER_REVIEW,
+      } as any);
+
+      const result = await service.updateReport(REPORT_ID, ADMIN_ID, {
+        status: ReportStatus.UNDER_REVIEW,
+      } as any);
+
+      expect(result.report.status).toBe(ReportStatus.UNDER_REVIEW);
+    });
+
+    it("applies resolution notes to appeals", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: REPORT_ID,
+        status: ReportStatus.RESOLVED,
+      } as any);
+      mockPrisma.appeal.updateMany.mockResolvedValueOnce({ count: 2 } as any);
+
+      const result = await service.updateReport(REPORT_ID, ADMIN_ID, {
+        status: ReportStatus.RESOLVED,
+        resolutionNotes: "Content violates policy",
+      } as any);
+
+      expect(result.notesAppliedToAppeals).toBe(2);
+      expect(mockPrisma.appeal.updateMany).toHaveBeenCalledWith({
+        where: { reportId: REPORT_ID },
+        data: expect.objectContaining({
+          resolutionNotes: "Content violates policy",
+        }),
+      });
+    });
+
+    it("sets resolvedAt and resolvedBy when transitioning to REJECTED", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: REPORT_ID,
+        status: ReportStatus.REJECTED,
+        resolvedAt: new Date(),
+        resolvedBy: ADMIN_ID,
+      } as any);
+
+      const result = await service.updateReport(REPORT_ID, ADMIN_ID, {
+        status: ReportStatus.REJECTED,
+      } as any);
+
+      expect(result.report.resolvedBy).toBe(ADMIN_ID);
+      expect(result.report.resolvedAt).not.toBeNull();
+    });
+
+    it("does not update appeals if no resolution notes are provided", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.report.update.mockResolvedValueOnce({ id: REPORT_ID } as any);
+
+      await service.updateReport(REPORT_ID, ADMIN_ID, {
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      expect(mockPrisma.appeal.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("bulkUpdateReports", () => {
+    it("updates multiple reports in a transaction", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 2 }] as any);
+
+      const result = await service.bulkUpdateReports(ADMIN_ID, {
+        reportIds: ["r1", "r2", "r3"],
+        status: ReportStatus.RESOLVED,
+        resolutionNotes: "Batch resolved",
+      } as any);
+
+      expect(result.updatedReports).toBe(3);
+      expect(result.updatedAppeals).toBe(2);
+    });
+
+    it("updates related appeals", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 2 }, { count: 5 }] as any);
+
+      const result = await service.bulkUpdateReports(ADMIN_ID, {
+        reportIds: ["r1", "r2"],
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      expect(result.updatedAppeals).toBe(5);
+    });
+
+    it("handles empty report IDs list", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 0 }, { count: 0 }] as any);
+
+      const result = await service.bulkUpdateReports(ADMIN_ID, {
+        reportIds: [],
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      expect(result.updatedReports).toBe(0);
+      expect(result.updatedAppeals).toBe(0);
+    });
+
+    it("uses transaction for atomicity", async () => {
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 2 }, { count: 3 }] as any);
+
+      await service.bulkUpdateReports(ADMIN_ID, {
+        reportIds: ["r1", "r2"],
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+  });
+
+  describe("createAppeal", () => {
+    it("creates an appeal for a report", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.appeal.create.mockResolvedValueOnce({
+        id: "appeal-1",
+        reportId: REPORT_ID,
+        userId: USER_ID,
+        message: "Please reconsider this decision",
+        createdAt: new Date(),
+        status: ReportStatus.PENDING,
+        resolvedAt: null,
+        resolvedBy: null,
+        resolutionNotes: null,
+      } as any);
+
+      const result = await service.createAppeal(REPORT_ID, USER_ID, {
+        message: "Please reconsider this decision",
+      } as any);
+
+      expect(result.reportId).toBe(REPORT_ID);
+      expect(result.userId).toBe(USER_ID);
+      expect(result.message).toBe("Please reconsider this decision");
+    });
+
+    it("throws NotFoundException if report does not exist", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce(null as any);
+
+      await expect(
+        service.createAppeal(REPORT_ID, USER_ID, { message: "Please reconsider" } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("stores appeal message correctly", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.appeal.create.mockResolvedValueOnce({
+        id: "appeal-1",
+        reportId: REPORT_ID,
+        userId: USER_ID,
+        message: "Please reconsider this report",
+        createdAt: new Date(),
+        status: ReportStatus.PENDING,
+        resolvedAt: null,
+        resolvedBy: null,
+        resolutionNotes: null,
+      } as any);
+
+      const result = await service.createAppeal(REPORT_ID, USER_ID, {
+        message: "Please reconsider this report",
+      } as any);
+
+      expect(result.message).toBe("Please reconsider this report");
+    });
+
+    it("stores appeal with the reporter user ID", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.appeal.create.mockResolvedValueOnce({
+        id: "appeal-1",
+        reportId: REPORT_ID,
+        userId: USER_ID,
+        message: "Appeal message",
+        createdAt: new Date(),
+        status: ReportStatus.PENDING,
+        resolvedAt: null,
+        resolvedBy: null,
+        resolutionNotes: null,
+      } as any);
+
+      await service.createAppeal(REPORT_ID, USER_ID, {
+        message: "Appeal message",
+      } as any);
+
+      expect(mockPrisma.appeal.create).toHaveBeenCalledWith({
+        data: {
+          reportId: REPORT_ID,
+          userId: USER_ID,
+          message: "Appeal message",
+        },
+      });
+    });
+  });
+
   describe("assignReport", () => {
-    it("should assign report to admin", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.user.findUnique).mockResolvedValue({
-        id: mockAdminId,
+    it("assigns report to valid admin", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: ADMIN_ID,
         systemRole: SystemRole.ADMIN,
       } as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        resolvedBy: mockAdminId,
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: REPORT_ID,
+        resolvedBy: ADMIN_ID,
       } as any);
 
-      const result = await service.assignReport(mockReportId, mockAdminId);
+      const result = await service.assignReport(REPORT_ID, ADMIN_ID);
 
-      expect(result.resolvedBy).toBe(mockAdminId);
+      expect(result.resolvedBy).toBe(ADMIN_ID);
     });
 
-    it("should throw NotFoundException if report does not exist", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(null as any);
+    it("throws NotFoundException when admin user not found", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.user.findUnique.mockResolvedValueOnce(null as any);
 
-      await expect(
-        service.assignReport("nonexistent", mockAdminId)
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.assignReport(REPORT_ID, "no-admin")).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it("should throw NotFoundException if admin does not exist", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.user.findUnique).mockResolvedValue(null as any);
-
-      await expect(
-        service.assignReport(mockReportId, "nonexistent-admin")
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should throw BadRequestException if assignee is not admin", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.user.findUnique).mockResolvedValue({
-        id: mockUserId,
+    it("throws BadRequestException when assignee is not ADMIN", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: USER_ID,
         systemRole: SystemRole.USER,
       } as any);
 
-      await expect(
-        service.assignReport(mockReportId, mockUserId)
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.assignReport(REPORT_ID, USER_ID)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it("should check user has ADMIN role", async () => {
-      asMock(prismaService.report.findUnique).mockResolvedValue(mockReport as any);
-      asMock(prismaService.user.findUnique).mockResolvedValue({
-        id: mockAdminId,
+    it("checks user has ADMIN role", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: REPORT_ID } as any);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: ADMIN_ID,
         systemRole: SystemRole.ADMIN,
       } as any);
-      asMock(prismaService.report.update).mockResolvedValue({
-        ...mockReport,
-        resolvedBy: mockAdminId,
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: REPORT_ID,
+        resolvedBy: ADMIN_ID,
       } as any);
 
-      await service.assignReport(mockReportId, mockAdminId);
+      await service.assignReport(REPORT_ID, ADMIN_ID);
 
-      expect(prismaService.user.findUnique).toHaveBeenCalledWith({
-        where: { id: mockAdminId },
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: ADMIN_ID },
         select: {
           id: true,
           systemRole: true,

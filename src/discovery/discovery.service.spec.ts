@@ -376,11 +376,14 @@ describe("DiscoveryService", () => {
         title: "Night Drive",
         slug: "night-drive",
         coverArtUrl: "https://example.com/cover.jpg",
+        coverArt: "https://example.com/cover.jpg",
         uploaderId: "user-1",
         uploader: { userId: "user-1", handle: "artist", displayName: "Artist" },
         recentPlays: 100,
         recentLikes: 50,
         velocityScore: 200,
+        artist_handle: null,
+        genre: null,
       });
     });
 
@@ -422,6 +425,7 @@ describe("DiscoveryService", () => {
           userId: true,
           handle: true,
           displayName: true,
+          avatarUrl: true,
         },
       });
     });

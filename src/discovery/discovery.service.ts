@@ -43,8 +43,15 @@ export class DiscoveryService {
                 select: {
                   handle: true,
                   displayName: true,
+                  avatarUrl: true,
                 },
               },
+            },
+          },
+          primaryGenre: {
+            select: {
+              name: true,
+              slug: true,
             },
           },
         },
@@ -93,6 +100,7 @@ export class DiscoveryService {
                 select: {
                   handle: true,
                   displayName: true,
+                  avatarUrl: true,
                 },
               },
             },
@@ -102,32 +110,38 @@ export class DiscoveryService {
       }),
     ]);
 
+    const enrichedTracks = tracks.map((track) => this.enrichTrack(track));
+    const enrichedUsers = users.map((user) => this.enrichUser(user));
+    const enrichedPlaylists = playlists.map((playlist) => this.enrichPlaylist(playlist));
+
     return {
       query: normalized,
       results: {
-        tracks,
-        users,
-        playlists,
+        tracks: enrichedTracks,
+        users: enrichedUsers,
+        playlists: enrichedPlaylists,
       },
       totals: {
-        tracks: tracks.length,
-        users: users.length,
-        playlists: playlists.length,
+        tracks: enrichedTracks.length,
+        users: enrichedUsers.length,
+        playlists: enrichedPlaylists.length,
       },
     };
   }
 
   async trending(limit = 20, windowDays = 7) {
-    const rawRows = await this.prisma.$queryRaw<Array<{
-      id: string;
-      title: string;
-      slug: string;
-      cover_art_url: string | null;
-      uploader_id: string;
-      recent_plays: bigint;
-      recent_likes: bigint;
-      velocity_score: number;
-    }>>`
+    const rawRows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        slug: string;
+        cover_art_url: string | null;
+        uploader_id: string;
+        recent_plays: bigint;
+        recent_likes: bigint;
+        velocity_score: number;
+      }>
+    >`
       SELECT
         t.id,
         t.title,
@@ -153,7 +167,9 @@ export class DiscoveryService {
       LIMIT ${limit}
     `;
 
-    const uploaderIds = Array.from(new Set(rawRows.map((row) => row.uploader_id)));
+    const uploaderIds = Array.from(
+      new Set(rawRows.map((row) => row.uploader_id)),
+    );
 
     const uploaderProfiles = uploaderIds.length
       ? await this.prisma.userProfile.findMany({
@@ -162,25 +178,32 @@ export class DiscoveryService {
             userId: true,
             handle: true,
             displayName: true,
+            avatarUrl: true,
           },
         })
       : [];
 
-    const profileMap = new Map(uploaderProfiles.map((profile) => [profile.userId, profile]));
+    const profileMap = new Map(
+      uploaderProfiles.map((profile) => [profile.userId, profile]),
+    );
 
     return {
       windowDays,
-      items: rawRows.map((row) => ({
-        id: row.id,
-        title: row.title,
-        slug: row.slug,
-        coverArtUrl: row.cover_art_url,
-        uploaderId: row.uploader_id,
-        uploader: profileMap.get(row.uploader_id) ?? null,
-        recentPlays: Number(row.recent_plays),
-        recentLikes: Number(row.recent_likes),
-        velocityScore: row.velocity_score,
-      })),
+      items: rawRows.map((row) => {
+        const track: Record<string, unknown> = {
+          id: row.id,
+          title: row.title,
+          slug: row.slug,
+          coverArtUrl: row.cover_art_url,
+          uploaderId: row.uploader_id,
+          uploader: profileMap.get(row.uploader_id) ?? null,
+          recentPlays: Number(row.recent_plays),
+          recentLikes: Number(row.recent_likes),
+          velocityScore: row.velocity_score,
+        };
+
+        return this.enrichTrack(track);
+      }),
     };
   }
 
@@ -197,7 +220,7 @@ export class DiscoveryService {
     if (segments.length === 1) {
       const userProfile = await this.prisma.userProfile.findFirst({
         where: { handle },
-        select: { userId: true, handle: true },
+        select: { userId: true, handle: true, avatarUrl: true, displayName: true },
       });
 
       if (!userProfile) {
@@ -209,6 +232,9 @@ export class DiscoveryService {
         resourceType: ReportTargetType.USER,
         id: userProfile.userId,
         handle: userProfile.handle,
+        avatarUrl: userProfile.avatarUrl,
+        avatar_url: userProfile.avatarUrl,
+        displayName: userProfile.displayName,
       };
     }
 
@@ -228,6 +254,20 @@ export class DiscoveryService {
         select: {
           id: true,
           slug: true,
+          title: true,
+          description: true,
+          coverArtUrl: true,
+          owner: {
+            select: {
+              profile: {
+                select: {
+                  handle: true,
+                  displayName: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -240,6 +280,11 @@ export class DiscoveryService {
         resourceType: ReportTargetType.PLAYLIST,
         id: playlist.id,
         slug: playlist.slug,
+        title: playlist.title,
+        description: playlist.description,
+        coverArtUrl: playlist.coverArtUrl,
+        coverArt: playlist.coverArtUrl,
+        owner_handle: playlist.owner?.profile?.handle ?? null,
       };
     }
 
@@ -257,6 +302,26 @@ export class DiscoveryService {
       select: {
         id: true,
         slug: true,
+        title: true,
+        description: true,
+        coverArtUrl: true,
+        uploader: {
+          select: {
+            profile: {
+              select: {
+                handle: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+        primaryGenre: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
       },
     });
 
@@ -266,6 +331,12 @@ export class DiscoveryService {
         resourceType: ReportTargetType.TRACK,
         id: track.id,
         slug: track.slug,
+        title: track.title,
+        description: track.description,
+        coverArtUrl: track.coverArtUrl,
+        coverArt: track.coverArtUrl,
+        genre: track.primaryGenre?.slug ?? track.primaryGenre?.name ?? null,
+        artist_handle: track.uploader?.profile?.handle ?? null,
       };
     }
 
@@ -281,6 +352,20 @@ export class DiscoveryService {
       select: {
         id: true,
         slug: true,
+        title: true,
+        description: true,
+        coverArtUrl: true,
+        owner: {
+          select: {
+            profile: {
+              select: {
+                handle: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -290,6 +375,11 @@ export class DiscoveryService {
         resourceType: ReportTargetType.PLAYLIST,
         id: playlist.id,
         slug: playlist.slug,
+        title: playlist.title,
+        description: playlist.description,
+        coverArtUrl: playlist.coverArtUrl,
+        coverArt: playlist.coverArtUrl,
+        owner_handle: playlist.owner?.profile?.handle ?? null,
       };
     }
 
@@ -317,5 +407,26 @@ export class DiscoveryService {
     }
 
     return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  }
+
+  private enrichUser<T extends { avatarUrl?: string | null }>(user: T) {
+    return Object.assign(user as Record<string, unknown>, {
+      avatar_url: user.avatarUrl ?? null,
+    });
+  }
+
+  private enrichTrack<T extends { coverArtUrl?: string | null; uploader?: { profile?: { handle?: string | null } | null } | null; primaryGenre?: { slug?: string | null; name?: string | null } | null }>(track: T) {
+    return Object.assign(track as Record<string, unknown>, {
+      coverArt: track.coverArtUrl ?? null,
+      artist_handle: track.uploader?.profile?.handle ?? null,
+      genre: track.primaryGenre?.slug ?? track.primaryGenre?.name ?? null,
+    });
+  }
+
+  private enrichPlaylist<T extends { coverArtUrl?: string | null; owner?: { profile?: { handle?: string | null } | null } | null }>(playlist: T) {
+    return Object.assign(playlist as Record<string, unknown>, {
+      coverArt: playlist.coverArtUrl ?? null,
+      owner_handle: playlist.owner?.profile?.handle ?? null,
+    });
   }
 }

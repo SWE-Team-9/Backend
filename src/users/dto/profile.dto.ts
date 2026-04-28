@@ -1,4 +1,4 @@
-﻿import {
+import {
   IsArray,
   IsBoolean,
   IsEnum,
@@ -180,13 +180,13 @@ export class CheckHandleQueryDto {
   @ApiProperty({
     example: "yahia_dev",
     description:
-      "Handle to check (3–30 chars, lowercase letters, numbers, underscores, hyphens).",
+      "Handle to check (3-30 chars, lowercase letters, numbers, underscores, hyphens).",
   })
   @IsString()
   @IsNotEmpty()
   @Matches(HANDLE_REGEX, {
     message:
-      "handle must be 3–30 characters and contain only lowercase letters, numbers, underscores, and hyphens.",
+      "handle must be 3-30 characters and contain only lowercase letters, numbers, underscores, and hyphens.",
   })
   handle!: string;
 }

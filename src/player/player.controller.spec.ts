@@ -201,6 +201,14 @@ describe("PlayerController", () => {
       expect(svc.markPlayed).toHaveBeenCalledWith("user-1", UUID);
       expect(res.body.playCount).toBe(4821);
     });
+
+    it("should pass optional playlist context through", async () => {
+      await request(app.getHttpServer())
+        .post(`/player/tracks/${UUID}/play?playlistId=pl_101`)
+        .expect(201);
+
+      expect(svc.markPlayed).toHaveBeenCalledWith("user-1", UUID, "pl_101");
+    });
   });
 
   // ── GET /player/history/recent ─────────────────────────────────────

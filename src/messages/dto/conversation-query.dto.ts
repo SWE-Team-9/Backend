@@ -3,7 +3,10 @@ import { IsBoolean, IsInt, IsOptional, Max, Min } from "class-validator";
 
 export class ConversationQueryDto {
   @IsOptional()
-  @Transform(({ value }) => value === "true" || value === true)
+  @Transform(({ obj }) => {
+    const raw = (obj as Record<string, unknown>).archived;
+    return raw === "true" || raw === true;
+  })
   @IsBoolean()
   archived?: boolean = false;
 

@@ -84,10 +84,12 @@ export class AuthService {
     // Generate verification token before the transaction so it's ready to store atomically
     const rawVerificationToken = crypto.randomBytes(32).toString("hex");
     const tokenHash = this.tokenService.hashToken(rawVerificationToken);
-    const tokenExpiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000);
+    const tokenExpiresAt = new Date(
+      Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000,
+    );
 
     // Create user, profile, auth identity, AND email token in one transaction.
-    // If anything here fails the entire insert is rolled back — no orphaned rows.
+    // If anything here fails the entire insert is rolled back - no orphaned rows.
     let user;
     try {
       user = await this.prisma.$transaction(async (tx: any) => {
@@ -146,18 +148,22 @@ export class AuthService {
             message: "An account with this email already exists.",
           });
         }
-
       }
 
       throw error;
     }
 
-    // Send verification email AFTER the transaction commits (non-fatal — user
+    // Send verification email AFTER the transaction commits (non-fatal - user
     // can always request a resend via /auth/resend-verification).
-    await this.sendVerificationEmail(dto.email, dto.display_name, rawVerificationToken);
+    await this.sendVerificationEmail(
+      dto.email,
+      dto.display_name,
+      rawVerificationToken,
+    );
 
     return {
-      message: "Registration successful. Please check your email to verify your account.",
+      message:
+        "Registration successful. Please check your email to verify your account.",
       user: {
         id: user.id,
         email: user.email,
@@ -192,7 +198,8 @@ export class AuthService {
       throw new GoneException({
         statusCode: 410,
         error: "TOKEN_EXPIRED",
-        message: "This verification link has expired. Please request a new one.",
+        message:
+          "This verification link has expired. Please request a new one.",
       });
     }
 
@@ -239,17 +246,24 @@ export class AuthService {
       // Create a fresh token then send the email
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = this.tokenService.hashToken(rawToken);
-      const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000);
+      const expiresAt = new Date(
+        Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 60 * 60 * 1000,
+      );
 
       await this.prisma.emailVerificationToken.create({
         data: { userId: user.id, tokenHash, expiresAt },
       });
 
-      await this.sendVerificationEmail(user.email, user.profile?.displayName, rawToken);
+      await this.sendVerificationEmail(
+        user.email,
+        user.profile?.displayName,
+        rawToken,
+      );
     }
 
     return {
-      message: "If an unverified account with this email exists, a new verification link has been sent.",
+      message:
+        "If an unverified account with this email exists, a new verification link has been sent.",
     };
   }
 
@@ -320,8 +334,12 @@ export class AuthService {
     }
 
     // Create tokens and session
-    const accessToken = this.tokenService.signAccessToken(user.id, user.systemRole);
-    const { raw: refreshToken, hash: refreshTokenHash } = this.tokenService.createRefreshToken();
+    const accessToken = this.tokenService.signAccessToken(
+      user.id,
+      user.systemRole,
+    );
+    const { raw: refreshToken, hash: refreshTokenHash } =
+      this.tokenService.createRefreshToken();
 
     const sessionId = await this.sessionService.createSession({
       userId: user.id,
@@ -381,7 +399,7 @@ export class AuthService {
     let user: any;
 
     if (authIdentity) {
-      // Existing Google user — just log them in
+      // Existing Google user - just log them in
       user = authIdentity.user;
     } else {
       // Case B: Check if a user with this email already exists (registered via email)
@@ -402,7 +420,7 @@ export class AuthService {
         });
         user = existingUser;
       } else {
-        // Case C: Brand new user — create everything
+        // Case C: Brand new user - create everything
         user = await this.prisma.$transaction(async (tx: any) => {
           const newUser = await tx.user.create({
             data: {
@@ -413,7 +431,10 @@ export class AuthService {
             },
           });
 
-          const handle = await this.buildUniqueHandle(googleUser.displayName, tx);
+          const handle = await this.buildUniqueHandle(
+            googleUser.displayName,
+            tx,
+          );
           await tx.userProfile.create({
             data: {
               userId: newUser.id,
@@ -446,8 +467,12 @@ export class AuthService {
     }
 
     // Create tokens and session
-    const accessToken = this.tokenService.signAccessToken(user.id, user.systemRole ?? "USER");
-    const { raw: refreshToken, hash: refreshTokenHash } = this.tokenService.createRefreshToken();
+    const accessToken = this.tokenService.signAccessToken(
+      user.id,
+      user.systemRole ?? "USER",
+    );
+    const { raw: refreshToken, hash: refreshTokenHash } =
+      this.tokenService.createRefreshToken();
 
     await this.sessionService.createSession({
       userId: user.id,
@@ -472,19 +497,24 @@ export class AuthService {
     const tokenHash = this.tokenService.hashToken(refreshTokenRaw);
 
     // Find active session with this token
-    const session = await this.sessionService.findActiveSessionByHash(tokenHash);
+    const session =
+      await this.sessionService.findActiveSessionByHash(tokenHash);
 
     if (!session) {
       // Token reuse detection: if this hash belongs to a revoked session,
       // someone is replaying an old token -> revoke ALL sessions for safety
-      const revokedSession = await this.sessionService.wasTokenReusedFromRevokedSession(tokenHash);
+      const revokedSession =
+        await this.sessionService.wasTokenReusedFromRevokedSession(tokenHash);
       if (revokedSession) {
-        this.logger.warn(`Refresh token reuse detected for user ${revokedSession.userId}. Revoking all sessions.`);
+        this.logger.warn(
+          `Refresh token reuse detected for user ${revokedSession.userId}. Revoking all sessions.`,
+        );
         await this.sessionService.revokeAllUserSessions(revokedSession.userId);
         throw new UnauthorizedException({
           statusCode: 401,
           error: "TOKEN_REUSE_DETECTED",
-          message: "A previously used refresh token was reused. All sessions have been revoked for security.",
+          message:
+            "A previously used refresh token was reused. All sessions have been revoked for security.",
         });
       }
 
@@ -505,8 +535,12 @@ export class AuthService {
     }
 
     // Rotate the refresh token
-    const { raw: newRefreshToken, hash: newHash } = this.tokenService.createRefreshToken();
-    const newSessionId = await this.sessionService.rotateRefreshToken(session, newHash);
+    const { raw: newRefreshToken, hash: newHash } =
+      this.tokenService.createRefreshToken();
+    const newSessionId = await this.sessionService.rotateRefreshToken(
+      session,
+      newHash,
+    );
 
     // Sign a new access token
     const accessToken = this.tokenService.signAccessToken(
@@ -527,7 +561,8 @@ export class AuthService {
   async logout(refreshTokenRaw: string | undefined) {
     if (refreshTokenRaw) {
       const tokenHash = this.tokenService.hashToken(refreshTokenRaw);
-      const session = await this.sessionService.findActiveSessionByHash(tokenHash);
+      const session =
+        await this.sessionService.findActiveSessionByHash(tokenHash);
       if (session) {
         await this.sessionService.revokeSession(session.id);
       }
@@ -539,9 +574,11 @@ export class AuthService {
   // Endpoint 9: Logout All Devices
   // ═══════════════════════════════════════════════════════════════════════════
   async logoutAll(userId: string) {
-    const revokedCount = await this.sessionService.revokeAllUserSessions(userId);
+    const revokedCount =
+      await this.sessionService.revokeAllUserSessions(userId);
     return {
-      message: "All sessions have been revoked. You have been logged out of all devices.",
+      message:
+        "All sessions have been revoked. You have been logged out of all devices.",
       revoked_count: revokedCount,
     };
   }
@@ -566,7 +603,9 @@ export class AuthService {
       // Create a new reset token
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = this.tokenService.hashToken(rawToken);
-      const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_HOURS * 60 * 60 * 1000);
+      const expiresAt = new Date(
+        Date.now() + PASSWORD_RESET_EXPIRY_HOURS * 60 * 60 * 1000,
+      );
 
       await this.prisma.passwordResetToken.create({
         data: {
@@ -591,7 +630,8 @@ export class AuthService {
     }
 
     return {
-      message: "If an account with this email exists, a password reset link has been sent.",
+      message:
+        "If an account with this email exists, a password reset link has been sent.",
     };
   }
 
@@ -638,13 +678,20 @@ export class AuthService {
     // Revoke all sessions (force re-login)
     await this.sessionService.revokeAllUserSessions(record.userId);
 
-    return { message: "Password reset successful. Please log in with your new password." };
+    return {
+      message:
+        "Password reset successful. Please log in with your new password.",
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Endpoint 12: Change Password
   // ═══════════════════════════════════════════════════════════════════════════
-  async changePassword(userId: string, currentSessionId: string, dto: ChangePasswordDto) {
+  async changePassword(
+    userId: string,
+    currentSessionId: string,
+    dto: ChangePasswordDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException({
@@ -655,7 +702,10 @@ export class AuthService {
     }
 
     // Verify current password
-    const currentValid = await argon2.verify(user.passwordHash, dto.current_password);
+    const currentValid = await argon2.verify(
+      user.passwordHash,
+      dto.current_password,
+    );
     if (!currentValid) {
       throw new UnauthorizedException({
         statusCode: 401,
@@ -683,7 +733,10 @@ export class AuthService {
     // Revoke all OTHER sessions (keep current one active)
     await this.sessionService.revokeOtherSessions(userId, currentSessionId);
 
-    return { message: "Password changed successfully. All other sessions have been revoked." };
+    return {
+      message:
+        "Password changed successfully. All other sessions have been revoked.",
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -733,7 +786,9 @@ export class AuthService {
     // Create new email change request
     const rawToken = crypto.randomBytes(32).toString("hex");
     const tokenHash = this.tokenService.hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + EMAIL_CHANGE_EXPIRY_HOURS * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + EMAIL_CHANGE_EXPIRY_HOURS * 60 * 60 * 1000,
+    );
 
     await this.prisma.emailChangeRequest.create({
       data: {
@@ -759,7 +814,8 @@ export class AuthService {
     }
 
     return {
-      message: "A confirmation link has been sent to your new email address. The link expires in 1 hour.",
+      message:
+        "A confirmation link has been sent to your new email address. The link expires in 1 hour.",
     };
   }
 
@@ -797,7 +853,8 @@ export class AuthService {
       throw new ConflictException({
         statusCode: 409,
         error: "EMAIL_ALREADY_EXISTS",
-        message: "This email has been taken by another account since you requested the change.",
+        message:
+          "This email has been taken by another account since you requested the change.",
       });
     }
 
@@ -816,7 +873,9 @@ export class AuthService {
     // Revoke all sessions (force re-login with new email)
     await this.sessionService.revokeAllUserSessions(record.userId);
 
-    return { message: "Email changed successfully. Please log in with your new email." };
+    return {
+      message: "Email changed successfully. Please log in with your new email.",
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -898,12 +957,16 @@ export class AuthService {
     currentRefreshTokenRaw?: string,
   ) {
     // Find the session
-    const session = await this.sessionService.findSessionByIdAndUser(sessionId, userId);
+    const session = await this.sessionService.findSessionByIdAndUser(
+      sessionId,
+      userId,
+    );
     if (!session) {
       throw new NotFoundException({
         statusCode: 404,
         error: "SESSION_NOT_FOUND",
-        message: "Session not found, does not belong to you, or is already revoked.",
+        message:
+          "Session not found, does not belong to you, or is already revoked.",
       });
     }
 
@@ -914,7 +977,8 @@ export class AuthService {
         throw new ForbiddenException({
           statusCode: 403,
           error: "CANNOT_REVOKE_CURRENT",
-          message: "You cannot revoke the session you are currently using. Use the logout endpoint instead.",
+          message:
+            "You cannot revoke the session you are currently using. Use the logout endpoint instead.",
         });
       }
     }
@@ -924,7 +988,7 @@ export class AuthService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Helper: Send verification email (mail only — token already saved to DB)
+  // Helper: Send verification email (mail only - token already saved to DB)
   // ═══════════════════════════════════════════════════════════════════════════
   private async sendVerificationEmail(
     email: string,
@@ -984,5 +1048,4 @@ export class AuthService {
     handle = `${base}-${crypto.randomBytes(3).toString("hex")}`;
     return handle;
   }
-
 }
