@@ -19,7 +19,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
 import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
 import { PlaylistsService } from './playlists.service';
 import { PlaylistRecentQueryDto } from './dto/playlist-recent-query.dto';
@@ -159,12 +158,6 @@ export class PlaylistsController {
     @CurrentUser('userId') userId: string,
     @Query() query: PlaylistRecentQueryDto,
   ) {
-    return this.playlistsService.getRecentPlaylists(userId, query.limit);
-  }
-
-  @Get('debug/recent')
-  @Public()
-  getRecentPlaylistsDebug(@Query('userId') userId: string, @Query() query: PlaylistRecentQueryDto) {
     return this.playlistsService.getRecentPlaylists(userId, query.limit);
   }
 
