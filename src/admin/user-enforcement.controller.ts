@@ -124,12 +124,12 @@ export class UserEnforcementController {
     format: "uuid",
     description: "Target user UUID.",
   })
-  @ApiResponse({ status: 200, description: "User restored." })
+  @ApiResponse({ status: 201, description: "User restored." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @ApiResponse({ status: 404, description: "User not found." })
   @Post(":userId/restore")
-  @HttpCode(200)
+  @HttpCode(201)
   restoreUser(
     @CurrentUser("userId") adminId: string,
     @Param("userId", ParseUUIDPipe) targetUserId: string,
