@@ -9,6 +9,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     count: jest.fn(),
   },
+  userProfile: { count: jest.fn() },
   moderationAction: {
     findMany: jest.fn(),
     count: jest.fn(),
@@ -133,8 +134,9 @@ describe("AdminUsersService", () => {
 
   describe("cache", () => {
     it("caches getOverviewStats and returns same result on second call", async () => {
-      // getOverviewStats calls 20 Promise.all items
+      // getOverviewStats calls 24 Promise.all items (added artistCount, listenerCount, completedPlayEvents)
       mockPrisma.user.count.mockResolvedValue(100);
+      mockPrisma.userProfile.count.mockResolvedValue(50);
       mockPrisma.track.count.mockResolvedValue(200);
       mockPrisma.playlist.count.mockResolvedValue(10);
       mockPrisma.comment.count.mockResolvedValue(500);
@@ -153,8 +155,14 @@ describe("AdminUsersService", () => {
 
       // Should return same reference (cached)
       expect(first).toStrictEqual(second);
-      // Prisma track.count should only have been called once (cached on second call)
-      expect(mockPrisma.track.count).toHaveBeenCalledTimes(4); // 4 track.count calls in getOverviewStats
+      // Prisma track.count should only have been called once (4x on first call, 0x on cached second)
+      expect(mockPrisma.track.count).toHaveBeenCalledTimes(4);
+      // New metrics should be present
+      expect(first.users).toHaveProperty("artists");
+      expect(first.users).toHaveProperty("listeners");
+      expect(first.users).toHaveProperty("artist_to_listener_ratio");
+      expect(first.engagement).toHaveProperty("play_through_rate_pct");
+      expect(first.engagement).toHaveProperty("completed_play_events");
     });
   });
 });
