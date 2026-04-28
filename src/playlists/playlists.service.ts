@@ -349,14 +349,17 @@ export class PlaylistsService {
         description: true,
         visibility: true,
         slug: true,
-        coverImageUrl: true,
         coverArtUrl: true,
         type: true,
         releaseDate: true,
-        genreId: true,
+        genre: {
+          select: {
+            id: true,
+          },
+        },
         tags: true,
-      },
-    });
+      } as any,
+    }) as any;
 
     if (!playlist) {
       throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
@@ -372,10 +375,10 @@ export class PlaylistsService {
       description: playlist.description,
       visibility: playlist.visibility,
       slug: playlist.slug,
-      coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+      coverImageUrl: playlist.coverArtUrl ?? null,
       type: playlist.type,
       releaseDate: playlist.releaseDate ? new Date(playlist.releaseDate as Date).toISOString() : null,
-      genreId: playlist.genreId,
+      genreId: playlist.genre?.id ?? null,
       tags: playlist.tags ?? [],
     };
   }
@@ -391,7 +394,6 @@ export class PlaylistsService {
         ownerId: true,
         visibility: true,
         secretToken: true,
-        genreId: true,
       },
     });
 
@@ -554,21 +556,20 @@ export class PlaylistsService {
     const updated = await this.prisma.playlist.update({
       where: { id: playlist.id },
       data: {
-        coverImageUrl: uploaded.url,
         coverArtUrl: uploaded.url,
       } as any,
       select: {
-        coverImageUrl: true,
+        coverArtUrl: true,
       } as any,
     }) as any;
 
     this.logAudit('playlist.cover.upload', userId, playlist.id, {
-      coverImageUrl: updated.coverImageUrl,
+      coverImageUrl: updated.coverArtUrl,
     });
 
     return {
       message: 'Playlist cover uploaded successfully',
-      coverImageUrl: updated.coverImageUrl,
+      coverImageUrl: updated.coverArtUrl,
     };
   }
 
@@ -641,7 +642,6 @@ export class PlaylistsService {
       select: {
         id: true,
         title: true,
-        coverImageUrl: true,
         coverArtUrl: true,
         owner: {
           select: {
@@ -665,7 +665,7 @@ export class PlaylistsService {
         .map((playlist) => ({
           playlistId: playlist.id,
           title: playlist.title,
-          coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+          coverImageUrl: playlist.coverArtUrl ?? null,
           owner: {
             id: playlist.owner.id,
             display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
