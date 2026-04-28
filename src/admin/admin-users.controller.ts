@@ -8,6 +8,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { Roles } from "../common/decorators/roles.decorator";
+import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { AdminUsersService } from "./admin-users.service";
@@ -23,6 +24,7 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("admin")
 @Roles("ADMIN")
+@ThrottlePolicy(30, 60_000)
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
 

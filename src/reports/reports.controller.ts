@@ -21,7 +21,7 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Post()
-  @ThrottlePolicy(5, 60_000)
+  @ThrottlePolicy(10, 3_600_000) // 10 per hour per spec
   @ApiOperation({ summary: "Create a new report" })
   @ApiResponse({ status: 201, description: "Report created successfully." })
   @ApiResponse({ status: 400, description: "Validation error." })

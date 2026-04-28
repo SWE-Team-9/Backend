@@ -176,6 +176,35 @@ describe("UserEnforcementService", () => {
         expect.objectContaining({ recipientId: TARGET_ID, actorId: ADMIN_ID }),
       );
     });
+
+    it("re-queries the DB for admin systemRole — does not rely on JWT claim", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser()) // ensureTargetUser
+        .mockResolvedValueOnce(makeAdmin()) // reVerifyAdminRole
+        .mockResolvedValueOnce(makeAdmin()); // verifyAdminPassword
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "action-3",
+        actionType: "WARN_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockResolvedValueOnce(
+        undefined,
+      );
+
+      await service.warnUser(ADMIN_ID, TARGET_ID, {
+        reason: "test",
+        currentPassword: "correct-pw",
+      });
+
+      // reVerifyAdminRole performs a fresh DB lookup for the admin's systemRole field
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: ADMIN_ID },
+          select: expect.objectContaining({ systemRole: true }),
+        }),
+      );
+    });
   });
 
   // ─── suspendUser ─────────────────────────────────────────────────────────────
@@ -260,6 +289,39 @@ describe("UserEnforcementService", () => {
         }),
       );
     });
+
+    it("sets accountStatus=SUSPENDED and suspendedUntil in the transaction", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin());
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.$transaction.mockResolvedValueOnce([{}, {}]);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a3",
+        actionType: "SUSPEND_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockResolvedValueOnce(
+        undefined,
+      );
+
+      await service.suspendUser(ADMIN_ID, TARGET_ID, {
+        reason: "abuse",
+        currentPassword: "pw",
+        durationDays: 3,
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: TARGET_ID },
+          data: expect.objectContaining({
+            accountStatus: "SUSPENDED",
+            suspendedUntil: expect.any(Date),
+          }),
+        }),
+      );
+    });
   });
 
   // ─── banUser ─────────────────────────────────────────────────────────────────
@@ -315,6 +377,74 @@ describe("UserEnforcementService", () => {
       expect(result.tracks_hidden).toBe(5);
       expect(result.action_type).toBe("BAN_USER");
     });
+
+    it("throws ForbiddenException with code CANNOT_BAN_ADMIN when target is an ADMIN", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce(
+        makeTargetUser({ systemRole: "ADMIN" }),
+      );
+
+      await expect(
+        service.banUser(ADMIN_ID, TARGET_ID, {
+          reason: "test",
+          currentPassword: "pw",
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "CANNOT_BAN_ADMIN" }),
+      });
+    });
+
+    it("throws ConflictException with code USER_ALREADY_BANNED when user is already banned", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce(
+        makeTargetUser({ accountStatus: "BANNED" }),
+      );
+
+      await expect(
+        service.banUser(ADMIN_ID, TARGET_ID, {
+          reason: "test",
+          currentPassword: "pw",
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "USER_ALREADY_BANNED" }),
+      });
+    });
+
+    it("calls track.updateMany and playlist.updateMany with moderationState=HIDDEN", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin());
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.$transaction.mockResolvedValueOnce([
+        { count: 2 },
+        { count: 1 },
+        {},
+        { count: 1 },
+      ]);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a4",
+        actionType: "BAN_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockResolvedValueOnce(
+        undefined,
+      );
+
+      await service.banUser(ADMIN_ID, TARGET_ID, {
+        reason: "severe violation",
+        currentPassword: "pw",
+      });
+
+      expect(mockPrisma.track.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ moderationState: "HIDDEN" }),
+        }),
+      );
+      expect(mockPrisma.playlist.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ moderationState: "HIDDEN" }),
+        }),
+      );
+    });
   });
 
   // ─── restoreUser ─────────────────────────────────────────────────────────────
@@ -358,6 +488,39 @@ describe("UserEnforcementService", () => {
 
       expect(result.tracks_restored).toBe(3);
       expect(result.playlists_restored).toBe(1);
+    });
+
+    it("throws ConflictException with code USER_ALREADY_ACTIVE for an ACTIVE user", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser()); // default ACTIVE
+
+      await expect(
+        service.restoreUser(ADMIN_ID, TARGET_ID, { reason: "test" }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "USER_ALREADY_ACTIVE" }),
+      });
+    });
+
+    it("does NOT call $transaction when restoreContent is false", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }))
+        .mockResolvedValueOnce(makeAdmin());
+      mockPrisma.user.update.mockResolvedValueOnce({});
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a5",
+        actionType: "RESTORE_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockResolvedValueOnce(
+        undefined,
+      );
+
+      await service.restoreUser(ADMIN_ID, TARGET_ID, {
+        reason: "appeal",
+        restoreContent: false,
+      });
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.track.updateMany).not.toHaveBeenCalled();
     });
   });
 });

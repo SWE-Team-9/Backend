@@ -2350,4 +2350,95 @@ describe("SubscriptionsService", () => {
       expect(result.trialEnd).not.toBeNull();
     });
   });
+
+  // ─── Scenario-specific coverage ────────────────────────────────────────────
+
+  describe("getMySubscription() — scenario coverage", () => {
+    it("returns planCode 'FREE' and adsEnabled=true when no subscription exists", async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
+      mockPrisma.track.count.mockResolvedValue(0);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.planCode).toBe("FREE");
+      expect(result.adsEnabled).toBe(true);
+    });
+
+    it("remainingUploads equals uploadLimit minus uploadedTracks for non-zero count", async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
+      mockPrisma.track.count.mockResolvedValue(1);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.remainingUploads).toBe(FREE_UPLOAD_LIMIT - 1);
+      expect(result.uploadedTracks).toBe(1);
+    });
+
+    it("PRO subscription shows adsEnabled=false and canDownload=true", async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100);
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(sub);
+      mockPrisma.track.count.mockResolvedValue(0);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.adsEnabled).toBe(false);
+      expect(result.canDownload).toBe(true);
+    });
+  });
+
+  describe("PLAN_CONFIG upload limits — spec verification", () => {
+    it("PRO plan uploadLimit is 100 per PLAN_CONFIG", () => {
+      expect(PLAN_CONFIG.PRO.uploadLimit).toBe(100);
+    });
+
+    it("GO_PLUS plan uploadLimit is 1000 per PLAN_CONFIG", () => {
+      expect(PLAN_CONFIG.GO_PLUS.uploadLimit).toBe(1000);
+    });
+  });
+
+  describe("getOfflineTrack() — error code and response verification", () => {
+    it("throws ForbiddenException with code DOWNLOAD_NOT_ALLOWED for FREE user", async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getOfflineTrack(USER_ID, TRACK_ID),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "DOWNLOAD_NOT_ALLOWED" }),
+      });
+    });
+
+    it("returns a downloadUrl field for PRO user", async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100);
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(sub);
+      mockPrisma.track.findFirst.mockResolvedValue(makeTrack());
+
+      const result = await service.getOfflineTrack(USER_ID, TRACK_ID);
+
+      expect(result).toHaveProperty("downloadUrl");
+      expect(result.downloadUrl).toBeTruthy();
+    });
+  });
+
+  describe("Upload quota guard — boundary assertions via getUploadQuota()", () => {
+    it("uploadedCount >= uploadLimit signals limit reached (upload guard blocks)", async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // FREE plan
+      mockPrisma.track.count.mockResolvedValue(FREE_UPLOAD_LIMIT); // at limit
+
+      const { uploadLimit, uploadedCount } =
+        await service.getUploadQuota(USER_ID);
+
+      // EntitlementsService blocks when uploadedCount >= uploadLimit (UPLOAD_LIMIT_REACHED)
+      expect(uploadedCount).toBeGreaterThanOrEqual(uploadLimit);
+    });
+
+    it("uploadedCount < uploadLimit signals upload allowed", async () => {
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // FREE plan
+      mockPrisma.track.count.mockResolvedValue(1); // below limit
+
+      const { uploadLimit, uploadedCount } =
+        await service.getUploadQuota(USER_ID);
+
+      expect(uploadedCount).toBeLessThan(uploadLimit);
+    });
+  });
 });

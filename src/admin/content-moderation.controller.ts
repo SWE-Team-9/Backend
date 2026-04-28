@@ -16,6 +16,7 @@ import {
 } from "@nestjs/swagger";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { ContentModerationService } from "./content-moderation.service";
@@ -30,6 +31,7 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("admin")
 @Roles("ADMIN", "MODERATOR")
+@ThrottlePolicy(30, 60_000)
 export class ContentModerationController {
   constructor(
     private readonly contentModerationService: ContentModerationService,
