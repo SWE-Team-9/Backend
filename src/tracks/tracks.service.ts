@@ -308,7 +308,12 @@ export class TracksService {
       : "audio/mpeg";
     const ext = mimeType.includes("wav") ? "wav" : "mp3";
     const storageKey = `tracks/${randomUUID()}.${ext}`;
-    await this.uploadAudioFile(file.buffer, storageKey, mimeType);
+    try {
+      await this.uploadAudioFile(file.buffer, storageKey, mimeType);
+    } catch (err) {
+      this.logger.error(`Audio upload to storage failed: ${err instanceof Error ? err.message : String(err)}`, err instanceof Error ? err.stack : undefined);
+      throw new BadRequestException("Failed to upload audio file. Please try again.");
+    }
 
     // --- upload cover art if provided ---
     let coverArtUrl: string | null = null;

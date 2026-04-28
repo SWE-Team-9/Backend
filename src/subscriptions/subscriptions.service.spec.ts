@@ -501,21 +501,60 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("upgrades an existing active subscription when switching to a different plan", async () => {
-      // Use a different plan ID to simulate an upgrade (GO_PLUS -> PRO or PRO -> different plan)
-      const plan = makePlan(SubscriptionTier.PRO, 100, "plan-uuid-NEW");
-      const existing = makeActiveSub(SubscriptionTier.GO_PLUS, 50); // planId='plan-uuid-4444'
-      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(plan);
+    it("immediately upgrades an existing active subscription to a higher plan", async () => {
+      // PRO -> GO_PLUS is an upgrade — should apply immediately
+      const goPlus = makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-uuid-NEW");
+      const existing = makeActiveSub(SubscriptionTier.PRO, 100); // planId='plan-uuid-4444'
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlus);
       mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(existing); // findActiveSubscription
+      mockPrisma.trialRedemption.findUnique.mockResolvedValue(null);
       mockPrisma.userSubscription.update.mockResolvedValue({});
       mockPrisma.billingInvoice.create.mockResolvedValue({ id: "inv-id" });
       mockPrisma.paymentEvent.create.mockResolvedValue({});
 
-      const result = await service.subscribe(USER_ID, dto);
+      const result = await service.subscribe(USER_ID, {
+        subscriptionType: SubscriptionTypeEnum.GO_PLUS,
+        paymentMethodId: "pm_test_card",
+      });
 
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledTimes(1);
       expect(mockPrisma.userSubscription.create).not.toHaveBeenCalled();
-      expect(result.planCode).toBe("PRO");
+      expect(result.planCode).toBe("GO_PLUS");
+    });
+
+    it("schedules a downgrade when switching from a higher plan to a lower one", async () => {
+      // GO_PLUS -> PRO is a downgrade — should be scheduled for period end, not immediate
+      const proPlan = makePlan(SubscriptionTier.PRO, 100, "plan-uuid-NEW");
+      const existing = makeActiveSub(SubscriptionTier.GO_PLUS, 1000); // currently GO_PLUS
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(proPlan);
+      mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(existing);
+      mockPrisma.userSubscription.update.mockResolvedValue({});
+      mockPrisma.paymentEvent.create.mockResolvedValue({});
+
+      const result = await service.subscribe(USER_ID, dto);
+
+      // Should schedule, not immediately apply
+      expect(result.scheduled).toBe(true);
+      expect(result.currentPlan).toBe("GO_PLUS");
+      expect(result.newPlan).toBe("PRO");
+      expect(result.effectiveAt).toBeDefined();
+      // Should mark cancelAtPeriodEnd on the existing sub
+      expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: existing.id },
+          data: expect.objectContaining({ cancelAtPeriodEnd: true }),
+        }),
+      );
+      // Should NOT create a new subscription
+      expect(mockPrisma.userSubscription.create).not.toHaveBeenCalled();
+      // Should log the downgrade_scheduled event
+      expect(mockPrisma.paymentEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            eventType: "customer.subscription.downgrade_scheduled",
+          }),
+        }),
+      );
     });
 
     it("throws ConflictException when user subscribes to the same plan they already have", async () => {
