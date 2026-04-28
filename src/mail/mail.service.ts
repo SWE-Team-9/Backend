@@ -413,6 +413,39 @@ export class MailService {
     });
   }
 
+  async sendDowngradeScheduledEmail(params: {
+    to: string;
+    displayName?: string;
+    currentPlanName: string;
+    newPlanName: string;
+    effectiveAt: Date;
+  }): Promise<void> {
+    const effectiveDateStr = params.effectiveAt.toISOString().slice(0, 10);
+    await this.sendMail({
+      to: params.to,
+      subject: `Your IQA3 plan will change to ${params.newPlanName} on ${effectiveDateStr}`,
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        `You've requested a plan downgrade from ${params.currentPlanName} to ${params.newPlanName}.`,
+        "",
+        `Your current ${params.currentPlanName} plan remains active until ${effectiveDateStr}.`,
+        `On ${effectiveDateStr} your plan will automatically switch to ${params.newPlanName}.`,
+        "",
+        "You keep all your current benefits until the switch date.",
+        "If you change your mind, you can cancel this downgrade in Settings > Subscription.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        `<p>You've requested a plan downgrade from <strong>${this.escapeHtml(params.currentPlanName)}</strong> to <strong>${this.escapeHtml(params.newPlanName)}</strong>.</p>`,
+        `<p>Your current <strong>${this.escapeHtml(params.currentPlanName)}</strong> plan remains active until <strong>${effectiveDateStr}</strong>.</p>`,
+        `<p>On <strong>${effectiveDateStr}</strong> your plan will automatically switch to <strong>${this.escapeHtml(params.newPlanName)}</strong>.</p>`,
+        "<p>You keep all your current benefits until the switch date.</p>",
+        "<p>If you change your mind, you can cancel this downgrade in <strong>Settings &gt; Subscription</strong>.</p>",
+      ].join(""),
+    });
+  }
+
   async sendPaymentMethodUpdatedEmail(params: {
     to: string;
     displayName?: string;

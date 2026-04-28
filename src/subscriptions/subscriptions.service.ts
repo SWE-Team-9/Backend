@@ -89,6 +89,16 @@ export const PLAN_CONFIG: Record<
   },
 };
 
+/**
+ * Numeric rank for plan tiers — higher = more features/price.
+ * Used to detect upgrades vs downgrades.
+ */
+const PLAN_TIER_RANK: Record<string, number> = {
+  FREE: 0,
+  PRO: 1,
+  GO_PLUS: 2,
+};
+
 /** Returns a new Date exactly one calendar month after the given date. */
 function addOneMonth(date: Date): Date {
   const result = new Date(date);
@@ -246,6 +256,20 @@ export class SubscriptionsService {
       });
     }
 
+    // The paymentMethod JSON field may hold either card info or a pendingDowngrade
+    // object (set when user schedules a downgrade in checkout()). Separate them.
+    const rawPaymentMethod = (sub as any).paymentMethod as Record<string, unknown> | null;
+    const pendingDowngrade = rawPaymentMethod?.pendingDowngrade as {
+      planCode: string;
+      planId: string;
+      planName: string;
+      effectiveAt: string;
+    } | null ?? null;
+    const paymentMethodData =
+      rawPaymentMethod && typeof rawPaymentMethod.brand === "string"
+        ? (rawPaymentMethod as unknown as PaymentMethodSummary)
+        : null;
+
     return this.buildSubscriptionResponse({
       userId,
       tier: sub.plan.tier,
@@ -258,8 +282,8 @@ export class SubscriptionsService {
       trialStart: (sub as any).trialStart ?? null,
       trialEnd: (sub as any).trialEnd ?? null,
       paymentMethodSummary: (sub as any).paymentMethodSummary ?? null,
-      paymentMethod:
-        ((sub as any).paymentMethod as PaymentMethodSummary | null) ?? null,
+      paymentMethod: paymentMethodData,
+      pendingDowngrade,
       latestInvoice,
     });
   }
@@ -333,6 +357,66 @@ export class SubscriptionsService {
         message: `You already have an active ${plan.name} subscription.`,
         details: { renewsAt: existing.currentPeriodEnd.toISOString() },
       });
+    }
+
+    // ── Downgrade detection ──────────────────────────────────────────────────
+    // If the user is on a higher-tier plan and requests a lower one, schedule
+    // the downgrade at the end of the current billing period instead of applying
+    // it immediately. The user keeps all higher-plan benefits until then.
+    if (existing) {
+      const currentTierCode = planTierToCode(existing.plan.tier);
+      if (PLAN_TIER_RANK[currentTierCode] > PLAN_TIER_RANK[planCode]) {
+        const effectiveAt = existing.currentPeriodEnd;
+
+        // Persist the scheduled downgrade intent in the subscription's
+        // paymentMethod JSON so getMySubscription can surface it.
+        const currentPaymentMethod =
+          typeof existing.paymentMethod === "object" &&
+          existing.paymentMethod !== null
+            ? (existing.paymentMethod as object)
+            : {};
+        await this.prisma.userSubscription.update({
+          where: { id: existing.id },
+          data: {
+            cancelAtPeriodEnd: true,
+            paymentMethod: {
+              ...currentPaymentMethod,
+              pendingDowngrade: {
+                planCode,
+                planId: plan.id,
+                planName: plan.name,
+                effectiveAt: effectiveAt.toISOString(),
+              },
+            },
+          },
+        });
+
+        await this.logPaymentEvent(
+          existing.id,
+          "customer.subscription.downgrade_scheduled",
+          {
+            fromPlanCode: currentTierCode,
+            toPlanCode: planCode,
+            effectiveAt: effectiveAt.toISOString(),
+          },
+        );
+
+        this.sendDowngradeScheduledEmailAsync(
+          userId,
+          existing.plan.name,
+          plan.name,
+          effectiveAt,
+        );
+
+        return {
+          subscriptionId: existing.id,
+          scheduled: true,
+          effectiveAt: effectiveAt.toISOString(),
+          currentPlan: currentTierCode,
+          newPlan: planCode,
+          message: `Your plan will downgrade from ${existing.plan.name} to ${plan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
+        };
+      }
     }
 
     // Trial eligibility
@@ -1205,6 +1289,7 @@ export class SubscriptionsService {
     trialEnd: Date | null;
     paymentMethodSummary: string | null;
     paymentMethod?: PaymentMethodSummary | null;
+    pendingDowngrade?: { planCode: string; planId: string; planName: string; effectiveAt: string } | null;
     latestInvoice: {
       id: string;
       amountPaidCents: number;
@@ -1249,6 +1334,7 @@ export class SubscriptionsService {
         ? `${opts.paymentMethod.brand.charAt(0).toUpperCase() + opts.paymentMethod.brand.slice(1)} ending in ${opts.paymentMethod.last4}`
         : opts.paymentMethodSummary,
       paymentMethod: opts.paymentMethod ?? null,
+      pendingDowngrade: opts.pendingDowngrade ?? null,
       latestInvoice: opts.latestInvoice
         ? {
             id: opts.latestInvoice.id,
@@ -1442,6 +1528,35 @@ export class SubscriptionsService {
             })
             .catch((err: unknown) =>
               this.logger.error(`[PLAN CHANGED EMAIL] ${err}`),
+            );
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private sendDowngradeScheduledEmailAsync(
+    userId: string,
+    currentPlanName: string,
+    newPlanName: string,
+    effectiveAt: Date,
+  ): void {
+    this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, profile: { select: { displayName: true } } },
+      })
+      .then((user) => {
+        if (user) {
+          this.mailService
+            .sendDowngradeScheduledEmail({
+              to: user.email,
+              displayName: user.profile?.displayName ?? undefined,
+              currentPlanName,
+              newPlanName,
+              effectiveAt,
+            })
+            .catch((err: unknown) =>
+              this.logger.error(`[DOWNGRADE SCHEDULED EMAIL] ${err}`),
             );
         }
       })
