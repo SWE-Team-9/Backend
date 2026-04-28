@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiCookieAuth,
@@ -15,6 +16,8 @@ import {
 } from "@nestjs/swagger";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
 import { ContentModerationService } from "./content-moderation.service";
 import {
   ModerateTrackDto,
@@ -24,6 +27,7 @@ import {
 
 @ApiTags("Admin - Content Moderation")
 @ApiCookieAuth("access_token")
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("admin")
 @Roles("ADMIN", "MODERATOR")
 export class ContentModerationController {

@@ -12,6 +12,24 @@ import {
 export class AdminUsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ─── In-memory TTL cache (5-minute TTL for expensive stat queries) ─────────────────
+
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private cache = new Map<string, { data: unknown; expiresAt: number }>();
+
+  private async getCached<T>(
+    key: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const hit = this.cache.get(key);
+    if (hit && hit.expiresAt > Date.now()) {
+      return hit.data as T;
+    }
+    const data = await fn();
+    this.cache.set(key, { data, expiresAt: Date.now() + this.CACHE_TTL_MS });
+    return data;
+  }
+
   // ─── Get all users ───────────────────────────────────────────────────────────
 
   async getUsers(query: AdminUsersQueryDto) {
@@ -330,83 +348,100 @@ export class AdminUsersService {
   // ─── Overview stats ──────────────────────────────────────────────────────────
 
   async getOverviewStats() {
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return this.getCached("overview_stats", async () => {
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [
-      totalUsers,
-      activeUsers,
-      suspendedUsers,
-      bannedUsers,
-      verifiedUsers,
-      totalTracks,
-      visibleTracks,
-      hiddenTracks,
-      removedTracks,
-      totalPlaylists,
-      totalComments,
-      totalLikes,
-      totalReposts,
-      reportsPending,
-      reportsInReview,
-      reportsResolvedThisWeek,
-      actionsThisWeek,
-    ] = await Promise.all([
-      this.prisma.user.count({ where: { deletedAt: null } }),
-      this.prisma.user.count({
-        where: { accountStatus: "ACTIVE", deletedAt: null },
-      }),
-      this.prisma.user.count({ where: { accountStatus: "SUSPENDED" } }),
-      this.prisma.user.count({ where: { accountStatus: "BANNED" } }),
-      this.prisma.user.count({ where: { isVerified: true, deletedAt: null } }),
-      this.prisma.track.count({ where: { deletedAt: null } }),
-      this.prisma.track.count({
-        where: { moderationState: "VISIBLE", deletedAt: null },
-      }),
-      this.prisma.track.count({ where: { moderationState: "HIDDEN" } }),
-      this.prisma.track.count({ where: { moderationState: "REMOVED" } }),
-      this.prisma.playlist.count({ where: { deletedAt: null } }),
-      this.prisma.comment.count(),
-      this.prisma.like.count(),
-      this.prisma.repost.count(),
-      this.prisma.moderationReport.count({ where: { status: "PENDING" } }),
-      this.prisma.moderationReport.count({ where: { status: "UNDER_REVIEW" } }),
-      this.prisma.moderationReport.count({
-        where: { status: "RESOLVED", resolvedAt: { gte: weekAgo } },
-      }),
-      this.prisma.moderationAction.count({
-        where: { createdAt: { gte: weekAgo } },
-      }),
-    ]);
+      const [
+        totalUsers,
+        activeUsers,
+        suspendedUsers,
+        bannedUsers,
+        verifiedUsers,
+        totalTracks,
+        visibleTracks,
+        hiddenTracks,
+        removedTracks,
+        totalPlaylists,
+        totalComments,
+        totalLikes,
+        totalReposts,
+        totalPlayEvents,
+        activeSubscriptions,
+        storageAggregate,
+        reportsPending,
+        reportsInReview,
+        reportsResolvedThisWeek,
+        actionsThisWeek,
+      ] = await Promise.all([
+        this.prisma.user.count({ where: { deletedAt: null } }),
+        this.prisma.user.count({
+          where: { accountStatus: "ACTIVE", deletedAt: null },
+        }),
+        this.prisma.user.count({ where: { accountStatus: "SUSPENDED" } }),
+        this.prisma.user.count({ where: { accountStatus: "BANNED" } }),
+        this.prisma.user.count({ where: { isVerified: true, deletedAt: null } }),
+        this.prisma.track.count({ where: { deletedAt: null } }),
+        this.prisma.track.count({
+          where: { moderationState: "VISIBLE", deletedAt: null },
+        }),
+        this.prisma.track.count({ where: { moderationState: "HIDDEN" } }),
+        this.prisma.track.count({ where: { moderationState: "REMOVED" } }),
+        this.prisma.playlist.count({ where: { deletedAt: null } }),
+        this.prisma.comment.count(),
+        this.prisma.like.count(),
+        this.prisma.repost.count(),
+        this.prisma.playEvent.count(),
+        this.prisma.userSubscription.count({ where: { status: "ACTIVE" } }),
+        this.prisma.trackFile.aggregate({ _sum: { fileSizeBytes: true } }),
+        this.prisma.moderationReport.count({ where: { status: "PENDING" } }),
+        this.prisma.moderationReport.count({ where: { status: "UNDER_REVIEW" } }),
+        this.prisma.moderationReport.count({
+          where: { status: "RESOLVED", resolvedAt: { gte: weekAgo } },
+        }),
+        this.prisma.moderationAction.count({
+          where: { createdAt: { gte: weekAgo } },
+        }),
+      ]);
 
-    return {
-      users: {
-        total: totalUsers,
-        active: activeUsers,
-        suspended: suspendedUsers,
-        banned: bannedUsers,
-        verified: verifiedUsers,
-        unverified: totalUsers - verifiedUsers,
-      },
-      content: {
-        total_tracks: totalTracks,
-        tracks_visible: visibleTracks,
-        tracks_hidden: hiddenTracks,
-        tracks_removed: removedTracks,
-        total_playlists: totalPlaylists,
-        total_comments: totalComments,
-      },
-      engagement: {
-        total_likes: totalLikes,
-        total_reposts: totalReposts,
-      },
-      moderation: {
-        reports_pending: reportsPending,
-        reports_in_review: reportsInReview,
-        reports_resolved_this_week: reportsResolvedThisWeek,
-        actions_taken_this_week: actionsThisWeek,
-      },
-    };
+      const totalStorageBytes = Number(
+        storageAggregate._sum.fileSizeBytes ?? BigInt(0),
+      );
+
+      return {
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+          suspended: suspendedUsers,
+          banned: bannedUsers,
+          verified: verifiedUsers,
+          unverified: totalUsers - verifiedUsers,
+        },
+        content: {
+          total_tracks: totalTracks,
+          tracks_visible: visibleTracks,
+          tracks_hidden: hiddenTracks,
+          tracks_removed: removedTracks,
+          total_playlists: totalPlaylists,
+          total_comments: totalComments,
+        },
+        engagement: {
+          total_likes: totalLikes,
+          total_reposts: totalReposts,
+          total_play_events: totalPlayEvents,
+        },
+        billing: {
+          active_subscriptions: activeSubscriptions,
+          total_storage_bytes: totalStorageBytes,
+        },
+        moderation: {
+          reports_pending: reportsPending,
+          reports_in_review: reportsInReview,
+          reports_resolved_this_week: reportsResolvedThisWeek,
+          actions_taken_this_week: actionsThisWeek,
+        },
+      };
+    });
   }
 
   // ─── Daily stats ─────────────────────────────────────────────────────────────
@@ -417,25 +452,29 @@ export class AdminUsersService {
       : new Date(Date.now() - 30 * 24 * 3600 * 1000);
     const dateTo = query.dateTo ? new Date(query.dateTo) : new Date();
 
-    const metrics = await this.prisma.dailyPlatformMetric.findMany({
-      where: {
-        metricDate: { gte: dateFrom, lte: dateTo },
-      },
-      orderBy: { metricDate: "desc" },
-    });
+    const cacheKey = `daily_stats:${dateFrom.toISOString()}:${dateTo.toISOString()}:${query.granularity ?? "daily"}`;
 
-    return {
-      date_from: dateFrom.toISOString().split("T")[0],
-      date_to: dateTo.toISOString().split("T")[0],
-      granularity: query.granularity ?? "daily",
-      metrics: metrics.map((m) => ({
-        date: m.metricDate.toISOString().split("T")[0],
-        new_users: m.newUsers,
-        tracks_uploaded: m.tracksUploaded,
-        total_storage_bytes: m.totalStorageBytes,
-        active_subscribers: m.activeSubscribers,
-      })),
-    };
+    return this.getCached(cacheKey, async () => {
+      const metrics = await this.prisma.dailyPlatformMetric.findMany({
+        where: {
+          metricDate: { gte: dateFrom, lte: dateTo },
+        },
+        orderBy: { metricDate: "desc" },
+      });
+
+      return {
+        date_from: dateFrom.toISOString().split("T")[0],
+        date_to: dateTo.toISOString().split("T")[0],
+        granularity: query.granularity ?? "daily",
+        metrics: metrics.map((m) => ({
+          date: m.metricDate.toISOString().split("T")[0],
+          new_users: m.newUsers,
+          tracks_uploaded: m.tracksUploaded,
+          total_storage_bytes: Number(m.totalStorageBytes),
+          active_subscribers: m.activeSubscribers,
+        })),
+      };
+    });
   }
 
   // ─── Most reported ───────────────────────────────────────────────────────────
@@ -444,48 +483,102 @@ export class AdminUsersService {
     const period = query.period ?? "last_30_days";
     const limit = query.limit ?? 10;
 
-    const since = this.periodToDate(period);
-    const dateFilter = since ? { createdAt: { gte: since } } : {};
+    return this.getCached(`most_reported:${period}:${limit}`, async () => {
+      const since = this.periodToDate(period);
+      const dateFilter = since ? { createdAt: { gte: since } } : {};
 
-    const [userReports, trackReports, playlistReports] = await Promise.all([
-      this.prisma.moderationReport.groupBy({
-        by: ["reportedUserId"],
-        where: { ...dateFilter, reportedUserId: { not: null } },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-        take: limit,
-      }),
-      this.prisma.moderationReport.groupBy({
-        by: ["trackId"],
-        where: { ...dateFilter, trackId: { not: null } },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-        take: limit,
-      }),
-      this.prisma.moderationReport.groupBy({
-        by: ["playlistId"],
-        where: { ...dateFilter, playlistId: { not: null } },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-        take: limit,
-      }),
-    ]);
+      const [userReports, trackReports, playlistReports] = await Promise.all([
+        this.prisma.moderationReport.groupBy({
+          by: ["reportedUserId"],
+          where: { ...dateFilter, reportedUserId: { not: null } },
+          _count: { id: true },
+          orderBy: { _count: { id: "desc" } },
+          take: limit,
+        }),
+        this.prisma.moderationReport.groupBy({
+          by: ["trackId"],
+          where: { ...dateFilter, trackId: { not: null } },
+          _count: { id: true },
+          orderBy: { _count: { id: "desc" } },
+          take: limit,
+        }),
+        this.prisma.moderationReport.groupBy({
+          by: ["playlistId"],
+          where: { ...dateFilter, playlistId: { not: null } },
+          _count: { id: true },
+          orderBy: { _count: { id: "desc" } },
+          take: limit,
+        }),
+      ]);
 
-    return {
-      period,
-      most_reported_users: userReports.map((r) => ({
-        user_id: r.reportedUserId,
-        report_count: r._count.id,
-      })),
-      most_reported_tracks: trackReports.map((r) => ({
-        track_id: r.trackId,
-        report_count: r._count.id,
-      })),
-      most_reported_playlists: playlistReports.map((r) => ({
-        playlist_id: r.playlistId,
-        report_count: r._count.id,
-      })),
-    };
+      // Enrich with target info
+      const userIds = userReports
+        .map((r) => r.reportedUserId)
+        .filter((id): id is string => id !== null);
+      const trackIds = trackReports
+        .map((r) => r.trackId)
+        .filter((id): id is string => id !== null);
+      const playlistIds = playlistReports
+        .map((r) => r.playlistId)
+        .filter((id): id is string => id !== null);
+
+      const [users, tracks, playlists] = await Promise.all([
+        userIds.length
+          ? this.prisma.user.findMany({
+              where: { id: { in: userIds } },
+              select: {
+                id: true,
+                profile: { select: { handle: true, displayName: true } },
+              },
+            })
+          : [],
+        trackIds.length
+          ? this.prisma.track.findMany({
+              where: { id: { in: trackIds } },
+              select: { id: true, title: true },
+            })
+          : [],
+        playlistIds.length
+          ? this.prisma.playlist.findMany({
+              where: { id: { in: playlistIds } },
+              select: { id: true, title: true },
+            })
+          : [],
+      ]);
+
+      const userMap = new Map(users.map((u) => [u.id, u]));
+      const trackMap = new Map(tracks.map((t) => [t.id, t]));
+      const playlistMap = new Map(playlists.map((p) => [p.id, p]));
+
+      return {
+        period,
+        most_reported_users: userReports.map((r) => {
+          const u = r.reportedUserId ? userMap.get(r.reportedUserId) : null;
+          return {
+            user_id: r.reportedUserId,
+            handle: u?.profile?.handle ?? null,
+            display_name: u?.profile?.displayName ?? null,
+            report_count: r._count.id,
+          };
+        }),
+        most_reported_tracks: trackReports.map((r) => {
+          const t = r.trackId ? trackMap.get(r.trackId) : null;
+          return {
+            track_id: r.trackId,
+            title: t?.title ?? null,
+            report_count: r._count.id,
+          };
+        }),
+        most_reported_playlists: playlistReports.map((r) => {
+          const p = r.playlistId ? playlistMap.get(r.playlistId) : null;
+          return {
+            playlist_id: r.playlistId,
+            title: p?.title ?? null,
+            report_count: r._count.id,
+          };
+        }),
+      };
+    });
   }
 
   private periodToDate(period: string): Date | null {

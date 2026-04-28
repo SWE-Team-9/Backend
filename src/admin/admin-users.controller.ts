@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
+import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
@@ -7,6 +7,8 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { Roles } from "../common/decorators/roles.decorator";
+import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
 import { AdminUsersService } from "./admin-users.service";
 import {
   AdminUsersQueryDto,
@@ -17,6 +19,7 @@ import {
 
 @ApiTags("Admin - Users")
 @ApiCookieAuth("access_token")
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("admin")
 @Roles("ADMIN")
 export class AdminUsersController {

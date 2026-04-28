@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiCookieAuth,
@@ -15,6 +16,8 @@ import {
 } from "@nestjs/swagger";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
 import { UserEnforcementService } from "./user-enforcement.service";
 import {
   WarnUserDto,
@@ -25,6 +28,7 @@ import {
 
 @ApiTags("Admin - User Enforcement")
 @ApiCookieAuth("access_token")
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("admin/users")
 @Roles("ADMIN")
 export class UserEnforcementController {
