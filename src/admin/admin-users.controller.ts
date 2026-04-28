@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from "@nestjs/common";
 import {
   ApiCookieAuth,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiResponse,
@@ -76,10 +77,61 @@ export class AdminUsersController {
   // GET /api/v1/admin/stats/overview
   @ApiOperation({
     summary: "Get platform overview stats",
-    description:
-      "Returns high-level platform statistics (user counts, track counts, etc.). Admin only.",
+    description: `Returns high-level platform analytics for the admin dashboard. Admin only.
+
+**Key metrics returned:**
+- **Total Users** with artist/listener breakdown and artist-to-listener ratio
+- **Total Tracks** (visible / hidden / removed)
+- **Total Plays** (all play events recorded)
+- **Play Through Rate** = (completed plays / total plays) × 100, where a completed play has \`completionRatio >= 0.90\` (user listened to ≥ 90% of the track)
+- **Total Storage Used** in bytes across all uploaded track files
+- **Moderation** report and action counts
+
+Results are cached for 5 minutes.`,
   })
-  @ApiResponse({ status: 200, description: "Overview stats returned." })
+  @ApiOkResponse({
+    description: "Overview stats returned.",
+    schema: {
+      example: {
+        users: {
+          total: 5000,
+          active: 4700,
+          suspended: 50,
+          banned: 150,
+          verified: 4800,
+          unverified: 200,
+          artists: 800,
+          listeners: 4200,
+          artist_to_listener_ratio: 0.1905,
+        },
+        content: {
+          total_tracks: 12000,
+          tracks_visible: 11500,
+          tracks_hidden: 300,
+          tracks_removed: 200,
+          total_playlists: 3000,
+          total_comments: 45000,
+        },
+        engagement: {
+          total_play_events: 1500000,
+          completed_play_events: 900000,
+          play_through_rate_pct: 60.0,
+          total_likes: 250000,
+          total_reposts: 80000,
+        },
+        billing: {
+          active_subscriptions: 320,
+          total_storage_bytes: 536870912000,
+        },
+        moderation: {
+          reports_pending: 12,
+          reports_in_review: 5,
+          reports_resolved_this_week: 30,
+          actions_taken_this_week: 18,
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
   @Get("stats/overview")

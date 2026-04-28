@@ -358,6 +358,8 @@ export class AdminUsersService {
         suspendedUsers,
         bannedUsers,
         verifiedUsers,
+        artistCount,
+        listenerCount,
         totalTracks,
         visibleTracks,
         hiddenTracks,
@@ -367,6 +369,7 @@ export class AdminUsersService {
         totalLikes,
         totalReposts,
         totalPlayEvents,
+        completedPlayEvents,
         activeSubscriptions,
         storageAggregate,
         reportsPending,
@@ -381,6 +384,9 @@ export class AdminUsersService {
         this.prisma.user.count({ where: { accountStatus: "SUSPENDED" } }),
         this.prisma.user.count({ where: { accountStatus: "BANNED" } }),
         this.prisma.user.count({ where: { isVerified: true, deletedAt: null } }),
+        // Artist vs Listener breakdown (from UserProfile.accountType)
+        this.prisma.userProfile.count({ where: { accountType: "ARTIST" } }),
+        this.prisma.userProfile.count({ where: { accountType: "LISTENER" } }),
         this.prisma.track.count({ where: { deletedAt: null } }),
         this.prisma.track.count({
           where: { moderationState: "VISIBLE", deletedAt: null },
@@ -392,6 +398,10 @@ export class AdminUsersService {
         this.prisma.like.count(),
         this.prisma.repost.count(),
         this.prisma.playEvent.count(),
+        // Completed plays: completionRatio >= 0.90 (listened >= 90% of track)
+        this.prisma.playEvent.count({
+          where: { completionRatio: { gte: 0.9 } },
+        }),
         this.prisma.userSubscription.count({ where: { status: "ACTIVE" } }),
         this.prisma.trackFile.aggregate({ _sum: { fileSizeBytes: true } }),
         this.prisma.moderationReport.count({ where: { status: "PENDING" } }),
@@ -408,6 +418,21 @@ export class AdminUsersService {
         storageAggregate._sum.fileSizeBytes ?? BigInt(0),
       );
 
+      // Play Through Rate = (completedPlays / totalPlays) × 100
+      // A completed play is one where completionRatio >= 0.90
+      const playThroughRate =
+        totalPlayEvents > 0
+          ? Number(((completedPlayEvents / totalPlayEvents) * 100).toFixed(2))
+          : 0;
+
+      // Artist-to-Listener ratio: how many artists per listener (e.g. 0.25 = 1 artist per 4 listeners)
+      const artistToListenerRatio =
+        listenerCount > 0
+          ? Number((artistCount / listenerCount).toFixed(4))
+          : artistCount > 0
+            ? null // all artists, no listeners
+            : 0;
+
       return {
         users: {
           total: totalUsers,
@@ -416,6 +441,9 @@ export class AdminUsersService {
           banned: bannedUsers,
           verified: verifiedUsers,
           unverified: totalUsers - verifiedUsers,
+          artists: artistCount,
+          listeners: listenerCount,
+          artist_to_listener_ratio: artistToListenerRatio,
         },
         content: {
           total_tracks: totalTracks,
@@ -426,9 +454,11 @@ export class AdminUsersService {
           total_comments: totalComments,
         },
         engagement: {
+          total_play_events: totalPlayEvents,
+          completed_play_events: completedPlayEvents,
+          play_through_rate_pct: playThroughRate,
           total_likes: totalLikes,
           total_reposts: totalReposts,
-          total_play_events: totalPlayEvents,
         },
         billing: {
           active_subscriptions: activeSubscriptions,
