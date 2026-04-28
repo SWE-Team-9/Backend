@@ -46,6 +46,8 @@ function buildPrismaMock() {
       delete: jest.fn(),
     },
     playlistLike: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
       upsert: jest.fn(),
       deleteMany: jest.fn(),
     },
@@ -372,24 +374,39 @@ describe('PlaylistsService', () => {
   describe('likePlaylist', () => {
     it('likes a playlist', async () => {
       prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101' });
-      prisma.playlistLike.upsert.mockResolvedValue({});
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+      prisma.playlistLike.create.mockResolvedValue({});
 
       const result = await service.likePlaylist('usr_1', 'pl_101');
 
-      expect(prisma.playlistLike.upsert).toHaveBeenCalledWith({
+      expect(prisma.playlistLike.findUnique).toHaveBeenCalledWith({
         where: {
           userId_playlistId: {
             userId: 'usr_1',
             playlistId: 'pl_101',
           },
         },
-        update: {},
-        create: {
+        select: {
+          userId: true,
+        },
+      });
+      expect(prisma.playlistLike.create).toHaveBeenCalledWith({
+        data: {
           userId: 'usr_1',
           playlistId: 'pl_101',
         },
       });
       expect(result).toEqual({ message: 'Playlist liked successfully' });
+    });
+
+    it('throws conflict when playlist is already liked', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101' });
+      prisma.playlistLike.findUnique.mockResolvedValue({ userId: 'usr_1' });
+
+      await expect(service.likePlaylist('usr_1', 'pl_101')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.playlistLike.create).not.toHaveBeenCalled();
     });
 
     it('throws when playlist is missing', async () => {

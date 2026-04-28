@@ -461,35 +461,56 @@ export class PlaylistsService {
   }
 
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
-    const playlist = await this.prisma.playlist.findFirst({
-      where: {
-        id: playlistId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
-    }
-
-    await this.prisma.playlistLike.upsert({
-      where: {
-        userId_playlistId: {
-          userId,
-          playlistId: playlist.id,
+    const playlistIdResult = await this.prisma.$transaction(async (tx) => {
+      const playlist = await tx.playlist.findFirst({
+        where: {
+          id: playlistId,
+          deletedAt: null,
         },
-      },
-      update: {},
-      create: {
-        userId,
-        playlistId: playlist.id,
-      },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!playlist) {
+        throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      }
+
+      const existingLike = await tx.playlistLike.findUnique({
+        where: {
+          userId_playlistId: {
+            userId,
+            playlistId: playlist.id,
+          },
+        },
+        select: {
+          userId: true,
+        },
+      });
+
+      if (existingLike) {
+        throw this.conflict('PLAYLIST_ALREADY_LIKED', 'Playlist already liked.');
+      }
+
+      try {
+        await tx.playlistLike.create({
+          data: {
+            userId,
+            playlistId: playlist.id,
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw this.conflict('PLAYLIST_ALREADY_LIKED', 'Playlist already liked.');
+        }
+
+        throw error;
+      }
+
+      return playlist.id;
     });
 
-    this.logAudit('playlist.like', userId, playlist.id);
+    this.logAudit('playlist.like', userId, playlistIdResult);
 
     return {
       message: 'Playlist liked successfully',
