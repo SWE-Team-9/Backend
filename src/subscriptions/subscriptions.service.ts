@@ -433,7 +433,9 @@ export class SubscriptionsService {
       name: user.profile?.displayName ?? undefined,
     });
 
-    // Create checkout session via billing provider
+    // Create checkout session via billing provider.
+    // stripePriceId is passed in metadata so RealStripeBillingProvider can use
+    // it for the Stripe Checkout Session line_item without requiring DB access.
     const session = await this.billing.createCheckoutSession({
       userId,
       planCode,
@@ -441,7 +443,13 @@ export class SubscriptionsService {
       trialDays,
       returnUrl: dto.returnUrl,
       cancelUrl: dto.cancelUrl,
-      metadata: { userId, planId: plan.id },
+      metadata: {
+        userId,
+        planId: plan.id,
+        // Used by RealStripeBillingProvider to set the Stripe price ID.
+        // Null-safe: real Stripe provider will throw a clear error if missing.
+        stripePriceId: plan.stripePriceId ?? "",
+      },
     });
 
     const periodEnd = new Date(session.renewsAt);
@@ -834,12 +842,34 @@ export class SubscriptionsService {
       case "invoice.paid":
       case "invoice.payment_succeeded": {
         if (sub) {
+          // For checkout.session.completed: Stripe creates the real subscription
+          // (sub_xxx) after checkout completes. The DB record was created with
+          // the checkout session ID (cs_xxx) as the stripeSubscriptionId.
+          // Update it now to the real subscription ID so future webhook events
+          // (invoice.paid, subscription.deleted, etc.) can be matched correctly.
+          const realSubId = obj["subscription"] as string | undefined;
+          const updateData: Record<string, unknown> = {
+            status: SubscriptionStatus.ACTIVE,
+            cancelAtPeriodEnd: false,
+            // Clear any stale payment-failure markers set by invoice.payment_failed.
+            // The cron already guards by status=PAST_DUE, but keeping these null
+            // avoids confusing the data if the subscription is ever inspected directly.
+            paymentFailureAt: null,
+            paymentFailureGraceEndsAt: null,
+          };
+          if (
+            event.type === "checkout.session.completed" &&
+            realSubId &&
+            realSubId !== sub.stripeSubscriptionId
+          ) {
+            updateData.stripeSubscriptionId = realSubId;
+            this.logger.log(
+              `[WEBHOOK] Updating stripeSubscriptionId: ${sub.stripeSubscriptionId} → ${realSubId}`,
+            );
+          }
           await this.prisma.userSubscription.update({
             where: { id: sub.id },
-            data: {
-              status: SubscriptionStatus.ACTIVE,
-              cancelAtPeriodEnd: false,
-            },
+            data: updateData as Parameters<typeof this.prisma.userSubscription.update>[0]["data"],
           });
           const invoiceId = obj["invoice"] as string | undefined;
           const amountPaid = (obj["amount_paid"] as number | undefined) ?? 0;
