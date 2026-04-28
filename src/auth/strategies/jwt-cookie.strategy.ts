@@ -4,6 +4,7 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { Request } from "express";
 import { JwtPayload } from "../interfaces/jwt-payload.interface";
+import { PrismaService } from "../../prisma/prisma.service";
 
 // Extract the JWT from the "access_token" httpOnly cookie (primary - browser / web clients)
 function cookieExtractor(req: Request): string | null {
@@ -25,7 +26,10 @@ export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
   "jwt-cookie",
 ) {
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     super({
       // Try the httpOnly cookie first; fall back to Authorization: Bearer.
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -42,11 +46,17 @@ export class JwtCookieStrategy extends PassportStrategy(
 
   // This runs after the JWT signature is verified.
   // Return value gets attached to request.user
-  validate(payload: JwtPayload) {
-    // Return the shape that @CurrentUser("userId") expects
+  async validate(payload: JwtPayload) {
+    // Fetch account status so the guard can block suspended/banned users
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { accountStatus: true },
+    });
+
     return {
       userId: payload.sub,
       role: payload.role,
+      accountStatus: user?.accountStatus ?? "ACTIVE",
     };
   }
 }

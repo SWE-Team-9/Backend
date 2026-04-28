@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, UseGuards } from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
@@ -7,6 +7,7 @@ import {
 } from "@nestjs/swagger";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { AllowSuspended } from "../common/decorators/allow-suspended.decorator";
 import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
 import { CreateAppealDto } from "./dto/create-appeal.dto";
 import { CreateReportDto } from "./dto/create-report.dto";
@@ -34,7 +35,8 @@ export class ReportsController {
   }
 
   @Post("appeal")
-
+  @HttpCode(201)
+  @AllowSuspended()
   @ApiOperation({ summary: "Create an appeal for a report" })
   @ApiResponse({ status: 201, description: "Appeal created successfully." })
   @ApiResponse({ status: 400, description: "Validation error." })
