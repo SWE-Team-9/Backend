@@ -18,8 +18,10 @@ import type { Response } from "express";
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiHeader,
   ApiOperation,
   ApiParam,
+  ApiProduces,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -69,15 +71,63 @@ export class SubscriptionsController {
   }
 
   // ─── GET /subscriptions/offline/:trackId ──────────────────────────────────
-  @ApiOperation({ summary: "Get offline download URL (PRO / GO+ only)" })
-  @ApiParam({ name: "trackId", description: "UUID of the track" })
-  @ApiResponse({ status: 200, description: "Download URL returned." })
+  @ApiOperation({
+    summary: "[STEP 1] Check offline entitlement & get track metadata (PRO / GO+ only)",
+    description:
+      "**Offline Listening — Step 1 of 2**\n\n" +
+      "Call this first to:\n" +
+      "- Verify the user has an active PRO or GO+ subscription (returns 403 if not)\n" +
+      "- Get the track title, artist, duration and cover art for display in the offline library\n\n" +
+      "After a successful response, proceed to **Step 2**: " +
+      "`GET /subscriptions/offline/{trackId}/stream` to download the audio bytes.\n\n" +
+      "**Authentication:** Requires a valid session cookie (`withCredentials: true` / `Cookie` header).\n\n" +
+      "**Error codes:**\n" +
+      "- `DOWNLOAD_NOT_ALLOWED` (403) — user is on the FREE plan\n" +
+      "- `404` — track does not exist or is not published",
+  })
+  @ApiParam({
+    name: "trackId",
+    description: "UUID of the track to save for offline",
+    example: "6df98111-74b9-4fef-b284-2dc5040701d9",
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      "Entitlement confirmed. Returns track metadata. " +
+      "Use `trackId`, `title`, `artist`, `durationMs` and `coverArtUrl` " +
+      "to populate the offline library UI. " +
+      "Then call `/offline/{trackId}/stream` to download the audio.",
+    schema: {
+      example: {
+        trackId: "6df98111-74b9-4fef-b284-2dc5040701d9",
+        title: "Midnight Drive",
+        artist: "DJ Nova",
+        handle: "djnova",
+        durationMs: 214000,
+        coverArtUrl: "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/covers/abc.jpg",
+        downloadUrl: "(signed S3 URL — do not use directly; call /stream instead)",
+        expiresAt: "2026-04-28T14:00:00.000Z",
+        expiresInSeconds: 900,
+        planCode: "PRO",
+      },
+    },
+  })
   @ApiResponse({
     status: 403,
-    description: "DOWNLOAD_NOT_ALLOWED - requires PRO or GO+.",
+    description:
+      "`DOWNLOAD_NOT_ALLOWED` — User is on the FREE plan. " +
+      "Show an upgrade prompt directing the user to `/subscriptions/checkout`.",
+    schema: {
+      example: {
+        statusCode: 403,
+        code: "DOWNLOAD_NOT_ALLOWED",
+        message: "Offline listening is available on PRO and GO+.",
+        details: { currentPlan: "FREE", upgradeOptions: ["PRO", "GO_PLUS"] },
+      },
+    },
   })
-  @ApiResponse({ status: 404, description: "Track not found." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 404, description: "Track not found or not yet published." })
+  @ApiResponse({ status: 401, description: "Not authenticated — missing or expired session cookie." })
   @Get("offline/:trackId")
   async getOfflineTrack(
     @CurrentUser("userId") userId: string,
@@ -87,15 +137,59 @@ export class SubscriptionsController {
   }
 
   // ─── GET /subscriptions/offline/:trackId/stream ───────────────────────────
-  // Proxies the S3 audio bytes back to the browser so the client can store
-  // them in IndexedDB for offline playback — avoids browser-side CORS issues
-  // with S3 presigned URLs when the bucket doesn't allow the app origin.
-  @ApiOperation({ summary: "Stream audio bytes for offline caching (PRO / GO+ only)" })
-  @ApiParam({ name: "trackId", description: "UUID of the track" })
-  @ApiResponse({ status: 200, description: "Audio bytes streamed inline." })
-  @ApiResponse({ status: 403, description: "DOWNLOAD_NOT_ALLOWED - requires PRO or GO+." })
-  @ApiResponse({ status: 404, description: "Track not found." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiOperation({
+    summary: "[STEP 2] Download audio bytes for offline caching (PRO / GO+ only)",
+    description:
+      "**Offline Listening — Step 2 of 2**\n\n" +
+      "Downloads the raw audio bytes for a track and returns them as `audio/mpeg`. " +
+      "The server fetches the file from S3 internally — " +
+      "**the client never needs S3 credentials or a presigned URL**.\n\n" +
+      "**How to use:**\n" +
+      "1. Call `GET /subscriptions/offline/{trackId}` first (Step 1) to verify entitlement\n" +
+      "2. Call this endpoint to download the bytes\n" +
+      "3. Store the bytes in **app-private storage** (IndexedDB on web, app cache dir on mobile)\n" +
+      "4. When playing offline, load the audio from the private cache — " +
+      "do NOT save to the public Downloads folder\n\n" +
+      "**Web (Next.js):** `fetch(url, { credentials: 'include' })` → store Blob in IndexedDB\n\n" +
+      "**Flutter:** Use `flutter_cache_manager` with `authHeaders: { 'Cookie': sessionCookie }` " +
+      "→ `AudioSource.file(cachedFile.path)` for playback\n\n" +
+      "**Authentication:** Session cookie required (`withCredentials: true` / `Cookie` header). " +
+      "The cookie is set automatically by login — no manual token handling needed.\n\n" +
+      "**Error codes:**\n" +
+      "- `DOWNLOAD_NOT_ALLOWED` (403) — subscription lapsed since Step 1\n" +
+      "- `404` — track not found",
+  })
+  @ApiParam({
+    name: "trackId",
+    description: "UUID of the track (same value used in Step 1)",
+    example: "6df98111-74b9-4fef-b284-2dc5040701d9",
+  })
+  @ApiHeader({
+    name: "Cookie",
+    description:
+      "Session cookie set automatically by the login endpoint. " +
+      "Web: handled by the browser when `credentials: 'include'` is set. " +
+      "Flutter: extract from the DioClient CookieJar and pass as `Cookie: <value>`.",
+    required: true,
+  })
+  @ApiProduces("audio/mpeg")
+  @ApiResponse({
+    status: 200,
+    description:
+      "Raw audio bytes (`audio/mpeg`). " +
+      "Response headers: `Content-Type: audio/mpeg`, `Content-Disposition: inline`, " +
+      "`Content-Length: <bytes>`, `Cache-Control: private, max-age=900`. " +
+      "Read the response body as a Blob (web) or stream it to a file (mobile) " +
+      "and store in app-private cache for offline playback.",
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      "`DOWNLOAD_NOT_ALLOWED` — Subscription is no longer active. " +
+      "Re-check entitlement and prompt the user to renew.",
+  })
+  @ApiResponse({ status: 404, description: "Track not found or not yet published." })
+  @ApiResponse({ status: 401, description: "Not authenticated — missing or expired session cookie." })
   @Get("offline/:trackId/stream")
   async streamOfflineTrack(
     @CurrentUser("userId") userId: string,
