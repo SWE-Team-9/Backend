@@ -171,15 +171,49 @@ export class PaymentMethodsService {
   }
 
   // ── Delete (detach) a payment method ─────────────────────────────────────
+  // Returns { subscriptionScheduledToCancel: true, expiresAt } when removing
+  // the last card automatically schedules the subscription to cancel at the end
+  // of the current billing period. The user keeps full access until then.
 
   async deletePaymentMethod(
     userId: string,
     paymentMethodId: string,
-  ): Promise<void> {
+  ): Promise<{ subscriptionScheduledToCancel?: true; expiresAt?: string }> {
     const pm = await this.prisma.paymentMethod.findFirst({
       where: { id: paymentMethodId, userId },
     });
     if (!pm) throw new NotFoundException("Payment method not found");
+
+    // If this is the last payment method, check for an active paid subscription.
+    // If one exists, allow the deletion but automatically schedule cancellation
+    // at the end of the current billing period so the user keeps access until
+    // then and is not surprised by an unexpected charge failure.
+    let autoCancel: { id: string; expiresAt: Date; stripeSubId: string | null } | null = null;
+    const totalMethods = await this.prisma.paymentMethod.count({
+      where: { userId },
+    });
+    if (totalMethods === 1) {
+      const activeSub = await this.prisma.userSubscription.findFirst({
+        where: {
+          userId,
+          status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
+          cancelAtPeriodEnd: false,
+          plan: { tier: { not: "FREE" } },
+        },
+        select: {
+          id: true,
+          currentPeriodEnd: true,
+          stripeSubscriptionId: true,
+        },
+      });
+      if (activeSub) {
+        autoCancel = {
+          id: activeSub.id,
+          expiresAt: activeSub.currentPeriodEnd,
+          stripeSubId: activeSub.stripeSubscriptionId,
+        };
+      }
+    }
 
     // Detach from Stripe (ignore error if already detached)
     try {
@@ -214,6 +248,38 @@ export class PaymentMethodsService {
           });
       }
     }
+
+    // Auto-cancel subscription when the last payment method is removed
+    if (autoCancel) {
+      const now = new Date();
+      await this.prisma.userSubscription.update({
+        where: { id: autoCancel.id },
+        data: { cancelAtPeriodEnd: true, canceledAt: now },
+      });
+
+      // Tell Stripe to cancel at period end (only if it's a real sub_xxx ID)
+      if (autoCancel.stripeSubId?.startsWith("sub_")) {
+        await this.stripe
+          .cancelSubscription(autoCancel.stripeSubId, true)
+          .catch((err) =>
+            this.logger.warn(
+              `[PM DELETE] Stripe cancel-at-period-end failed for ${autoCancel!.stripeSubId}: ${String(err)}`,
+            ),
+          );
+      }
+
+      this.logger.log(
+        `[PM DELETE] Auto-scheduled subscription ${autoCancel.id} to cancel at ${autoCancel.expiresAt.toISOString()} ` +
+          `after last payment method removed for user ${userId}`,
+      );
+
+      return {
+        subscriptionScheduledToCancel: true,
+        expiresAt: autoCancel.expiresAt.toISOString(),
+      };
+    }
+
+    return {};
   }
 
   // ── Helper ────────────────────────────────────────────────────────────────

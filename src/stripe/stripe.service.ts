@@ -152,6 +152,38 @@ export class StripeService {
     return this.stripe.subscriptions.update(stripeSubscriptionId, params);
   }
 
+  // ── Customer Search ───────────────────────────────────────────────────────
+  // Find an existing Stripe customer by the userId stored in their metadata.
+  // Returns the Stripe customer ID or null if not found.
+
+  async searchCustomersByUserId(userId: string): Promise<string | null> {
+    const result = await this.stripe.customers.search({
+      query: `metadata['userId']:'${userId}'`,
+      limit: 1,
+    });
+    return result.data[0]?.id ?? null;
+  }
+
+  // ── Checkout Session ──────────────────────────────────────────────────────
+  // Creates a Stripe Hosted Checkout session.
+  // The user is redirected to session.url to enter payment details on Stripe.
+
+  async createCheckoutSession(
+    params: Stripe.Checkout.SessionCreateParams,
+  ): Promise<Stripe.Checkout.Session> {
+    return this.stripe.checkout.sessions.create(params);
+  }
+
+  // ── Billing Portal ────────────────────────────────────────────────────────
+  // Creates a Stripe Customer Portal session so the user can manage their
+  // payment methods, view invoices, and cancel or change plans.
+
+  async createBillingPortalSession(
+    params: Stripe.BillingPortal.SessionCreateParams,
+  ): Promise<Stripe.BillingPortal.Session> {
+    return this.stripe.billingPortal.sessions.create(params);
+  }
+
   // ── Webhook ───────────────────────────────────────────────────────────────
   // Verifies the Stripe-Signature header and parses the raw body.
   // Throws if the signature is invalid.

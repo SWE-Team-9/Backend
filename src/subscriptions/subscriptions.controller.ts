@@ -203,16 +203,79 @@ export class SubscriptionsController {
   @ApiOperation({
     summary: "Create a checkout session to subscribe to PRO or GO+",
     description:
-      "Canonical Module-12 checkout endpoint. Enforces trial eligibility via TrialRedemption. " +
-      "Returns a checkoutUrl to redirect the user to (mock in dev; real Stripe URL in prod).",
+      "**Module-12 canonical checkout endpoint.**\n\n" +
+      "Behavior depends on the active billing provider:\n\n" +
+      "**Mock mode** (`BILLING_PROVIDER=mock_stripe`, default):\n" +
+      "- Subscription is activated immediately in the DB\n" +
+      "- Returns `{ status: 'active', checkoutUrl: 'https://mock-checkout...' }`\n" +
+      "- No real payment is taken — use this for development/testing\n\n" +
+      "**Real Stripe mode** (`BILLING_PROVIDER=stripe`):\n" +
+      "- Creates a Stripe Hosted Checkout Session\n" +
+      "- Returns `{ checkoutUrl: 'https://checkout.stripe.com/...' }`\n" +
+      "- **Frontend must redirect the user to `checkoutUrl`** — Stripe collects card details\n" +
+      "- On success, Stripe redirects to `/subscriptions/success?session_id=...`\n" +
+      "- On cancel, Stripe redirects to `/subscriptions/cancel`\n" +
+      "- Subscription is activated asynchronously via the `POST /webhook` event `checkout.session.completed`\n\n" +
+      "**Trial logic:**\n" +
+      "- First-time PRO subscribers get a 7-day free trial\n" +
+      "- First-time GO+ subscribers get a 30-day free trial\n" +
+      "- Trial eligibility is tracked per-user in `TrialRedemption` to prevent abuse\n\n" +
+      "**Downgrade detection:**\n" +
+      "- If requesting a lower tier than the current plan, the downgrade is scheduled\n" +
+      "  at the end of the current billing period (user keeps current benefits until then)\n\n" +
+      "**Pre-requisites for real Stripe:**\n" +
+      "- Each `SubscriptionPlan` row in the DB must have `stripePriceId` set\n" +
+      "- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` must be configured in `.env`",
   })
   @ApiBody({ type: CheckoutDto })
-  @ApiResponse({ status: 200, description: "Checkout session created." })
+  @ApiResponse({
+    status: 200,
+    description: "Checkout session created.",
+    schema: {
+      examples: {
+        mock: {
+          summary: "Mock mode response (subscription activated immediately)",
+          value: {
+            subscriptionId: "sub_uuid",
+            status: "active",
+            planCode: "PRO",
+            trialEligible: false,
+            amountPaidCents: 999,
+            currentPeriodEnd: "2026-05-28T00:00:00.000Z",
+            checkoutUrl: "https://mock-checkout.example.com/pay?session=cs_mock_...",
+          },
+        },
+        stripe: {
+          summary: "Real Stripe response (frontend must redirect to checkoutUrl)",
+          value: {
+            checkoutSessionId: "cs_test_a1B2c3D4",
+            checkoutUrl: "https://checkout.stripe.com/pay/cs_test_a1B2c3D4",
+            planCode: "PRO",
+            trialEligible: true,
+            trialDays: 7,
+            amountDueNowCents: 0,
+            renewsAt: "2026-05-05T00:00:00.000Z",
+            trialEndsAt: "2026-05-05T00:00:00.000Z",
+          },
+        },
+        downgrade: {
+          summary: "Downgrade scheduled (no redirect needed)",
+          value: {
+            scheduled: true,
+            effectiveAt: "2026-05-28T00:00:00.000Z",
+            currentPlan: "GO_PLUS",
+            newPlan: "PRO",
+            message: "Your plan will downgrade from GO+ to Artist Pro on 2026-05-28.",
+          },
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 400,
-    description: "Invalid plan or already subscribed.",
+    description: "Invalid plan code, or `SUBSCRIPTION_ALREADY_ACTIVE` (already on that plan).",
   })
-  @ApiResponse({ status: 403, description: "EMAIL_NOT_VERIFIED." })
+  @ApiResponse({ status: 403, description: "`EMAIL_NOT_VERIFIED` — email address not confirmed." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Post("checkout")
   @HttpCode(HttpStatus.OK)
@@ -245,28 +308,33 @@ export class SubscriptionsController {
 
   // ─── POST /subscriptions/portal ───────────────────────────────────────────
   @ApiOperation({
-    summary: "Open billing portal / payment method management",
+    summary: "Create a Stripe Customer Portal session for billing management",
     description:
-      "Creates a Stripe Customer Portal session. The user is redirected to a secure, " +
-      "hosted page where they can add, update, or remove payment methods, view invoices, " +
-      "cancel, or change plans. The response includes a safe payment method summary for " +
-      "display on the settings page (brand, last4, expiry - never full card data). " +
-      'Pass flow="payment_methods" to open the payment-methods screen directly.',
+      "Returns a `portalUrl` that the user should be redirected to.\n\n" +
+      "**On the portal, the user can:**\n" +
+      "- Add, update, or remove payment methods (card, bank, etc.)\n" +
+      "- View and download past invoices\n" +
+      "- Cancel or change their subscription plan\n\n" +
+      "**Mock mode:** Returns a mock portal URL (no real Stripe redirect).\n\n" +
+      "**Real Stripe mode:** Returns a `https://billing.stripe.com/...` URL. " +
+      "After the user finishes, they are redirected to the `returnUrl` (defaults to `/settings`).\n\n" +
+      "The response also includes a safe `paymentMethodSummary` (brand, last4, expiry — never full card data) " +
+      "suitable for displaying the saved card on the settings page without an extra API call.\n\n" +
+      "Pass `flow: \"payment_methods\"` in the body to open the payment-methods screen directly.",
   })
   @ApiBody({ type: PaymentMethodPortalDto, required: false })
   @ApiQuery({
     name: "returnUrl",
     required: false,
-    description: "Backward-compat: returnUrl as query param",
+    description: "Where to send the user after they close the portal (backward-compat query param).",
   })
   @ApiResponse({
     status: 200,
-    description: "Portal session created.",
+    description: "Portal session created. Redirect the user to `portalUrl`.",
     schema: {
       example: {
-        portalSessionId: "bps_mock_abc123",
-        portalUrl:
-          "https://mock-portal.example.com/billing?session=bps_mock_abc123",
+        portalSessionId: "bps_test_a1B2c3",
+        portalUrl: "https://billing.stripe.com/session/bps_test_a1B2c3",
         capabilities: {
           canUpdatePaymentMethod: true,
           canCancel: true,
@@ -367,13 +435,44 @@ export class SubscriptionsController {
 
   // ─── POST /subscriptions/webhook (public - Stripe calls this) ─────────────
   @ApiOperation({
-    summary: "Stripe webhook receiver",
+    summary: "Stripe webhook receiver — do NOT call this manually",
     description:
-      "Receives Stripe webhook events. The raw request body is used for signature " +
-      "verification (configured in main.ts). This endpoint is public.",
+      "**This endpoint is called by Stripe, not by your frontend/mobile app.**\n\n" +
+      "Stripe sends signed HMAC events here after payment events occur. " +
+      "The raw request body is used for signature verification before any processing.\n\n" +
+      "**How to set up (real Stripe only):**\n" +
+      "1. Stripe Dashboard → Developers → Webhooks → Add endpoint\n" +
+      "2. URL: `https://your-domain.com/api/v1/subscriptions/webhook`\n" +
+      "3. Select events:\n" +
+      "   - `checkout.session.completed` — activates subscription after payment\n" +
+      "   - `invoice.paid` / `invoice.payment_succeeded` — renews subscription\n" +
+      "   - `invoice.payment_failed` — starts grace period, sends payment failure email\n" +
+      "   - `customer.subscription.deleted` — cancels subscription\n" +
+      "4. Copy the webhook signing secret → set as `STRIPE_WEBHOOK_SECRET` in `.env`\n\n" +
+      "**Local testing with Stripe CLI:**\n" +
+      "```\nstripe listen --forward-to localhost:3006/api/v1/subscriptions/webhook\n```\n\n" +
+      "**Idempotent:** duplicate events are detected via `stripeEventId` and skipped.\n\n" +
+      "**Mock mode:** The mock provider bypasses signature verification — " +
+      "you can POST any JSON `{ id, type, data: { object: {} } }` to test the handler locally.",
   })
-  @ApiResponse({ status: 200, schema: { example: { received: true } } })
-  @ApiResponse({ status: 400, description: "Invalid signature or payload." })
+  @ApiHeader({
+    name: "stripe-signature",
+    description:
+      "HMAC signature added by Stripe. Required for real Stripe events. " +
+      "Not required when using MockStripeBillingProvider (mock mode ignores it).",
+    required: false,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Event received and processed.",
+    schema: { example: { received: true } },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "`WEBHOOK_INVALID_SIGNATURE` — signature mismatch. " +
+      "Check that `STRIPE_WEBHOOK_SECRET` matches the webhook in Stripe Dashboard.",
+  })
   @Public()
   @Post("webhook")
   @HttpCode(HttpStatus.OK)

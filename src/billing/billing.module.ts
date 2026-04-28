@@ -1,28 +1,37 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { StripeService } from "../stripe/stripe.service";
 import { BILLING_PROVIDER } from "./billing-provider.interface";
 import { MockStripeBillingProvider } from "./mock-stripe.provider";
+import { RealStripeBillingProvider } from "./real-stripe.provider";
 
 /**
  * BillingModule - provides IBillingProvider to the application.
  *
  * BILLING_PROVIDER env var selects the implementation:
- *   mock_stripe (default) - MockStripeBillingProvider (no real Stripe calls)
- *   stripe               - RealStripeBillingProvider (real Stripe API calls)
+ *   mock_stripe (default) — MockStripeBillingProvider (zero real Stripe calls)
+ *   stripe                — RealStripeBillingProvider (live/test Stripe API)
  *
- * To add real Stripe support:
- * 1. Implement RealStripeBillingProvider using StripeService.
- * 2. Add it to the switch below.
- * 3. Set BILLING_PROVIDER=stripe in .env.
+ * To switch to real Stripe:
+ *   1. In .env: set BILLING_PROVIDER=stripe
+ *   2. Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET
+ *   3. Set stripePriceId on each SubscriptionPlan row in the DB
+ *      (copy price_xxx from Stripe Dashboard → Products)
+ *   4. Register the webhook endpoint in Stripe Dashboard:
+ *      https://your-domain.com/api/v1/subscriptions/webhook
+ *      Events: checkout.session.completed, invoice.paid,
+ *              invoice.payment_failed, customer.subscription.deleted
  */
 @Module({
   providers: [
     MockStripeBillingProvider,
+    RealStripeBillingProvider,
     {
       provide: BILLING_PROVIDER,
       useFactory: (
         config: ConfigService,
         mockProvider: MockStripeBillingProvider,
+        realProvider: RealStripeBillingProvider,
       ) => {
         const providerName =
           config.get<string>("billing.provider") ??
@@ -30,15 +39,16 @@ import { MockStripeBillingProvider } from "./mock-stripe.provider";
           "mock_stripe";
 
         switch (providerName) {
-          // TODO(RealStripe): case 'stripe': return realStripeBillingProvider;
+          case "stripe":
+            return realProvider;
           case "mock_stripe":
           default:
             return mockProvider;
         }
       },
-      inject: [ConfigService, MockStripeBillingProvider],
+      inject: [ConfigService, MockStripeBillingProvider, RealStripeBillingProvider],
     },
   ],
-  exports: [BILLING_PROVIDER, MockStripeBillingProvider],
+  exports: [BILLING_PROVIDER, MockStripeBillingProvider, RealStripeBillingProvider],
 })
 export class BillingModule {}
