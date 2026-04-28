@@ -414,11 +414,10 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: PlaylistVisibility.PUBLIC,
         slug: "late-night-drive",
-        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
-        coverArtUrl: null,
+        coverArtUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
         type: "ALBUM",
         releaseDate: new Date("2026-03-01"),
-        genreId: 12,
+        genre: { id: 12 },
         tags: ["chill", "night-drive"],
       });
 
@@ -450,7 +449,7 @@ describe("PlaylistsService", () => {
         key: "playlists/pl_101/cover.jpg",
       });
       prisma.playlist.update.mockResolvedValue({
-        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+        coverArtUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
       });
 
       const result = await service.uploadCover("usr_1", "pl_101", {
@@ -489,14 +488,12 @@ describe("PlaylistsService", () => {
         {
           id: "pl_101",
           title: "Late Night Drive",
-          coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
-          coverArtUrl: null,
+          coverArtUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
           owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         },
         {
           id: "pl_102",
           title: "Weekend Mix",
-          coverImageUrl: null,
           coverArtUrl: null,
           owner: { id: "usr_2", profile: { displayName: "Sara Ali" } },
         },
