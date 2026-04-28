@@ -11,6 +11,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: 'postgresql://johndoe:mypassword@localhost:5432/mydb?schema=public'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,9 +39,23 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: 'postgresql://johndoe:mypassword@localhost:5432/mydb?schema=public'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js for build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies for build
+        run: npm ci
+
+      - name: Generate Prisma client for build
+        run: npx prisma generate
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
