@@ -1,7 +1,7 @@
 type Env = Record<string, string | undefined>;
 
 // Always required - the server cannot function without these.
-const REQUIRED_ENV_KEYS = ["JWT_SECRET", "CLIENT_URL", "DATABASE_URL"] as const;
+const REQUIRED_ENV_KEYS = ["JWT_SECRET", "JWT_REFRESH_SECRET", "CLIENT_URL", "DATABASE_URL"] as const;
 
 // Optional keys that, when present, must pass a format check.
 const BOOLEAN_KEYS = ["AUTH_COOKIE_SECURE"] as const;
@@ -58,9 +58,31 @@ export function validateEnvironment(config: Env): Env {
 
   // ── JWT_SECRET strength ────────────────────────────────────────────────────
   const jwtSecret = config["JWT_SECRET"];
-  if (jwtSecret && jwtSecret.length < 32) {
+  if (jwtSecret && jwtSecret.length < 64) {
     errors.push(
-      `JWT_SECRET must be at least 32 characters long for security (got ${jwtSecret.length} chars).`,
+      `JWT_SECRET must be at least 64 characters long for security (got ${jwtSecret.length} chars).`,
+    );
+  }
+
+  // ── JWT_REFRESH_SECRET strength ───────────────────────────────────────────
+  const jwtRefreshSecret = config["JWT_REFRESH_SECRET"];
+  if (jwtRefreshSecret && jwtRefreshSecret.length < 64) {
+    errors.push(
+      `JWT_REFRESH_SECRET must be at least 64 characters long for security (got ${jwtRefreshSecret.length} chars).`,
+    );
+  }
+
+  // ── DATABASE_URL SSL (production) ─────────────────────────────────────────
+  const dbUrl = config["DATABASE_URL"];
+  const nodeEnvForDb = config["NODE_ENV"];
+  if (
+    dbUrl &&
+    nodeEnvForDb === "production" &&
+    !dbUrl.includes("sslmode=require") &&
+    !dbUrl.includes("ssl=true")
+  ) {
+    errors.push(
+      `DATABASE_URL must include sslmode=require (or ssl=true) in production.`,
     );
   }
 
