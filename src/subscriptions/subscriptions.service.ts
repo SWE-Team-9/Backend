@@ -89,6 +89,16 @@ export const PLAN_CONFIG: Record<
   },
 };
 
+/**
+ * Numeric rank for plan tiers — higher = more features/price.
+ * Used to detect upgrades vs downgrades.
+ */
+const PLAN_TIER_RANK: Record<string, number> = {
+  FREE: 0,
+  PRO: 1,
+  GO_PLUS: 2,
+};
+
 /** Returns a new Date exactly one calendar month after the given date. */
 function addOneMonth(date: Date): Date {
   const result = new Date(date);
@@ -121,7 +131,6 @@ function planTierToCode(
 @Injectable()
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
-  private readonly paymentFeaturesEnabled: boolean;
   private readonly s3Client: S3Client | null;
   private readonly s3Bucket: string;
   private readonly s3Region: string;
@@ -135,14 +144,7 @@ export class SubscriptionsService {
     private readonly mailService: MailService,
     @Inject(BILLING_PROVIDER) private readonly billing: IBillingProvider,
   ) {
-    this.paymentFeaturesEnabled =
-      (process.env.ENABLE_PAYMENT_FEATURES ??
-        (process.env.NODE_ENV === "test" ? "true" : "false")) === "true";
-
-    this.storageProvider = this.config.get<"local" | "s3">(
-      "storage.provider",
-      "local",
-    );
+    this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
@@ -171,44 +173,9 @@ export class SubscriptionsService {
     }
   }
 
-  private ensurePaymentFeaturesEnabled(): void {
-    if (!this.paymentFeaturesEnabled) {
-      throw new BadRequestException({
-        code: "PAYMENT_FEATURES_DISABLED",
-        message:
-          "Subscription and payment features are disabled in this environment.",
-      });
-    }
-  }
-
   // ── GET /subscriptions/plans ──────────────────────────────────────────────
 
   async getPlans() {
-    if (!this.paymentFeaturesEnabled) {
-      return [
-        {
-          id: "free-local",
-          code: "free-monthly",
-          name: "Free",
-          tier: "FREE",
-          priceCents: 0,
-          priceDisplay: "Free",
-          billingInterval: "MONTH",
-          uploadLimit: FREE_UPLOAD_LIMIT,
-          uploadLimitDisplay: String(FREE_UPLOAD_LIMIT),
-          isUnlimited: false,
-          trialDays: 0,
-          adsEnabled: true,
-          canDownload: false,
-          supportLevel: "community",
-          highlightedFeatures: buildPlanFeatures(
-            PLAN_CONFIG.FREE,
-            FREE_UPLOAD_LIMIT,
-          ),
-        },
-      ];
-    }
-
     const plans = await this.prisma.subscriptionPlan.findMany({
       where: { isActive: true },
       select: {
@@ -253,27 +220,6 @@ export class SubscriptionsService {
   // ── GET /subscriptions/me ─────────────────────────────────────────────────
 
   async getMySubscription(userId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      const uploadedTracks = await this.prisma.track.count({
-        where: { uploaderId: userId, deletedAt: null },
-      });
-
-      return this.buildSubscriptionResponse({
-        userId,
-        tier: "FREE",
-        planName: "Free",
-        uploadLimit: FREE_UPLOAD_LIMIT,
-        uploadedTracks,
-        currentPeriodEnd: null,
-        subscriptionStatus: null,
-        cancelAtPeriodEnd: false,
-        trialStart: null,
-        trialEnd: null,
-        paymentMethodSummary: null,
-        latestInvoice: null,
-      });
-    }
-
     const sub = await this.findActiveSubscription(userId);
     const uploadedTracks = await this.prisma.track.count({
       where: { uploaderId: userId, deletedAt: null },
@@ -310,6 +256,20 @@ export class SubscriptionsService {
       });
     }
 
+    // The paymentMethod JSON field may hold either card info or a pendingDowngrade
+    // object (set when user schedules a downgrade in checkout()). Separate them.
+    const rawPaymentMethod = (sub as any).paymentMethod as Record<string, unknown> | null;
+    const pendingDowngrade = rawPaymentMethod?.pendingDowngrade as {
+      planCode: string;
+      planId: string;
+      planName: string;
+      effectiveAt: string;
+    } | null ?? null;
+    const paymentMethodData =
+      rawPaymentMethod && typeof rawPaymentMethod.brand === "string"
+        ? (rawPaymentMethod as unknown as PaymentMethodSummary)
+        : null;
+
     return this.buildSubscriptionResponse({
       userId,
       tier: sub.plan.tier,
@@ -322,8 +282,8 @@ export class SubscriptionsService {
       trialStart: (sub as any).trialStart ?? null,
       trialEnd: (sub as any).trialEnd ?? null,
       paymentMethodSummary: (sub as any).paymentMethodSummary ?? null,
-      paymentMethod:
-        ((sub as any).paymentMethod as PaymentMethodSummary | null) ?? null,
+      paymentMethod: paymentMethodData,
+      pendingDowngrade,
       latestInvoice,
     });
   }
@@ -332,8 +292,6 @@ export class SubscriptionsService {
   // POST /subscriptions/subscribe is preserved as a backward-compat alias.
 
   async checkout(userId: string, dto: CheckoutDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -401,6 +359,66 @@ export class SubscriptionsService {
       });
     }
 
+    // ── Downgrade detection ──────────────────────────────────────────────────
+    // If the user is on a higher-tier plan and requests a lower one, schedule
+    // the downgrade at the end of the current billing period instead of applying
+    // it immediately. The user keeps all higher-plan benefits until then.
+    if (existing) {
+      const currentTierCode = planTierToCode(existing.plan.tier);
+      if (PLAN_TIER_RANK[currentTierCode] > PLAN_TIER_RANK[planCode]) {
+        const effectiveAt = existing.currentPeriodEnd;
+
+        // Persist the scheduled downgrade intent in the subscription's
+        // paymentMethod JSON so getMySubscription can surface it.
+        const currentPaymentMethod =
+          typeof existing.paymentMethod === "object" &&
+          existing.paymentMethod !== null
+            ? (existing.paymentMethod as object)
+            : {};
+        await this.prisma.userSubscription.update({
+          where: { id: existing.id },
+          data: {
+            cancelAtPeriodEnd: true,
+            paymentMethod: {
+              ...currentPaymentMethod,
+              pendingDowngrade: {
+                planCode,
+                planId: plan.id,
+                planName: plan.name,
+                effectiveAt: effectiveAt.toISOString(),
+              },
+            },
+          },
+        });
+
+        await this.logPaymentEvent(
+          existing.id,
+          "customer.subscription.downgrade_scheduled",
+          {
+            fromPlanCode: currentTierCode,
+            toPlanCode: planCode,
+            effectiveAt: effectiveAt.toISOString(),
+          },
+        );
+
+        this.sendDowngradeScheduledEmailAsync(
+          userId,
+          existing.plan.name,
+          plan.name,
+          effectiveAt,
+        );
+
+        return {
+          subscriptionId: existing.id,
+          scheduled: true,
+          effectiveAt: effectiveAt.toISOString(),
+          currentPlan: currentTierCode,
+          newPlan: planCode,
+          message: `Your plan will downgrade from ${existing.plan.name} to ${plan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
+        };
+      }
+    }
+
     // Trial eligibility
     const trialRedemption = await this.prisma.trialRedemption.findUnique({
       where: { userId_planCode: { userId, planCode: plan.code } },
@@ -415,7 +433,9 @@ export class SubscriptionsService {
       name: user.profile?.displayName ?? undefined,
     });
 
-    // Create checkout session via billing provider
+    // Create checkout session via billing provider.
+    // stripePriceId is passed in metadata so RealStripeBillingProvider can use
+    // it for the Stripe Checkout Session line_item without requiring DB access.
     const session = await this.billing.createCheckoutSession({
       userId,
       planCode,
@@ -423,7 +443,13 @@ export class SubscriptionsService {
       trialDays,
       returnUrl: dto.returnUrl,
       cancelUrl: dto.cancelUrl,
-      metadata: { userId, planId: plan.id },
+      metadata: {
+        userId,
+        planId: plan.id,
+        // Used by RealStripeBillingProvider to set the Stripe price ID.
+        // Null-safe: real Stripe provider will throw a clear error if missing.
+        stripePriceId: plan.stripePriceId ?? "",
+      },
     });
 
     const periodEnd = new Date(session.renewsAt);
@@ -549,8 +575,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/portal ────────────────────────────────────────────
 
   async createBillingPortal(userId: string, dto?: PaymentMethodPortalDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { email: true, profile: { select: { displayName: true } } },
@@ -586,8 +610,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/cancel ────────────────────────────────────────────
 
   async cancelSubscription(userId: string, _dto: CancelSubscriptionDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const sub = await this.findActiveSubscription(userId);
     if (!sub) {
       throw new ConflictException({
@@ -632,8 +654,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/resume ────────────────────────────────────────────
 
   async resumeSubscription(userId: string) {
-    this.ensurePaymentFeaturesEnabled();
-
     const sub = await this.findActiveSubscription(userId);
     if (!sub)
       throw new NotFoundException({
@@ -663,8 +683,6 @@ export class SubscriptionsService {
   // ── POST /subscriptions/change-plan ──────────────────────────────────────
 
   async changePlan(userId: string, dto: ChangePlanDto) {
-    this.ensurePaymentFeaturesEnabled();
-
     const sub = await this.findActiveSubscription(userId);
     if (!sub)
       throw new NotFoundException({
@@ -722,14 +740,7 @@ export class SubscriptionsService {
   // ── GET /subscriptions/invoices ───────────────────────────────────────────
 
   async getInvoices(userId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      return [];
-    }
-
-    const subs = await this.prisma.userSubscription.findMany({
-      where: { userId },
-      select: { id: true },
-    });
+    const subs = await this.prisma.userSubscription.findMany({ where: { userId }, select: { id: true } });
     if (!subs.length) return [];
     const invoices = await this.prisma.billingInvoice.findMany({
       where: { subscriptionId: { in: subs.map((s) => s.id) } },
@@ -766,15 +777,8 @@ export class SubscriptionsService {
 
   // ── POST /subscriptions/webhook ───────────────────────────────────────────
 
-  async handleStripeWebhook(
-    rawBody: Buffer,
-    signature: string,
-  ): Promise<{ received: boolean }> {
-    if (!this.paymentFeaturesEnabled) {
-      return { received: true };
-    }
-
-    let event: ReturnType<IBillingProvider["constructWebhookEvent"]>;
+  async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<{ received: boolean }> {
+    let event: ReturnType<IBillingProvider['constructWebhookEvent']>;
     try {
       event = this.billing.constructWebhookEvent(rawBody, signature);
     } catch {
@@ -838,12 +842,34 @@ export class SubscriptionsService {
       case "invoice.paid":
       case "invoice.payment_succeeded": {
         if (sub) {
+          // For checkout.session.completed: Stripe creates the real subscription
+          // (sub_xxx) after checkout completes. The DB record was created with
+          // the checkout session ID (cs_xxx) as the stripeSubscriptionId.
+          // Update it now to the real subscription ID so future webhook events
+          // (invoice.paid, subscription.deleted, etc.) can be matched correctly.
+          const realSubId = obj["subscription"] as string | undefined;
+          const updateData: Record<string, unknown> = {
+            status: SubscriptionStatus.ACTIVE,
+            cancelAtPeriodEnd: false,
+            // Clear any stale payment-failure markers set by invoice.payment_failed.
+            // The cron already guards by status=PAST_DUE, but keeping these null
+            // avoids confusing the data if the subscription is ever inspected directly.
+            paymentFailureAt: null,
+            paymentFailureGraceEndsAt: null,
+          };
+          if (
+            event.type === "checkout.session.completed" &&
+            realSubId &&
+            realSubId !== sub.stripeSubscriptionId
+          ) {
+            updateData.stripeSubscriptionId = realSubId;
+            this.logger.log(
+              `[WEBHOOK] Updating stripeSubscriptionId: ${sub.stripeSubscriptionId} → ${realSubId}`,
+            );
+          }
           await this.prisma.userSubscription.update({
             where: { id: sub.id },
-            data: {
-              status: SubscriptionStatus.ACTIVE,
-              cancelAtPeriodEnd: false,
-            },
+            data: updateData as Parameters<typeof this.prisma.userSubscription.update>[0]["data"],
           });
           const invoiceId = obj["invoice"] as string | undefined;
           const amountPaid = (obj["amount_paid"] as number | undefined) ?? 0;
@@ -1060,13 +1086,6 @@ export class SubscriptionsService {
   // ── GET /subscriptions/offline/:trackId ───────────────────────────────────
 
   async getOfflineTrack(userId: string, trackId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      throw new ForbiddenException({
-        code: "DOWNLOAD_NOT_ALLOWED",
-        message: "Offline downloads are unavailable in this environment.",
-      });
-    }
-
     const sub = await this.findActiveSubscription(userId);
     const planCode = sub ? planTierToCode(sub.plan.tier) : "FREE";
     const canDownload = sub !== null && PLAN_CONFIG[planCode].canDownload;
@@ -1169,6 +1188,71 @@ export class SubscriptionsService {
     };
   }
 
+  // ── GET /subscriptions/offline/:trackId/stream ────────────────────────────
+  // Server-side proxy: fetches audio from S3 and streams bytes back to the
+  // browser, bypassing S3 CORS restrictions. The browser stores the bytes in
+  // IndexedDB for offline playback — no file is written to the device.
+
+  async streamOfflineTrack(
+    userId: string,
+    trackId: string,
+    res: import("express").Response,
+  ): Promise<void> {
+    // Reuse the existing entitlement + presigned URL logic
+    const trackData = await this.getOfflineTrack(userId, trackId);
+    const presignedUrl = trackData.downloadUrl;
+
+    let audioBuffer: Buffer;
+
+    if (this.storageProvider === "s3" && this.s3Client) {
+      // Fetch directly via the AWS SDK (server-to-S3, no CORS restriction)
+      const sub = await this.findActiveSubscription(userId);
+      const planCode = sub ? planTierToCode(sub.plan.tier) : "FREE";
+      const track = await this.prisma.track.findFirst({
+        where: { id: trackId, deletedAt: null },
+        select: {
+          files: {
+            where: { isCurrent: true, fileRole: { in: [FileRole.STREAM, FileRole.ORIGINAL] } },
+            select: { storageKey: true },
+          },
+        },
+      });
+      const storageKey =
+        track?.files.find(() => true)?.storageKey ?? null;
+
+      if (storageKey) {
+        const s3Res = await this.s3Client.send(
+          new GetObjectCommand({ Bucket: this.s3Bucket, Key: storageKey }),
+        );
+        const chunks: Buffer[] = [];
+        for await (const chunk of s3Res.Body as AsyncIterable<Buffer>) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        audioBuffer = Buffer.concat(chunks);
+        void planCode; // used above for entitlement check via getOfflineTrack
+      } else {
+        // Fall through to fetch the presigned URL
+        const httpRes = await fetch(presignedUrl);
+        if (!httpRes.ok) throw new Error(`S3 fetch failed: ${httpRes.status}`);
+        audioBuffer = Buffer.from(await httpRes.arrayBuffer());
+      }
+    } else {
+      // Local storage: fetch the local URL on the server side
+      const httpRes = await fetch(presignedUrl);
+      if (!httpRes.ok) throw new Error(`Local fetch failed: ${httpRes.status}`);
+      audioBuffer = Buffer.from(await httpRes.arrayBuffer());
+    }
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Content-Disposition": "inline",
+      "Content-Length": String(audioBuffer.length),
+      "Cache-Control": "private, max-age=900",
+      "Access-Control-Allow-Origin": "*",
+    });
+    res.end(audioBuffer);
+  }
+
   // ── getUploadQuota (used by TracksService / EntitlementsService) ───────────
 
   async getUploadQuota(
@@ -1244,10 +1328,6 @@ export class SubscriptionsService {
   // ── findActiveSubscription ────────────────────────────────────────────────
 
   async findActiveSubscription(userId: string) {
-    if (!this.paymentFeaturesEnabled) {
-      return null;
-    }
-
     return this.prisma.userSubscription.findFirst({
       where: {
         userId,
@@ -1304,6 +1384,7 @@ export class SubscriptionsService {
     trialEnd: Date | null;
     paymentMethodSummary: string | null;
     paymentMethod?: PaymentMethodSummary | null;
+    pendingDowngrade?: { planCode: string; planId: string; planName: string; effectiveAt: string } | null;
     latestInvoice: {
       id: string;
       amountPaidCents: number;
@@ -1348,6 +1429,7 @@ export class SubscriptionsService {
         ? `${opts.paymentMethod.brand.charAt(0).toUpperCase() + opts.paymentMethod.brand.slice(1)} ending in ${opts.paymentMethod.last4}`
         : opts.paymentMethodSummary,
       paymentMethod: opts.paymentMethod ?? null,
+      pendingDowngrade: opts.pendingDowngrade ?? null,
       latestInvoice: opts.latestInvoice
         ? {
             id: opts.latestInvoice.id,
@@ -1541,6 +1623,35 @@ export class SubscriptionsService {
             })
             .catch((err: unknown) =>
               this.logger.error(`[PLAN CHANGED EMAIL] ${err}`),
+            );
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private sendDowngradeScheduledEmailAsync(
+    userId: string,
+    currentPlanName: string,
+    newPlanName: string,
+    effectiveAt: Date,
+  ): void {
+    this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, profile: { select: { displayName: true } } },
+      })
+      .then((user) => {
+        if (user) {
+          this.mailService
+            .sendDowngradeScheduledEmail({
+              to: user.email,
+              displayName: user.profile?.displayName ?? undefined,
+              currentPlanName,
+              newPlanName,
+              effectiveAt,
+            })
+            .catch((err: unknown) =>
+              this.logger.error(`[DOWNGRADE SCHEDULED EMAIL] ${err}`),
             );
         }
       })
