@@ -31,6 +31,23 @@ function buildServiceMock() {
       visibility: "PRIVATE",
       message: "Access granted via secret token",
     }),
+    getRecentPlaylists: jest.fn().mockResolvedValue({ playlists: [] }),
+    getEditDetails: jest.fn().mockResolvedValue({
+      playlistId: "pl_101",
+      title: "Late Night Drive",
+      description: "chill tracks",
+      visibility: "PUBLIC",
+      slug: "late-night-drive",
+      coverImageUrl: null,
+      type: "PLAYLIST",
+      releaseDate: null,
+      genreId: null,
+      tags: [],
+    }),
+    uploadCover: jest.fn().mockResolvedValue({
+      message: "Playlist cover uploaded successfully",
+      coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+    }),
     likePlaylist: jest.fn().mockResolvedValue({
       message: "Playlist liked successfully",
     }),
@@ -172,6 +189,45 @@ describe("PlaylistsController", () => {
         .expect(200);
 
       expect(service.resolveSecret).toHaveBeenCalledWith("sec_abc");
+    });
+  });
+
+  describe("GET /playlists/recent", () => {
+    it("returns recently played playlists", async () => {
+      await request(app.getHttpServer())
+        .get("/playlists/recent?limit=5")
+        .expect(200);
+
+      expect(service.getRecentPlaylists).toHaveBeenCalledWith("usr_1", 5);
+    });
+  });
+
+  describe("GET /playlists/:playlistId/edit", () => {
+    it("returns owner edit payload", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/playlists/pl_101/edit")
+        .expect(200);
+
+      expect(service.getEditDetails).toHaveBeenCalledWith("usr_1", "pl_101");
+      expect(res.body).toHaveProperty("slug", "late-night-drive");
+    });
+  });
+
+  describe("POST /playlists/:playlistId/cover", () => {
+    it("uploads playlist cover image", async () => {
+      const res = await request(app.getHttpServer())
+        .post("/playlists/pl_101/cover")
+        .attach("file", Buffer.from([0xff, 0xd8, 0xff]), {
+          filename: "cover.jpg",
+          contentType: "image/jpeg",
+        })
+        .expect(200);
+
+      expect(service.uploadCover).toHaveBeenCalled();
+      expect(res.body).toHaveProperty(
+        "message",
+        "Playlist cover uploaded successfully",
+      );
     });
   });
 

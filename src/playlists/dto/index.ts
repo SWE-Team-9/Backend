@@ -1,6 +1,13 @@
 export { CreatePlaylistDto } from './create-playlist.dto';
 export { UpdatePlaylistDto } from './update-playlist.dto';
 export { UpdatePlaylistResponseDto } from './update-playlist-response.dto';
+export { GetPlaylistEditResponseDto } from './get-playlist-edit-response.dto';
+export {
+	GetRecentPlaylistsResponseDto,
+	RecentPlaylistItemDto,
+	RecentPlaylistOwnerDto,
+} from './get-recent-playlists.dto';
+export { UploadPlaylistCoverResponseDto } from './upload-playlist-cover-response.dto';
 export {
 	AddTrackToPlaylistDto,
 	AddTrackToPlaylistResponseDto,

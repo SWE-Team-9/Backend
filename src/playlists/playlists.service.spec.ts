@@ -7,6 +7,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { PlaylistVisibility } from '@prisma/client';
 
+import { StorageService } from '../common/storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlaylistsService } from './playlists.service';
 
@@ -45,6 +46,12 @@ function buildPrismaMock() {
       updateMany: jest.fn(),
       delete: jest.fn(),
     },
+    genre: {
+      findFirst: jest.fn(),
+    },
+    playEvent: {
+      groupBy: jest.fn(),
+    },
     playlistLike: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -59,6 +66,9 @@ function buildPrismaMock() {
 describe('PlaylistsService', () => {
   let service: PlaylistsService;
   let prisma: ReturnType<typeof buildPrismaMock>;
+  const storageMock = {
+    upload: jest.fn(),
+  };
 
   beforeEach(async () => {
     prisma = buildPrismaMock();
@@ -67,6 +77,7 @@ describe('PlaylistsService', () => {
       providers: [
         PlaylistsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: StorageService, useValue: storageMock },
       ],
     }).compile();
 
@@ -340,6 +351,167 @@ describe('PlaylistsService', () => {
       await expect(service.update('usr_1', 'pl_101', {})).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+
+    it('updates new editable playlist metadata fields', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: 'pl_101',
+        ownerId: 'usr_1',
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+      });
+      prisma.genre.findFirst.mockResolvedValue({ id: 12 });
+      prisma.playlist.update.mockResolvedValue({
+        id: 'pl_101',
+        ownerId: 'usr_1',
+        title: 'Vol 2',
+        description: 'updated',
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+        owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
+        tracks: [],
+      });
+
+      await service.update('usr_1', 'pl_101', {
+        type: 'ALBUM' as any,
+        releaseDate: '2026-03-01',
+        genreId: 12,
+        tags: ['chill', 'chill', 'night-drive'],
+      });
+
+      expect(prisma.genre.findFirst).toHaveBeenCalledWith({
+        where: { id: 12 },
+        select: { id: true },
+      });
+      expect(prisma.playlist.update).toHaveBeenCalledWith({
+        where: { id: 'pl_101' },
+        data: expect.objectContaining({
+          type: 'ALBUM',
+          releaseDate: new Date('2026-03-01'),
+          genreId: 12,
+          tags: ['chill', 'night-drive'],
+        }),
+        select: expect.any(Object),
+      });
+    });
+  });
+
+  describe('getEditDetails', () => {
+    it('returns owner-only editable playlist data', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: 'pl_101',
+        ownerId: 'usr_1',
+        title: 'Late Night Drive',
+        description: 'chill tracks',
+        visibility: PlaylistVisibility.PUBLIC,
+        slug: 'late-night-drive',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+        coverArtUrl: null,
+        type: 'ALBUM',
+        releaseDate: new Date('2026-03-01'),
+        genreId: 12,
+        tags: ['chill', 'night-drive'],
+      });
+
+      const result = await service.getEditDetails('usr_1', 'pl_101');
+
+      expect(result).toEqual({
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        description: 'chill tracks',
+        visibility: PlaylistVisibility.PUBLIC,
+        slug: 'late-night-drive',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+        type: 'ALBUM',
+        releaseDate: '2026-03-01T00:00:00.000Z',
+        genreId: 12,
+        tags: ['chill', 'night-drive'],
+      });
+    });
+  });
+
+  describe('uploadCover', () => {
+    it('uploads a cover image and stores the returned URL', async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: 'pl_101', ownerId: 'usr_1' });
+      storageMock.upload.mockResolvedValue({
+        url: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+        key: 'playlists/pl_101/cover.jpg',
+      });
+      prisma.playlist.update.mockResolvedValue({
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+      });
+
+      const result = await service.uploadCover('usr_1', 'pl_101', {
+        buffer: Buffer.from([1, 2, 3]),
+        mimetype: 'image/jpeg',
+        originalname: 'cover.jpg',
+        size: 1024,
+      } as any);
+
+      expect(storageMock.upload).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), {
+        userId: 'usr_1',
+        type: 'cover',
+        mimeType: 'image/jpeg',
+        originalName: 'cover.jpg',
+      });
+      expect(result).toEqual({
+        message: 'Playlist cover uploaded successfully',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+      });
+    });
+  });
+
+  describe('getRecentPlaylists', () => {
+    it('returns unique recently played playlists ordered by last play time', async () => {
+      prisma.playEvent.groupBy.mockResolvedValue([
+        { playlistId: 'pl_101', _max: { startedAt: new Date('2026-04-02T10:00:00Z') } },
+        { playlistId: 'pl_102', _max: { startedAt: new Date('2026-04-01T10:00:00Z') } },
+      ]);
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: 'pl_101',
+          title: 'Late Night Drive',
+          coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+          coverArtUrl: null,
+          owner: { id: 'usr_1', profile: { displayName: 'Ahmed Hassan' } },
+        },
+        {
+          id: 'pl_102',
+          title: 'Weekend Mix',
+          coverImageUrl: null,
+          coverArtUrl: null,
+          owner: { id: 'usr_2', profile: { displayName: 'Sara Ali' } },
+        },
+      ]);
+
+      const result = await service.getRecentPlaylists('usr_1', 10);
+
+      expect(prisma.playEvent.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          by: ['playlistId'],
+          where: expect.objectContaining({
+            userId: 'usr_1',
+            playlistId: { not: null },
+          }),
+          take: 10,
+        }),
+      );
+      expect(result).toEqual({
+        playlists: [
+          {
+            playlistId: 'pl_101',
+            title: 'Late Night Drive',
+            coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+            owner: { id: 'usr_1', display_name: 'Ahmed Hassan' },
+          },
+          {
+            playlistId: 'pl_102',
+            title: 'Weekend Mix',
+            coverImageUrl: null,
+            owner: { id: 'usr_2', display_name: 'Sara Ali' },
+          },
+        ],
+      });
     });
   });
 

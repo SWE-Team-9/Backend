@@ -6,25 +6,29 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { PlaylistVisibility, Prisma } from '@prisma/client';
+import { PlaylistType, PlaylistVisibility, Prisma } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 
+import { StorageService } from '../common/storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 import {
   AddTrackToPlaylistDto,
   AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
+  GetPlaylistEditResponseDto,
   GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
   GetPlaylistDetailsResponseDto,
+  GetRecentPlaylistsResponseDto,
   PlaylistPaginationQueryDto,
   PlaylistTracksQueryDto,
   RemoveTrackFromPlaylistResponseDto,
   ReorderPlaylistTracksDto,
   ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
+  UploadPlaylistCoverResponseDto,
 } from './dto';
 import { PlaylistEntity } from './entities/playlist.entity';
 
@@ -34,8 +38,12 @@ export class PlaylistsService {
   private readonly maxPlaylistTracks = 5000;
   private readonly defaultTrackLimit = 100;
   private readonly maxTrackLimit = 200;
+  private readonly maxCoverUploadBytes = 5 * 1024 * 1024;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
+  ) {}
 
   async create(userId: string, dto: CreatePlaylistDto) {
     const visibility = dto.visibility;
@@ -328,6 +336,50 @@ export class PlaylistsService {
     return this.findOne(playlistId, requesterUserId, tracksQuery);
   }
 
+  async getEditDetails(userId: string, playlistId: string): Promise<GetPlaylistEditResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        title: true,
+        description: true,
+        visibility: true,
+        slug: true,
+        coverImageUrl: true,
+        coverArtUrl: true,
+        type: true,
+        releaseDate: true,
+        genreId: true,
+        tags: true,
+      },
+    });
+
+    if (!playlist) {
+      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only edit your own playlists.');
+    }
+
+    return {
+      playlistId: playlist.id,
+      title: playlist.title,
+      description: playlist.description,
+      visibility: playlist.visibility,
+      slug: playlist.slug,
+      coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+      type: playlist.type,
+      releaseDate: playlist.releaseDate ? new Date(playlist.releaseDate as Date).toISOString() : null,
+      genreId: playlist.genreId,
+      tags: playlist.tags ?? [],
+    };
+  }
+
   async update(userId: string, playlistId: string, dto: UpdatePlaylistDto) {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
@@ -339,6 +391,7 @@ export class PlaylistsService {
         ownerId: true,
         visibility: true,
         secretToken: true,
+        genreId: true,
       },
     });
 
@@ -350,7 +403,7 @@ export class PlaylistsService {
       throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only update your own playlists.');
     }
 
-    const data: Prisma.PlaylistUpdateInput = {};
+    const data: Record<string, unknown> = {};
 
     if (dto.title !== undefined) {
       data.title = dto.title;
@@ -358,6 +411,10 @@ export class PlaylistsService {
 
     if (dto.description !== undefined) {
       data.description = dto.description;
+    }
+
+    if (dto.type !== undefined) {
+      data.type = dto.type;
     }
 
     if (dto.visibility !== undefined) {
@@ -376,13 +433,42 @@ export class PlaylistsService {
       }
     }
 
+    if (dto.releaseDate !== undefined) {
+      data.releaseDate = new Date(dto.releaseDate);
+    }
+
+    if (dto.genreId !== undefined) {
+      if (dto.genreId === null) {
+        data.genreId = null;
+      } else {
+        const genre = await this.prisma.genre.findFirst({
+          where: {
+            id: dto.genreId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!genre) {
+          throw this.notFound('GENRE_NOT_FOUND', 'Genre not found.');
+        }
+
+        data.genreId = genre.id;
+      }
+    }
+
+    if (dto.tags !== undefined) {
+      data.tags = Array.from(new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean)));
+    }
+
     if (Object.keys(data).length === 0) {
       throw this.badRequest('PLAYLIST_UPDATE_EMPTY', 'At least one field must be provided for update.');
     }
 
     const updated = await this.prisma.playlist.update({
       where: { id: playlist.id },
-      data,
+      data: data as any,
       select: {
         id: true,
         ownerId: true,
@@ -418,8 +504,8 @@ export class PlaylistsService {
             },
           },
         },
-      },
-    });
+      } as any,
+    }) as any;
 
     this.logAudit('playlist.update', userId, playlist.id, {
       changedFields: Object.keys(data),
@@ -429,6 +515,60 @@ export class PlaylistsService {
     return {
       message: 'Playlist updated successfully',
       playlist: this.sanitizePlaylistOutput(updated, userId),
+    };
+  }
+
+  async uploadCover(
+    userId: string,
+    playlistId: string,
+    file: Express.Multer.File,
+  ): Promise<UploadPlaylistCoverResponseDto> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerId: true,
+      },
+    });
+
+    if (!playlist) {
+      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+    }
+
+    if (playlist.ownerId !== userId) {
+      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only edit your own playlists.');
+    }
+
+    this.validateCoverUpload(file);
+
+    const uploaded = await this.storageService.upload(file.buffer, {
+      userId,
+      type: 'cover',
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+    });
+
+    const updated = await this.prisma.playlist.update({
+      where: { id: playlist.id },
+      data: {
+        coverImageUrl: uploaded.url,
+        coverArtUrl: uploaded.url,
+      } as any,
+      select: {
+        coverImageUrl: true,
+      } as any,
+    }) as any;
+
+    this.logAudit('playlist.cover.upload', userId, playlist.id, {
+      coverImageUrl: updated.coverImageUrl,
+    });
+
+    return {
+      message: 'Playlist cover uploaded successfully',
+      coverImageUrl: updated.coverImageUrl,
     };
   }
 
@@ -458,6 +598,80 @@ export class PlaylistsService {
     });
 
     this.logAudit('playlist.delete', userId, playlist.id);
+  }
+
+  async getRecentPlaylists(userId: string, limit = 10): Promise<GetRecentPlaylistsResponseDto> {
+    const take = Math.min(Math.max(limit ?? 10, 1), 50);
+
+    const recentPlaylists = await this.prisma.playEvent.groupBy({
+      by: ['playlistId'],
+      where: {
+        userId,
+        playlistId: {
+          not: null,
+        },
+        
+      },
+      _max: {
+        startedAt: true,
+      },
+      orderBy: {
+        _max: {
+          startedAt: 'desc',
+        },
+      },
+      take,
+    });
+
+    const playlistIds = recentPlaylists
+      .map((entry) => entry.playlistId)
+      .filter((playlistId): playlistId is string => Boolean(playlistId));
+
+    if (playlistIds.length === 0) {
+      return { playlists: [] };
+    }
+
+    const playlists = await this.prisma.playlist.findMany({
+      where: {
+        id: {
+          in: playlistIds,
+        },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+        coverImageUrl: true,
+        coverArtUrl: true,
+        owner: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const playlistMap = new Map(playlists.map((playlist) => [playlist.id, playlist]));
+
+    return {
+      playlists: playlistIds
+        .map((playlistId) => playlistMap.get(playlistId))
+        .filter((playlist): playlist is NonNullable<typeof playlist> => Boolean(playlist))
+        .map((playlist) => ({
+          playlistId: playlist.id,
+          title: playlist.title,
+          coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+          owner: {
+            id: playlist.owner.id,
+            display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
+          },
+        })),
+    };
   }
 
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
@@ -515,6 +729,26 @@ export class PlaylistsService {
     return {
       message: 'Playlist liked successfully',
     };
+  }
+
+  private validateCoverUpload(file: Express.Multer.File): void {
+    if (!file || !file.buffer) {
+      throw this.badRequest('PLAYLIST_COVER_REQUIRED', 'Cover image file is required.');
+    }
+
+    if (!file.mimetype?.startsWith('image/')) {
+      throw this.badRequest(
+        'INVALID_COVER_MIME_TYPE',
+        'Only image uploads are allowed for playlist covers.',
+      );
+    }
+
+    if (file.size > this.maxCoverUploadBytes) {
+      throw this.badRequest(
+        'PLAYLIST_COVER_TOO_LARGE',
+        'Playlist cover image must be 5 MB or smaller.',
+      );
+    }
   }
 
   async unlikePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
