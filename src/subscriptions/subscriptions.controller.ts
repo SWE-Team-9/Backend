@@ -10,9 +10,11 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
+import type { Response } from "express";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -82,6 +84,25 @@ export class SubscriptionsController {
     @Param("trackId", ParseUUIDPipe) trackId: string,
   ) {
     return this.subscriptionsService.getOfflineTrack(userId, trackId);
+  }
+
+  // ─── GET /subscriptions/offline/:trackId/stream ───────────────────────────
+  // Proxies the S3 audio bytes back to the browser so the client can store
+  // them in IndexedDB for offline playback — avoids browser-side CORS issues
+  // with S3 presigned URLs when the bucket doesn't allow the app origin.
+  @ApiOperation({ summary: "Stream audio bytes for offline caching (PRO / GO+ only)" })
+  @ApiParam({ name: "trackId", description: "UUID of the track" })
+  @ApiResponse({ status: 200, description: "Audio bytes streamed inline." })
+  @ApiResponse({ status: 403, description: "DOWNLOAD_NOT_ALLOWED - requires PRO or GO+." })
+  @ApiResponse({ status: 404, description: "Track not found." })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @Get("offline/:trackId/stream")
+  async streamOfflineTrack(
+    @CurrentUser("userId") userId: string,
+    @Param("trackId", ParseUUIDPipe) trackId: string,
+    @Res() res: Response,
+  ) {
+    return this.subscriptionsService.streamOfflineTrack(userId, trackId, res);
   }
 
   // ─── POST /subscriptions/checkout ─────────────────────────────────────────

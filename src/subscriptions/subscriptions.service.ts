@@ -1158,6 +1158,71 @@ export class SubscriptionsService {
     };
   }
 
+  // ── GET /subscriptions/offline/:trackId/stream ────────────────────────────
+  // Server-side proxy: fetches audio from S3 and streams bytes back to the
+  // browser, bypassing S3 CORS restrictions. The browser stores the bytes in
+  // IndexedDB for offline playback — no file is written to the device.
+
+  async streamOfflineTrack(
+    userId: string,
+    trackId: string,
+    res: import("express").Response,
+  ): Promise<void> {
+    // Reuse the existing entitlement + presigned URL logic
+    const trackData = await this.getOfflineTrack(userId, trackId);
+    const presignedUrl = trackData.downloadUrl;
+
+    let audioBuffer: Buffer;
+
+    if (this.storageProvider === "s3" && this.s3Client) {
+      // Fetch directly via the AWS SDK (server-to-S3, no CORS restriction)
+      const sub = await this.findActiveSubscription(userId);
+      const planCode = sub ? planTierToCode(sub.plan.tier) : "FREE";
+      const track = await this.prisma.track.findFirst({
+        where: { id: trackId, deletedAt: null },
+        select: {
+          files: {
+            where: { isCurrent: true, fileRole: { in: [FileRole.STREAM, FileRole.ORIGINAL] } },
+            select: { storageKey: true },
+          },
+        },
+      });
+      const storageKey =
+        track?.files.find(() => true)?.storageKey ?? null;
+
+      if (storageKey) {
+        const s3Res = await this.s3Client.send(
+          new GetObjectCommand({ Bucket: this.s3Bucket, Key: storageKey }),
+        );
+        const chunks: Buffer[] = [];
+        for await (const chunk of s3Res.Body as AsyncIterable<Buffer>) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        audioBuffer = Buffer.concat(chunks);
+        void planCode; // used above for entitlement check via getOfflineTrack
+      } else {
+        // Fall through to fetch the presigned URL
+        const httpRes = await fetch(presignedUrl);
+        if (!httpRes.ok) throw new Error(`S3 fetch failed: ${httpRes.status}`);
+        audioBuffer = Buffer.from(await httpRes.arrayBuffer());
+      }
+    } else {
+      // Local storage: fetch the local URL on the server side
+      const httpRes = await fetch(presignedUrl);
+      if (!httpRes.ok) throw new Error(`Local fetch failed: ${httpRes.status}`);
+      audioBuffer = Buffer.from(await httpRes.arrayBuffer());
+    }
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Content-Disposition": "inline",
+      "Content-Length": String(audioBuffer.length),
+      "Cache-Control": "private, max-age=900",
+      "Access-Control-Allow-Origin": "*",
+    });
+    res.end(audioBuffer);
+  }
+
   // ── getUploadQuota (used by TracksService / EntitlementsService) ───────────
 
   async getUploadQuota(
