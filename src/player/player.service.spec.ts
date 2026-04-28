@@ -25,6 +25,9 @@ describe("PlayerService", () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
     },
+    playlist: {
+      findFirst: jest.fn(),
+    },
     playEvent: {
       create: jest.fn(),
       count: jest.fn(),
@@ -262,6 +265,27 @@ describe("PlayerService", () => {
         message: "Play event recorded successfully",
         trackId: "track-uuid",
         playCount: 4821,
+      });
+    });
+
+    it("should record playlist context when provided", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
+      (prismaMock.playlist.findFirst as jest.Mock).mockResolvedValue({ id: "pl-1" });
+      (prismaMock.playEvent.create as jest.Mock).mockResolvedValue({});
+      (prismaMock.playEvent.count as jest.Mock).mockResolvedValue(1);
+
+      await service.markPlayed("user-uuid", "track-uuid", "pl-1");
+
+      expect(prismaMock.playEvent.create).toHaveBeenCalledWith({
+        data: {
+          userId: "user-uuid",
+          trackId: "track-uuid",
+          playlistId: "pl-1",
+          source: "TRACK",
+          deviceType: "WEB",
+        },
       });
     });
 

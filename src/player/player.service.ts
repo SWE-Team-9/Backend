@@ -150,13 +150,34 @@ export class PlayerService {
   }
 
   // 4. POST /player/tracks/:trackId/play
-  async markPlayed(userId: string, trackId: string) {
+  async markPlayed(userId: string, trackId: string, playlistId?: string) {
     await this.findTrackOrFail(trackId);
+
+    let normalizedPlaylistId: string | null = null;
+    if (playlistId) {
+      const playlist = await this.prisma.playlist.findFirst({
+        where: {
+          id: playlistId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (!playlist) {
+        throw new NotFoundException({
+          code: "PLAYLIST_NOT_FOUND",
+          message: "Playlist not found.",
+        });
+      }
+
+      normalizedPlaylistId = playlist.id;
+    }
 
     await this.prisma.playEvent.create({
       data: {
         userId,
         trackId,
+        ...(normalizedPlaylistId ? { playlistId: normalizedPlaylistId } : {}),
         source: "TRACK",
         deviceType: "WEB",
       },

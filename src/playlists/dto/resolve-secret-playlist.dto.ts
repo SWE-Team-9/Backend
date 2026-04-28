@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class ResolveSecretPlaylistParamsDto {
   @IsString()
@@ -9,6 +9,6 @@ export class ResolveSecretPlaylistParamsDto {
 export class ResolveSecretPlaylistResponseDto {
   playlistId!: string;
   title!: string;
-  visibility!: "PRIVATE";
+  visibility!: 'PRIVATE';
   message!: string;
 }

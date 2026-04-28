@@ -123,10 +123,16 @@ export class PlayerController {
       },
     },
   })
+  @ApiQuery({ name: "playlistId", required: false, description: "Optional playlist context" })
   markPlayed(
     @CurrentUser("userId") userId: string,
     @Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string,
+    @Query("playlistId") playlistId?: string,
   ) {
+    if (playlistId) {
+      return this.playerService.markPlayed(userId, trackId, playlistId);
+    }
+
     return this.playerService.markPlayed(userId, trackId);
   }
 
