@@ -1032,6 +1032,8 @@ export class PlaylistsService {
         select: {
           id: true,
           title: true,
+          slug: true,
+          coverArtUrl: true,
           visibility: true,
           _count: {
             select: {
@@ -1049,6 +1051,8 @@ export class PlaylistsService {
       playlists: playlists.map((playlist) => ({
         playlistId: playlist.id,
         title: playlist.title,
+        slug: playlist.slug,
+        coverArtUrl: playlist.coverArtUrl ?? null,
         visibility: playlist.visibility,
         tracksCount: playlist._count.tracks,
       })),
