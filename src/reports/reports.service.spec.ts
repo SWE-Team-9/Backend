@@ -252,6 +252,8 @@ describe("ReportsService", () => {
 
   describe("bulkUpdateReports", () => {
     it("updates multiple reports in a transaction", async () => {
+      // Mock the findMany call that checks for RESOLVED reports
+      mockPrisma.report.findMany.mockResolvedValueOnce([]);
       mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 2 }]);
 
       const result = await service.bulkUpdateReports("admin-1", {

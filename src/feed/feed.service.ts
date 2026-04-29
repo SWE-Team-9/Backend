@@ -17,7 +17,7 @@ export class FeedService {
 
     if (followingIds.length === 0) {
       return {
-        items: [],
+        data: [],
         pagination: {
           page,
           limit,
@@ -72,7 +72,7 @@ export class FeedService {
     ]);
 
     return {
-      items: tracks,
+      data: tracks,
       pagination: {
         page,
         limit,
