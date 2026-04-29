@@ -329,10 +329,10 @@ model User {
   favoriteGenres           UserFavoriteGenre[]
   socialLinks              UserSocialLink[]
   handleHistory            UserHandleHistory[]
-  following                UserFollow[]              @relation("Follower")
-  followers                UserFollow[]              @relation("Following")
-  blockedUsers             UserBlock[]               @relation("Blocker")
-  blockedBy                UserBlock[]               @relation("Blocked")
+  following                UserFollow[]                @relation("Follower")
+  followers                UserFollow[]                @relation("Following")
+  blockedUsers             UserBlock[]                 @relation("Blocker")
+  blockedBy                UserBlock[]                 @relation("Blocked")
   tracks                   Track[]
   likes                    Like[]
   reposts                  Repost[]
@@ -341,28 +341,28 @@ model User {
   playlists                Playlist[]
   playlistLikes            PlaylistLike[]
   playlistReposts          PlaylistRepost[]
-  actorEvents              ActivityEvent[]           @relation("Actor")
-  targetEvents             ActivityEvent[]           @relation("TargetUser")
+  actorEvents              ActivityEvent[]             @relation("Actor")
+  targetEvents             ActivityEvent[]             @relation("TargetUser")
   conversationParticipants ConversationParticipant[]
   sentMessages             Message[]
-  receivedNotifications    Notification[]            @relation("NotificationRecipient")
-  triggeredNotifications   Notification[]            @relation("NotificationActor")
-  submittedReports         ModerationReport[]        @relation("Reporter")
-  reportedIn               ModerationReport[]        @relation("ReportedUser")
-  executedActions          ModerationAction[]        @relation("AdminAction")
-  receivedActions          ModerationAction[]        @relation("TargetUserAction")
+  receivedNotifications    Notification[]              @relation("NotificationRecipient")
+  triggeredNotifications   Notification[]              @relation("NotificationActor")
+  submittedReports         ModerationReport[]          @relation("Reporter")
+  reportedIn               ModerationReport[]          @relation("ReportedUser")
+  executedActions          ModerationAction[]          @relation("AdminAction")
+  receivedActions          ModerationAction[]          @relation("TargetUserAction")
   subscriptions            UserSubscription[]
   offlineDownloads         OfflineDownload[]
-  authSessions             Session[]                 @relation("authSessions")
+  authSessions             Session[]                   @relation("authSessions")
   UserSession              UserSession[]
   apiAuthCodes             ApiAuthCode[]
   apiAccessTokens          ApiAccessToken[]
   playbackProgress         PlaybackProgress[]
   playerSession            PlayerSession?
-  reportsSubmitted         Report[]                  @relation("ReportReporter")
-  reportsResolved          Report[]                  @relation("ReportResolver")
-  appealsSubmitted         Appeal[]                  @relation("AppealUser")
-  appealsResolved          Appeal[]                  @relation("AppealResolver")
+  reportsSubmitted         Report[]                    @relation("ReportReporter")
+  reportsResolved          Report[]                    @relation("ReportResolver")
+  appealsSubmitted         Appeal[]                    @relation("AppealUser")
+  appealsResolved          Appeal[]                    @relation("AppealResolver")
   searchIndex              UserSearchIndexable?
   notificationPreference   UserNotificationPreference?
   billing                  UserBilling?
@@ -690,32 +690,32 @@ model Tag {
 }
 
 model Track {
-  id              String           @id @default(uuid()) @db.Uuid
-  uploaderId      String           @map("uploader_id") @db.Uuid
-  primaryGenreId  Int?             @map("primary_genre_id") @db.SmallInt
-  title           String
-  slug            String           @db.Citext
-  description     String?          @db.Text
-  releaseDate     DateTime?        @map("release_date") @db.Date
-  durationMs      Int?             @map("duration_ms")
-  waveformData    Float[]          @map("waveform_data")
-  visibility      TrackVisibility  @default(PUBLIC)
-  accessLevel     TrackAccessLevel @default(PLAYABLE) @map("access_level")
-  status          TrackStatus      @default(PROCESSING)
-  moderationState ModerationState  @default(VISIBLE) @map("moderation_state")
-  license         TrackLicense     @default(ALL_RIGHTS_RESERVED)
-  allowComments   Boolean          @default(true) @map("allow_comments")
-  downloadable    Boolean          @default(false)
-  coverArtUrl     String?          @map("cover_art_url")
-  secretToken     String?          @map("secret_token")
-  publishedAt          DateTime?        @map("published_at") @db.Timestamptz
-  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt            DateTime?        @map("deleted_at") @db.Timestamptz
+  id                  String           @id @default(uuid()) @db.Uuid
+  uploaderId          String           @map("uploader_id") @db.Uuid
+  primaryGenreId      Int?             @map("primary_genre_id") @db.SmallInt
+  title               String
+  slug                String           @db.Citext
+  description         String?          @db.Text
+  releaseDate         DateTime?        @map("release_date") @db.Date
+  durationMs          Int?             @map("duration_ms")
+  waveformData        Float[]          @map("waveform_data")
+  visibility          TrackVisibility  @default(PUBLIC)
+  accessLevel         TrackAccessLevel @default(PLAYABLE) @map("access_level")
+  status              TrackStatus      @default(PROCESSING)
+  moderationState     ModerationState  @default(VISIBLE) @map("moderation_state")
+  license             TrackLicense     @default(ALL_RIGHTS_RESERVED)
+  allowComments       Boolean          @default(true) @map("allow_comments")
+  downloadable        Boolean          @default(false)
+  coverArtUrl         String?          @map("cover_art_url")
+  secretToken         String?          @map("secret_token")
+  publishedAt         DateTime?        @map("published_at") @db.Timestamptz
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt           DateTime?        @map("deleted_at") @db.Timestamptz
   // Module 12: set true when track auto-hidden due to plan-limit downgrade;
   // reset to false on upgrade. Never confuse with user-set visibility.
-  hiddenByPlanLimit    Boolean          @default(false) @map("hidden_by_plan_limit")
-  hiddenByPlanLimitAt  DateTime?        @map("hidden_by_plan_limit_at") @db.Timestamptz
+  hiddenByPlanLimit   Boolean          @default(false) @map("hidden_by_plan_limit")
+  hiddenByPlanLimitAt DateTime?        @map("hidden_by_plan_limit_at") @db.Timestamptz
 
   uploader          User                    @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
   primaryGenre      Genre?                  @relation(fields: [primaryGenreId], references: [id], onDelete: SetNull)
@@ -1204,25 +1204,25 @@ model SubscriptionPlan {
 }
 
 model UserSubscription {
-  id                   String             @id @default(uuid()) @db.Uuid
-  userId               String             @map("user_id") @db.Uuid
-  planId               String             @map("plan_id") @db.Uuid
-  stripeCustomerId     String?            @map("stripe_customer_id")
-  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
-  status               SubscriptionStatus @default(ACTIVE)
-  cancelAtPeriodEnd             Boolean            @default(false) @map("cancel_at_period_end")
-  currentPeriodStart            DateTime           @map("current_period_start") @db.Timestamptz
-  currentPeriodEnd              DateTime           @map("current_period_end") @db.Timestamptz
-  trialStart                    DateTime?          @map("trial_start") @db.Timestamptz
-  trialEnd                      DateTime?          @map("trial_end") @db.Timestamptz
-  canceledAt                    DateTime?          @map("canceled_at") @db.Timestamptz
-  endedAt                       DateTime?          @map("ended_at") @db.Timestamptz
-  paymentFailureAt              DateTime?          @map("payment_failure_at") @db.Timestamptz
-  paymentFailureGraceEndsAt     DateTime?          @map("payment_failure_grace_ends_at") @db.Timestamptz
-  paymentMethodSummary          String?            @map("payment_method_summary") @db.VarChar(100)
-  paymentMethod                 Json?              @map("payment_method")
-  createdAt                     DateTime           @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt                     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  id                        String             @id @default(uuid()) @db.Uuid
+  userId                    String             @map("user_id") @db.Uuid
+  planId                    String             @map("plan_id") @db.Uuid
+  stripeCustomerId          String?            @map("stripe_customer_id")
+  stripeSubscriptionId      String?            @unique @map("stripe_subscription_id")
+  status                    SubscriptionStatus @default(ACTIVE)
+  cancelAtPeriodEnd         Boolean            @default(false) @map("cancel_at_period_end")
+  currentPeriodStart        DateTime           @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd          DateTime           @map("current_period_end") @db.Timestamptz
+  trialStart                DateTime?          @map("trial_start") @db.Timestamptz
+  trialEnd                  DateTime?          @map("trial_end") @db.Timestamptz
+  canceledAt                DateTime?          @map("canceled_at") @db.Timestamptz
+  endedAt                   DateTime?          @map("ended_at") @db.Timestamptz
+  paymentFailureAt          DateTime?          @map("payment_failure_at") @db.Timestamptz
+  paymentFailureGraceEndsAt DateTime?          @map("payment_failure_grace_ends_at") @db.Timestamptz
+  paymentMethodSummary      String?            @map("payment_method_summary") @db.VarChar(100)
+  paymentMethod             Json?              @map("payment_method")
+  createdAt                 DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan     SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)

@@ -1,6 +1,7 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { SocketIoAdapter } from "./common/adapters/socket-io.adapter";
 import { ConfigService } from "@nestjs/config";
 import * as jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
@@ -162,7 +163,9 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
     const prismaService = app.get(PrismaService);
     const jwtSecret =
-      configService.get<string>("security.jwtSecret") ?? process.env.JWT_SECRET ?? "";
+      configService.get<string>("security.jwtSecret") ??
+      process.env.JWT_SECRET ??
+      "";
     const jwtIssuer =
       configService.get<string>("security.jwtIssuer") ?? "spotly-api";
     const jwtAudience =
@@ -187,69 +190,66 @@ async function bootstrap() {
 
     // Protected audio assets — require a valid, non-revoked JWT.
     // Note: cookieParser() is registered above so req.cookies is available here.
-    app.use(
-      "/uploads/tracks",
-      async (req: any, res: any, next: any) => {
-        // Extract token from httpOnly cookie (browser) or Authorization header
-        // (non-browser clients such as mobile apps).
-        const token: string | undefined =
-          req.cookies?.access_token ??
-          req.headers?.authorization?.replace(/^Bearer\s+/i, "");
+    app.use("/uploads/tracks", async (req: any, res: any, next: any) => {
+      // Extract token from httpOnly cookie (browser) or Authorization header
+      // (non-browser clients such as mobile apps).
+      const token: string | undefined =
+        req.cookies?.access_token ??
+        req.headers?.authorization?.replace(/^Bearer\s+/i, "");
 
-        if (!token) {
-          return res.status(401).json({
-            statusCode: 401,
-            code: "NOT_AUTHENTICATED",
-            message: "Authentication is required to stream audio.",
-          });
-        }
+      if (!token) {
+        return res.status(401).json({
+          statusCode: 401,
+          code: "NOT_AUTHENTICATED",
+          message: "Authentication is required to stream audio.",
+        });
+      }
 
-        let payload: any;
+      let payload: any;
+      try {
+        payload = jwt.verify(token, jwtSecret, {
+          issuer: jwtIssuer,
+          audience: jwtAudience,
+        });
+      } catch {
+        return res.status(401).json({
+          statusCode: 401,
+          code: "NOT_AUTHENTICATED",
+          message: "Invalid or expired token.",
+        });
+      }
+
+      // If the token carries a session ID (jti), verify the session is still
+      // active in the database. This enforces immediate revocation after logout.
+      if (payload?.jti) {
         try {
-          payload = jwt.verify(token, jwtSecret, {
-            issuer: jwtIssuer,
-            audience: jwtAudience,
+          const session = await prismaService.userSession.findUnique({
+            where: { id: payload.jti },
+            select: { revokedAt: true, expiresAt: true },
           });
-        } catch {
-          return res.status(401).json({
-            statusCode: 401,
-            code: "NOT_AUTHENTICATED",
-            message: "Invalid or expired token.",
-          });
-        }
-
-        // If the token carries a session ID (jti), verify the session is still
-        // active in the database. This enforces immediate revocation after logout.
-        if (payload?.jti) {
-          try {
-            const session = await prismaService.userSession.findUnique({
-              where: { id: payload.jti },
-              select: { revokedAt: true, expiresAt: true },
-            });
-            if (
-              !session ||
-              session.revokedAt !== null ||
-              session.expiresAt < new Date()
-            ) {
-              return res.status(401).json({
-                statusCode: 401,
-                code: "SESSION_REVOKED",
-                message: "Session has been revoked. Please log in again.",
-              });
-            }
-          } catch {
-            // Treat DB errors conservatively — deny access rather than fail open.
-            return res.status(503).json({
-              statusCode: 503,
-              code: "SERVICE_UNAVAILABLE",
-              message: "Unable to verify session. Please try again.",
+          if (
+            !session ||
+            session.revokedAt !== null ||
+            session.expiresAt < new Date()
+          ) {
+            return res.status(401).json({
+              statusCode: 401,
+              code: "SESSION_REVOKED",
+              message: "Session has been revoked. Please log in again.",
             });
           }
+        } catch {
+          // Treat DB errors conservatively — deny access rather than fail open.
+          return res.status(503).json({
+            statusCode: 503,
+            code: "SERVICE_UNAVAILABLE",
+            message: "Unable to verify session. Please try again.",
+          });
         }
+      }
 
-        next();
-      },
-    );
+      next();
+    });
     app.use(
       "/uploads/tracks",
       require("express").static(path.join(uploadDir, "tracks")),
@@ -348,6 +348,11 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api/docs", app, document);
   }
+
+  // Use a single shared socket.io Server for all gateways so multiple
+  // @WebSocketGateway decorators don't each spin up their own Server on the
+  // same HTTP port (which causes upgrade-event conflicts and silent failures).
+  app.useWebSocketAdapter(new SocketIoAdapter(app));
 
   await app.listen(port);
 

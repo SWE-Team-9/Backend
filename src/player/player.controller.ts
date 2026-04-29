@@ -326,7 +326,7 @@ export class PlayerController {
     return this.playerService.getTrackPreview(trackId);
   }
 
-  // ── Queue management ──────────────────────────────────────────────────────
+  // -- Queue management
 
   // 12. POST /player/queue/load
   @Post("queue/load")
@@ -357,10 +357,7 @@ export class PlayerController {
       },
     },
   })
-  loadQueue(
-    @CurrentUser("userId") userId: string,
-    @Body() body: LoadQueueDto,
-  ) {
+  loadQueue(@CurrentUser("userId") userId: string, @Body() body: LoadQueueDto) {
     return this.playerService.loadQueueContext(userId, body);
   }
 

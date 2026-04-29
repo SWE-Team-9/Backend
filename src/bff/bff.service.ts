@@ -31,18 +31,25 @@ export class BffService {
   // Fails fast with 401 when the session is invalid — the caller handles redirect.
 
   async getBootstrap(userId: string) {
-    const [me, profile, notificationsResult, messagesUnread, playerSession, entitlements, subscription] =
-      await Promise.all([
-        this.authService.getMe(userId),
-        this.usersService.getMyProfile(userId).catch(() => null),
-        this.notificationsService
-          .getNotifications(userId, { page: 1, limit: 10 })
-          .catch(() => ({ notifications: [], total: 0 })),
-        this.messagesService.getUnreadCount(userId).catch(() => 0),
-        this.playerService.getSession(userId).catch(() => null),
-        this.entitlementsService.getUserEntitlements(userId).catch(() => null),
-        this.subscriptionsService.getMySubscription(userId).catch(() => null),
-      ]);
+    const [
+      me,
+      profile,
+      notificationsResult,
+      messagesUnread,
+      playerSession,
+      entitlements,
+      subscription,
+    ] = await Promise.all([
+      this.authService.getMe(userId),
+      this.usersService.getMyProfile(userId).catch(() => null),
+      this.notificationsService
+        .getNotifications(userId, { page: 1, limit: 10 })
+        .catch(() => ({ notifications: [], total: 0 })),
+      this.messagesService.getUnreadCount(userId).catch(() => 0),
+      this.playerService.getSession(userId).catch(() => null),
+      this.entitlementsService.getUserEntitlements(userId).catch(() => null),
+      this.subscriptionsService.getMySubscription(userId).catch(() => null),
+    ]);
 
     const unreadCount = await this.notificationsService
       .getUnreadCountForUser(userId)
@@ -88,16 +95,24 @@ export class BffService {
     page: number,
     limit: number,
   ) {
-    const profile = await this.usersService.getProfileByHandle(handle, requesterId);
+    const profile = await this.usersService.getProfileByHandle(
+      handle,
+      requesterId,
+    );
 
     // Private or blocked — return minimal shape; callers redirect/render gated UI
-    const isPrivate = (profile as any).is_private === true && !(requesterId && (profile as any).id === requesterId);
+    const isPrivate =
+      (profile as any).is_private === true &&
+      !(requesterId && (profile as any).id === requesterId);
     if (isPrivate && !(requesterId && (profile as any).id === requesterId)) {
       return {
         viewer: requesterId ? await this.getViewerSummary(requesterId) : null,
         profile,
         relationship: requesterId
-          ? await this.getRelationship(requesterId, (profile as any).id ?? (profile as any).user_id)
+          ? await this.getRelationship(
+              requesterId,
+              (profile as any).id ?? (profile as any).user_id,
+            )
           : null,
         tracks: { items: [], page: 1, limit, total: 0, hasMore: false },
         counts: {
@@ -119,11 +134,17 @@ export class BffService {
       this.tracksService
         .getUserTracks(profileId, requesterId, page, limit)
         .catch(() => ({ tracks: [], totalTracks: 0 })),
-      requesterId ? this.getViewerInteractions(requesterId, profileId).catch(() => null) : null,
-      requesterId ? this.getRelationship(requesterId, profileId).catch(() => null) : null,
+      requesterId
+        ? this.getViewerInteractions(requesterId, profileId).catch(() => null)
+        : null,
+      requesterId
+        ? this.getRelationship(requesterId, profileId).catch(() => null)
+        : null,
     ]);
 
-    const viewer = requesterId ? await this.getViewerSummary(requesterId).catch(() => null) : null;
+    const viewer = requesterId
+      ? await this.getViewerSummary(requesterId).catch(() => null)
+      : null;
 
     const canEditProfile = requesterId === profileId;
     const canViewPrivateTracks = canEditProfile;
@@ -156,17 +177,25 @@ export class BffService {
   // Returns all data needed to render the settings page in one request.
 
   async getSettingsPageData(userId: string) {
-    const [me, profile, subscription, entitlements, notificationPreferences, sessionCount] =
-      await Promise.all([
-        this.authService.getMe(userId),
-        this.usersService.getMyProfile(userId).catch(() => null),
-        this.subscriptionsService.getMySubscription(userId).catch(() => null),
-        this.entitlementsService.getUserEntitlements(userId).catch(() => null),
-        this.notificationsService.getPreferences(userId).catch(() => null),
-        this.prisma.userSession
-          .count({ where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } })
-          .catch(() => 0),
-      ]);
+    const [
+      me,
+      profile,
+      subscription,
+      entitlements,
+      notificationPreferences,
+      sessionCount,
+    ] = await Promise.all([
+      this.authService.getMe(userId),
+      this.usersService.getMyProfile(userId).catch(() => null),
+      this.subscriptionsService.getMySubscription(userId).catch(() => null),
+      this.entitlementsService.getUserEntitlements(userId).catch(() => null),
+      this.notificationsService.getPreferences(userId).catch(() => null),
+      this.prisma.userSession
+        .count({
+          where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+        })
+        .catch(() => 0),
+    ]);
 
     return {
       me,
@@ -186,7 +215,12 @@ export class BffService {
       select: {
         id: true,
         profile: {
-          select: { handle: true, displayName: true, avatarUrl: true, accountType: true },
+          select: {
+            handle: true,
+            displayName: true,
+            avatarUrl: true,
+            accountType: true,
+          },
         },
       },
     });
@@ -212,15 +246,24 @@ export class BffService {
 
     const [follow, block, blockedBy] = await Promise.all([
       this.prisma.userFollow.findUnique({
-        where: { followerId_followingId: { followerId: requesterId, followingId: targetId } },
+        where: {
+          followerId_followingId: {
+            followerId: requesterId,
+            followingId: targetId,
+          },
+        },
         select: { followerId: true },
       }),
       this.prisma.userBlock.findUnique({
-        where: { blockerId_blockedId: { blockerId: requesterId, blockedId: targetId } },
+        where: {
+          blockerId_blockedId: { blockerId: requesterId, blockedId: targetId },
+        },
         select: { blockerId: true },
       }),
       this.prisma.userBlock.findUnique({
-        where: { blockerId_blockedId: { blockerId: targetId, blockedId: requesterId } },
+        where: {
+          blockerId_blockedId: { blockerId: targetId, blockedId: requesterId },
+        },
         select: { blockerId: true },
       }),
     ]);

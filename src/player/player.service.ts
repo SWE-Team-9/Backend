@@ -46,7 +46,7 @@ export class PlayerService {
    * Build a stream URL for a stored audio file.
    *
    * For S3: generates a short-lived presigned GET URL (STREAM_URL_TTL_SECONDS).
-   * This means clients cannot cache or share the URL beyond the TTL — the only
+   * This means clients cannot cache or share the URL beyond the TTL - the only
    * way to get a fresh URL is to call this endpoint again with a valid token.
    *
    * For local storage: returns a plain URL under /uploads/tracks/ which is
@@ -489,7 +489,7 @@ export class PlayerService {
       select: { storageKey: true },
     });
 
-    // Preview clips are @Public() — they're intentionally accessible to unauthenticated
+    // Preview clips are @Public() - they're intentionally accessible to unauthenticated
     // users (free-tier 30-second previews). Return a proper URL, not the raw storage key.
     // For local storage, /uploads/previews/ is served as a public static route.
     // For S3, use a public CDN/S3 URL (not presigned) since these are meant for all users.
@@ -503,7 +503,7 @@ export class PlayerService {
     };
   }
 
-  // ── Queue management ──────────────────────────────────────────────────────
+  // -- Queue management
 
   /** Ads injected every N real tracks (MVP: static, no audio URL). */
   private readonly AD_EVERY_N_TRACKS = 3;
@@ -511,13 +511,13 @@ export class PlayerService {
   private readonly STATIC_ADS = [
     {
       adId: "ad_001",
-      title: "Upgrade to Premium — No Ads",
+      title: "Upgrade to IQA3 Premium - No Ads",
       durationSeconds: 15,
       clickUrl: null as string | null,
     },
     {
       adId: "ad_002",
-      title: "Share your music on MagSW",
+      title: "Share your music on IQA3",
       durationSeconds: 15,
       clickUrl: null as string | null,
     },
@@ -745,7 +745,7 @@ export class PlayerService {
       if (repeatMode === "ALL") {
         nextIndex = 0;
       } else {
-        // Queue ended (OFF or ONE — user pressed NEXT explicitly, so advance past)
+        // Queue ended (OFF or ONE - user pressed NEXT explicitly, so advance past)
         return {
           type: "ENDED" as const,
           currentIndex: currentQueueIndex,
@@ -944,7 +944,7 @@ export class PlayerService {
     };
   }
 
-  // ── Private helpers ───────────────────────────────────────────────────────
+  // -- Private helpers
 
   private async findTrackOrFail(trackId: string) {
     const track = await this.prisma.track.findUnique({

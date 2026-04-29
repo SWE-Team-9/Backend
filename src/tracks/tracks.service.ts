@@ -411,7 +411,26 @@ export class TracksService {
       throw new NotFoundException("Track not found.");
     }
 
-    return this.formatDetailResponse(track);
+    const base = this.formatDetailResponse(track);
+
+    if (!requesterId) return base;
+
+    const [likeRecord, repostRecord] = await Promise.all([
+      this.prisma.like.findUnique({
+        where: { userId_trackId: { userId: requesterId, trackId } },
+        select: { id: true },
+      }),
+      this.prisma.repost.findUnique({
+        where: { userId_trackId: { userId: requesterId, trackId } },
+        select: { id: true },
+      }),
+    ]);
+
+    return {
+      ...base,
+      liked: !!likeRecord,
+      reposted: !!repostRecord,
+    };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -805,7 +824,7 @@ export class TracksService {
           Key: storageKey,
           Body: buffer,
           ContentType: mimeType,
-          // Audio files are protected content — must not be publicly cached by CDN or
+          // Audio files are protected content - must not be publicly cached by CDN or
           // browser. Using "private, no-cache" ensures each request goes through
           // presigned-URL authorization, preventing cached delivery after logout.
           CacheControl: "private, no-cache",

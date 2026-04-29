@@ -33,7 +33,7 @@ export class LoadQueueDto {
   @IsBoolean()
   shuffle?: boolean;
 
-  /** Explicit list of track IDs — required when contextType is CONTEXT_IDS. */
+  /** Explicit list of track IDs (required when contextType is CONTEXT_IDS). */
   @IsOptional()
   @IsArray()
   @IsUUID("4", { each: true })

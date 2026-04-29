@@ -14,7 +14,6 @@ import {
 
 @WebSocketGateway({
   namespace: "notifications",
-  cors: { origin: true, credentials: true },
 })
 export class NotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect, INotificationsGateway
