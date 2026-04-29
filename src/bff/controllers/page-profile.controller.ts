@@ -8,7 +8,15 @@ import {
   Req,
   Res,
 } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  ApiCookieAuth,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { IsInt, IsOptional, Max, Min } from "class-validator";
 import { Type } from "class-transformer";
@@ -49,14 +57,73 @@ export class PageProfileController {
   @ApiOperation({
     summary: "Profile page aggregate data",
     description:
-      "Returns everything needed to render the profile page in one request: " +
-      "profile, tracks, viewer relationship, viewer interactions, and permissions.",
+      "Returns everything needed to render a profile page in one request. " +
+      "Works for guests (no session) and authenticated users alike. " +
+      "Fields: `profile`, paginated `tracks`, `counts` (followers/following/tracks), " +
+      "`viewer` (requester summary), `relationship` (isFollowing/isBlocked), " +
+      "`viewerInteractions` (likedTrackIds / repostedTrackIds), and `permissions`. " +
+      "Private profiles return an empty tracks list and `canViewPrivateTracks: false` for non-owners.",
   })
-  @ApiParam({ name: "handle", description: "User handle" })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
-  @ApiResponse({ status: 200, description: "Profile page payload." })
-  @ApiResponse({ status: 404, description: "Profile not found." })
+  @ApiCookieAuth("access_token")
+  @ApiBearerAuth()
+  @ApiParam({
+    name: "handle",
+    description: "Public handle of the target user (e.g. `alice`).",
+    example: "alice",
+  })
+  @ApiQuery({
+    name: "page",
+    required: false,
+    type: Number,
+    description: "Track page number (default: 1).",
+    example: 1,
+  })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    type: Number,
+    description: "Tracks per page, max 50 (default: 10).",
+    example: 10,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Profile page payload returned successfully.",
+    schema: {
+      example: {
+        viewer: { id: "uuid", handle: "bob", displayName: "Bob", avatarUrl: null, accountType: "LISTENER" },
+        profile: {
+          id: "uuid",
+          handle: "alice",
+          display_name: "Alice",
+          bio: "Producer & DJ",
+          avatarUrl: null,
+          coverPhotoUrl: null,
+          account_type: "ARTIST",
+          is_private: false,
+          followers_count: 120,
+          following_count: 45,
+          track_count: 8,
+        },
+        tracks: {
+          items: [],
+          page: 1,
+          limit: 10,
+          total: 8,
+          hasMore: false,
+        },
+        counts: { followers: 120, following: 45, tracks: 8 },
+        relationship: {
+          isFollowing: false,
+          isBlocked: false,
+          isBlockedBy: false,
+          canMessage: true,
+        },
+        viewerInteractions: { likedTrackIds: ["uuid"], repostedTrackIds: [] },
+        permissions: { canEditProfile: false, canViewPrivateTracks: false },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: "No profile found for the given handle." })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Get("profile/:handle")
