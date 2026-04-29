@@ -1,11 +1,19 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from "@nestjs/common";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  ApiCookieAuth,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { Response } from "express";
 
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { BffService } from "../bff.service";
 
 @ApiTags("BFF")
+@ApiCookieAuth("access_token")
+@ApiBearerAuth()
 @Controller("app")
 export class AppBootstrapController {
   constructor(private readonly bffService: BffService) {}
@@ -20,14 +28,65 @@ export class AppBootstrapController {
    * Cache: private, no-store — all fields are user-specific.
    */
   @ApiOperation({
-    summary: "Bootstrap app shell data",
+    summary: "App shell bootstrap",
     description:
-      "Single endpoint that returns everything the authenticated shell needs " +
-      "(me, profile, notifications, messages, player session, entitlements, subscription). " +
-      "Replaces several parallel requests made after login.",
+      "Returns everything the authenticated shell needs in a single round-trip, " +
+      "eliminating several parallel requests made after login. " +
+      "Fields: `me` (identity), `profile` (summary), `notifications` (unread count + latest 10), " +
+      "`messages` (unread count), `player` (restored session), `entitlements`, `subscription`. " +
+      "Auxiliary fields fall back to null / empty on partial service failure; only `me` is hard-required.",
   })
-  @ApiResponse({ status: 200, description: "Bootstrap payload." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({
+    status: 200,
+    description: "Bootstrap payload returned successfully.",
+    schema: {
+      example: {
+        me: {
+          id: "uuid",
+          email: "user@example.com",
+          display_name: "Alice",
+          handle: "alice",
+          avatar_url: null,
+          is_verified: true,
+          account_type: "ARTIST",
+          system_role: "USER",
+          subscription_tier: "PRO",
+        },
+        profile: {
+          id: "uuid",
+          handle: "alice",
+          displayName: "Alice",
+          avatarUrl: null,
+          coverUrl: null,
+          accountType: "ARTIST",
+          followersCount: 120,
+          followingCount: 45,
+          tracksCount: 8,
+        },
+        notifications: { unreadCount: 3, latest: [] },
+        messages: { unreadCount: 1 },
+        player: { session: null },
+        entitlements: {
+          planCode: "PRO",
+          isPremium: true,
+          uploadLimit: 100,
+          uploadedCount: 8,
+          remainingUploads: 92,
+          canUpload: true,
+          adsEnabled: false,
+          canDownload: true,
+        },
+        subscription: {
+          subscriptionType: "PRO",
+          uploadLimit: 100,
+          remainingUploads: 92,
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: null,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Missing or expired session — redirect to login." })
   @HttpCode(HttpStatus.OK)
   @Get("bootstrap")
   async getBootstrap(
