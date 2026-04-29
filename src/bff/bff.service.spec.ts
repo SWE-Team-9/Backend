@@ -101,7 +101,7 @@ const mockPrisma = {
   repost: { findMany: jest.fn() },
   track: { findMany: jest.fn() },
   user: { findUnique: jest.fn() },
-  session: { count: jest.fn() },
+  userSession: { count: jest.fn() },
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ describe("BffService", () => {
       mockNotificationsService.getPreferences.mockResolvedValue({
         likes: true, comments: true, follows: true, reposts: true,
       });
-      mockPrisma.session.count.mockResolvedValue(2);
+      mockPrisma.userSession.count.mockResolvedValue(2);
 
       const result = await service.getSettingsPageData("user-1");
 
@@ -302,7 +302,7 @@ describe("BffService", () => {
       mockSubscriptionsService.getMySubscription.mockResolvedValue(mockSubscription);
       mockEntitlementsService.getUserEntitlements.mockResolvedValue(mockEntitlements);
       mockNotificationsService.getPreferences.mockResolvedValue({});
-      mockPrisma.session.count.mockResolvedValue(1);
+      mockPrisma.userSession.count.mockResolvedValue(1);
 
       const result = await service.getSettingsPageData("user-1");
 
