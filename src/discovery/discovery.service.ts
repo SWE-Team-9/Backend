@@ -14,86 +14,132 @@ import { PrismaService } from "../prisma/prisma.service";
 export class DiscoveryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async search(q: string) {
+  async search(
+    q: string,
+    type: "all" | "tracks" | "users" | "playlists" = "all",
+    page = 1,
+    limit = 20,
+  ) {
     const normalized = q.trim();
+    const offset = (page - 1) * limit;
 
-    const [tracks, users, playlists] = await Promise.all([
-      // Use raw tsvector query for optimal GIN index performance on tracks
-      this.prisma.$queryRaw<
-        Array<{
-          id: string;
-          title: string;
-          slug: string;
-          description: string | null;
-          cover_art_url: string | null;
-          uploader_id: string;
-        }>
-      >`
-        SELECT
-          t.id,
-          t.title,
-          t.slug,
-          t.description,
-          t.cover_art_url,
-          t.uploader_id
-        FROM tracks t
-        WHERE
-          t.deleted_at IS NULL
-          AND t.visibility = 'PUBLIC'
-          AND t.status = 'FINISHED'
-          AND t.moderation_state = 'VISIBLE'
-          AND to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, ''))
-              @@ plainto_tsquery('english', ${normalized})
-        LIMIT 20
-      `,
-      this.prisma.userProfile.findMany({
-        where: {
-          visibility: ProfileVisibility.PUBLIC,
-          user: {
-            deletedAt: null,
-          },
-          OR: [
-            { handle: { search: normalized } },
-            { displayName: { search: normalized } },
-          ],
-        },
-        select: {
-          userId: true,
-          handle: true,
-          displayName: true,
-          avatarUrl: true,
-          bio: true,
-        },
-        take: 20,
-      }),
-      // Use raw tsvector query for optimal GIN index performance on playlists
-      this.prisma.$queryRaw<
-        Array<{
-          id: string;
-          owner_id: string;
-          title: string;
-          slug: string;
-          description: string | null;
-          cover_art_url: string | null;
-        }>
-      >`
-        SELECT
-          p.id,
-          p.owner_id,
-          p.title,
-          p.slug,
-          p.description,
-          p.cover_art_url
-        FROM playlists p
-        WHERE
-          p.deleted_at IS NULL
-          AND p.visibility = 'PUBLIC'
-          AND p.moderation_state = 'VISIBLE'
-          AND to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p.description, ''))
-              @@ plainto_tsquery('english', ${normalized})
-        LIMIT 20
-      `,
+    const shouldFetchTracks = type === "all" || type === "tracks";
+    const shouldFetchUsers = type === "all" || type === "users";
+    const shouldFetchPlaylists = type === "all" || type === "playlists";
+
+    const tracksPromise = shouldFetchTracks
+      ? this.prisma.$queryRaw<
+          Array<{
+            id: string;
+            title: string;
+            slug: string;
+            description: string | null;
+            cover_art_url: string | null;
+            uploader_id: string;
+            total_count: bigint;
+          }>
+        >`
+          SELECT
+            t.id,
+            t.title,
+            t.slug,
+            t.description,
+            t.cover_art_url,
+            t.uploader_id,
+            COUNT(*) OVER()::bigint AS total_count
+          FROM tracks t
+          WHERE
+            t.deleted_at IS NULL
+            AND t.visibility = 'PUBLIC'
+            AND t.status = 'FINISHED'
+            AND t.moderation_state = 'VISIBLE'
+            AND to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, ''))
+                @@ plainto_tsquery('english', ${normalized})
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+      : Promise.resolve([] as Array<never>);
+
+    const usersPromise = shouldFetchUsers
+      ? Promise.all([
+          this.prisma.userProfile.findMany({
+            where: {
+              visibility: ProfileVisibility.PUBLIC,
+              user: {
+                deletedAt: null,
+              },
+              OR: [
+                { handle: { search: normalized } },
+                { displayName: { search: normalized } },
+              ],
+            },
+            select: {
+              userId: true,
+              handle: true,
+              displayName: true,
+              avatarUrl: true,
+              bio: true,
+            },
+            skip: offset,
+            take: limit,
+          }),
+          this.prisma.userProfile.count({
+            where: {
+              visibility: ProfileVisibility.PUBLIC,
+              user: {
+                deletedAt: null,
+              },
+              OR: [
+                { handle: { search: normalized } },
+                { displayName: { search: normalized } },
+              ],
+            },
+          }),
+        ])
+      : Promise.resolve([[] as Array<never>, 0] as const);
+
+    const playlistsPromise = shouldFetchPlaylists
+      ? this.prisma.$queryRaw<
+          Array<{
+            id: string;
+            owner_id: string;
+            title: string;
+            slug: string;
+            description: string | null;
+            cover_art_url: string | null;
+            total_count: bigint;
+          }>
+        >`
+          SELECT
+            p.id,
+            p.owner_id,
+            p.title,
+            p.slug,
+            p.description,
+            p.cover_art_url,
+            COUNT(*) OVER()::bigint AS total_count
+          FROM playlists p
+          WHERE
+            p.deleted_at IS NULL
+            AND p.visibility = 'PUBLIC'
+            AND p.moderation_state = 'VISIBLE'
+            AND to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p.description, ''))
+                @@ plainto_tsquery('english', ${normalized})
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+      : Promise.resolve([] as Array<never>);
+
+    const [tracks, usersData, playlists] = await Promise.all([
+      tracksPromise,
+      usersPromise,
+      playlistsPromise,
     ]);
+
+    const [users, usersTotalCount] = usersData;
+    const tracksTotalCount = tracks.length > 0 ? Number(tracks[0].total_count) : 0;
+    const playlistsTotalCount =
+      playlists.length > 0 ? Number(playlists[0].total_count) : 0;
 
     // Transform raw query results to match expected API response shape
     const transformedTracks = tracks.map((t) => ({
@@ -114,17 +160,19 @@ export class DiscoveryService {
       coverArtUrl: p.cover_art_url,
     }));
 
+    const totalResults = tracksTotalCount + usersTotalCount + playlistsTotalCount;
+    const totalPages = totalResults > 0 ? Math.ceil(totalResults / limit) : 0;
+
     return {
-      query: normalized,
-      results: {
+      data: {
         tracks: transformedTracks,
         users,
         playlists: transformedPlaylists,
       },
-      totals: {
-        tracks: transformedTracks.length,
-        users: users.length,
-        playlists: transformedPlaylists.length,
+      meta: {
+        current_page: page,
+        total_results: totalResults,
+        total_pages: totalPages,
       },
     };
   }
