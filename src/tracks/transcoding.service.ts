@@ -270,7 +270,9 @@ export class TranscodingService {
           Key: storageKey,
           Body: buffer,
           ContentType: mimeType,
-          CacheControl: "public, max-age=31536000, immutable",
+          // Protected audio — do not allow CDN/browser caching. Presigned URLs
+          // are only effective when the underlying object is not publicly cached.
+          CacheControl: "private, no-cache",
         }),
       );
     } else {

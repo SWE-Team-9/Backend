@@ -223,12 +223,25 @@ async function buildRbacApp(
 /**
  * Builds an app with the real JwtAuthGuard + JwtCookieStrategy for JWT
  * validation tests (expired / tampered tokens).
+ *
+ * @param userRow       Row returned for user.findUnique (null = deleted user)
+ * @param sessionRow    Row returned for userSession.findUnique (undefined = not called)
  */
 async function buildJwtApp(
   userRow: { accountStatus: string } | null = { accountStatus: "ACTIVE" },
+  sessionRow?: {
+    revokedAt: Date | null;
+    expiresAt: Date;
+    user: { accountStatus: string } | null;
+  } | null,
 ): Promise<INestApplication> {
   const mockPrisma = {
     user: { findUnique: jest.fn().mockResolvedValue(userRow) },
+    userSession: {
+      findUnique: jest.fn().mockResolvedValue(
+        sessionRow !== undefined ? sessionRow : null,
+      ),
+    },
   };
 
   const mockConfig = {
@@ -536,5 +549,150 @@ describe("Suite 4 — IDOR Prevention", () => {
       expect.any(Number),
       expect.any(Number),
     );
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Suite 5 — Session Revocation & Post-Logout Token Denial
+//
+// Verifies that:
+//   (a) A JWT with jti is rejected immediately when its backing session is
+//       revoked — no waiting for the 15-minute token TTL.
+//   (b) A JWT with no jti (legacy) is rejected when the user no longer exists.
+//   (c) A JWT with jti for a session that is still active passes through.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const SESSION_UUID = "11111111-1111-1111-1111-111111111111";
+const FUTURE_DATE = new Date(Date.now() + 24 * 60 * 60 * 1000); // +1 day
+
+describe("Suite 5 — Session Revocation & Post-Logout Token Denial", () => {
+  afterEach(() => jest.clearAllMocks());
+
+  // ── 5a. Token with revoked session is blocked immediately ─────────────────
+
+  it("JWT with revoked session (jti) → 401 even if token is not yet expired", async () => {
+    const app = await buildJwtApp(
+      { accountStatus: "ACTIVE" },
+      // Session exists but has been revoked (revokedAt is set)
+      {
+        revokedAt: new Date(),
+        expiresAt: FUTURE_DATE,
+        user: { accountStatus: "ACTIVE" },
+      },
+    );
+
+    const tokenWithJti = signToken({
+      sub: USER_A_ID,
+      role: "ADMIN",
+      jti: SESSION_UUID,
+    });
+
+    await request(app.getHttpServer())
+      .get("/admin/users")
+      .set("Authorization", `Bearer ${tokenWithJti}`)
+      .expect(401);
+
+    await app.close();
+  });
+
+  it("JWT with unknown session id (jti) → 401 (session not found)", async () => {
+    const app = await buildJwtApp(
+      { accountStatus: "ACTIVE" },
+      null, // userSession.findUnique returns null
+    );
+
+    const tokenWithJti = signToken({
+      sub: USER_A_ID,
+      role: "ADMIN",
+      jti: SESSION_UUID,
+    });
+
+    await request(app.getHttpServer())
+      .get("/admin/users")
+      .set("Authorization", `Bearer ${tokenWithJti}`)
+      .expect(401);
+
+    await app.close();
+  });
+
+  it("JWT with expired session (jti, expiresAt in the past) → 401", async () => {
+    const pastDate = new Date(Date.now() - 1000); // already expired
+
+    const app = await buildJwtApp(
+      { accountStatus: "ACTIVE" },
+      {
+        revokedAt: null,
+        expiresAt: pastDate, // session row expired
+        user: { accountStatus: "ACTIVE" },
+      },
+    );
+
+    const tokenWithJti = signToken({
+      sub: USER_A_ID,
+      role: "ADMIN",
+      jti: SESSION_UUID,
+    });
+
+    await request(app.getHttpServer())
+      .get("/admin/users")
+      .set("Authorization", `Bearer ${tokenWithJti}`)
+      .expect(401);
+
+    await app.close();
+  });
+
+  it("JWT with valid active session (jti) → 200 (request succeeds)", async () => {
+    const app = await buildJwtApp(
+      { accountStatus: "ACTIVE" },
+      // Active session: not revoked, not expired
+      {
+        revokedAt: null,
+        expiresAt: FUTURE_DATE,
+        user: { accountStatus: "ACTIVE" },
+      },
+    );
+
+    const validToken = signToken({
+      sub: USER_A_ID,
+      role: "ADMIN",
+      jti: SESSION_UUID,
+    });
+
+    await request(app.getHttpServer())
+      .get("/admin/users")
+      .set("Authorization", `Bearer ${validToken}`)
+      .expect(200);
+
+    await app.close();
+  });
+
+  // ── 5b. Legacy token (no jti): deleted user is rejected ──────────────────
+
+  it("Legacy JWT (no jti) for a deleted user → 401 (was bug: used to return ACTIVE)", async () => {
+    // User row is null — the account was deleted from the DB
+    const app = await buildJwtApp(null);
+
+    const legacyToken = signToken({ sub: USER_A_ID, role: "USER" });
+    // No jti in this token — hits the legacy code path in validate()
+
+    await request(app.getHttpServer())
+      .get("/admin/users")
+      .set("Authorization", `Bearer ${legacyToken}`)
+      .expect(401);
+
+    await app.close();
+  });
+
+  it("Legacy JWT (no jti) for an existing user → 200 (backward compat preserved)", async () => {
+    const app = await buildJwtApp({ accountStatus: "ACTIVE" });
+
+    const legacyToken = signToken({ sub: USER_A_ID, role: "ADMIN" });
+
+    await request(app.getHttpServer())
+      .get("/admin/users")
+      .set("Authorization", `Bearer ${legacyToken}`)
+      .expect(200);
+
+    await app.close();
   });
 });

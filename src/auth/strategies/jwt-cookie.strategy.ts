@@ -45,18 +45,58 @@ export class JwtCookieStrategy extends PassportStrategy(
   }
 
   // This runs after the JWT signature is verified.
-  // Return value gets attached to request.user
+  // Return value gets attached to request.user; returning null causes a 401.
   async validate(payload: JwtPayload) {
-    // Fetch account status so the guard can block suspended/banned users
+    // ── Session revocation check ────────────────────────────────────────────
+    // When the JWT was signed with a session ID (jti), verify that session is
+    // still active. This makes logout effective immediately: revoking the
+    // session denies all subsequent requests that carry the same access token,
+    // even before the token's own expiry window closes.
+    if (payload.jti) {
+      const session = await this.prisma.userSession.findUnique({
+        where: { id: payload.jti },
+        select: {
+          revokedAt: true,
+          expiresAt: true,
+          user: { select: { accountStatus: true } },
+        },
+      });
+
+      // Deny: session revoked, expired, or unknown
+      if (
+        !session ||
+        session.revokedAt !== null ||
+        session.expiresAt < new Date()
+      ) {
+        return null;
+      }
+
+      // Deny: user account deleted (session row exists but user was removed)
+      if (!session.user) return null;
+
+      return {
+        userId: payload.sub,
+        role: payload.role,
+        accountStatus: session.user.accountStatus,
+      };
+    }
+
+    // ── Legacy path (tokens without jti) ───────────────────────────────────
+    // Tokens issued before this fix don't carry a jti; fall back to a simple
+    // user-existence + account-status check.  These tokens expire within 15 min
+    // at most, so the revocation gap is bounded.
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: { accountStatus: true },
     });
 
+    // Bug fix: deleted users must be rejected (previously defaulted to "ACTIVE").
+    if (!user) return null;
+
     return {
       userId: payload.sub,
       role: payload.role,
-      accountStatus: user?.accountStatus ?? "ACTIVE",
+      accountStatus: user.accountStatus,
     };
   }
 }
