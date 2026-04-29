@@ -92,12 +92,18 @@ export class AuditLogQueryDto {
   @IsString()
   actionType?: string;
 
-  @ApiPropertyOptional({ description: "Filter by admin user UUID.", format: "uuid" })
+  @ApiPropertyOptional({
+    description: "Filter by admin user UUID.",
+    format: "uuid",
+  })
   @IsOptional()
   @IsString()
   adminId?: string;
 
-  @ApiPropertyOptional({ description: "Filter by target user UUID.", format: "uuid" })
+  @ApiPropertyOptional({
+    description: "Filter by target user UUID.",
+    format: "uuid",
+  })
   @IsOptional()
   @IsString()
   targetUserId?: string;

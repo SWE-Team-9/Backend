@@ -84,7 +84,12 @@ describe("AdminUsersService", () => {
         suspendedUntil: null,
         lastLoginAt: null,
         createdAt: new Date(),
-        profile: { displayName: "Test", handle: "test", avatarUrl: null, accountType: "FREE" },
+        profile: {
+          displayName: "Test",
+          handle: "test",
+          avatarUrl: null,
+          accountType: "FREE",
+        },
         subscriptions: [],
         _count: { tracks: 5, playlists: 2, followers: 10, following: 3 },
       };
@@ -120,7 +125,12 @@ describe("AdminUsersService", () => {
           isVerified: true,
           lastLoginAt: null,
           createdAt: new Date(),
-          profile: { displayName: "Alice", handle: "alice", avatarUrl: null, accountType: "FREE" },
+          profile: {
+            displayName: "Alice",
+            handle: "alice",
+            avatarUrl: null,
+            accountType: "FREE",
+          },
           _count: { tracks: 2, submittedReports: 0 },
         },
       ]);

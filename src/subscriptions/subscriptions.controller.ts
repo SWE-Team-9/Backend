@@ -72,7 +72,8 @@ export class SubscriptionsController {
 
   // ─── GET /subscriptions/offline/:trackId ──────────────────────────────────
   @ApiOperation({
-    summary: "[STEP 1] Check offline entitlement & get track metadata (PRO / GO+ only)",
+    summary:
+      "[STEP 1] Check offline entitlement & get track metadata (PRO / GO+ only)",
     description:
       "**Offline Listening — Step 1 of 2**\n\n" +
       "Call this first to:\n" +
@@ -104,8 +105,10 @@ export class SubscriptionsController {
         artist: "DJ Nova",
         handle: "djnova",
         durationMs: 214000,
-        coverArtUrl: "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/covers/abc.jpg",
-        downloadUrl: "(signed S3 URL — do not use directly; call /stream instead)",
+        coverArtUrl:
+          "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/covers/abc.jpg",
+        downloadUrl:
+          "(signed S3 URL — do not use directly; call /stream instead)",
         expiresAt: "2026-04-28T14:00:00.000Z",
         expiresInSeconds: 900,
         planCode: "PRO",
@@ -126,8 +129,14 @@ export class SubscriptionsController {
       },
     },
   })
-  @ApiResponse({ status: 404, description: "Track not found or not yet published." })
-  @ApiResponse({ status: 401, description: "Not authenticated — missing or expired session cookie." })
+  @ApiResponse({
+    status: 404,
+    description: "Track not found or not yet published.",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Not authenticated — missing or expired session cookie.",
+  })
   @Get("offline/:trackId")
   async getOfflineTrack(
     @CurrentUser("userId") userId: string,
@@ -138,7 +147,8 @@ export class SubscriptionsController {
 
   // ─── GET /subscriptions/offline/:trackId/stream ───────────────────────────
   @ApiOperation({
-    summary: "[STEP 2] Download audio bytes for offline caching (PRO / GO+ only)",
+    summary:
+      "[STEP 2] Download audio bytes for offline caching (PRO / GO+ only)",
     description:
       "**Offline Listening — Step 2 of 2**\n\n" +
       "Downloads the raw audio bytes for a track and returns them as `audio/mpeg`. " +
@@ -188,8 +198,14 @@ export class SubscriptionsController {
       "`DOWNLOAD_NOT_ALLOWED` — Subscription is no longer active. " +
       "Re-check entitlement and prompt the user to renew.",
   })
-  @ApiResponse({ status: 404, description: "Track not found or not yet published." })
-  @ApiResponse({ status: 401, description: "Not authenticated — missing or expired session cookie." })
+  @ApiResponse({
+    status: 404,
+    description: "Track not found or not yet published.",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Not authenticated — missing or expired session cookie.",
+  })
   @Get("offline/:trackId/stream")
   async streamOfflineTrack(
     @CurrentUser("userId") userId: string,
@@ -242,11 +258,13 @@ export class SubscriptionsController {
             trialEligible: false,
             amountPaidCents: 999,
             currentPeriodEnd: "2026-05-28T00:00:00.000Z",
-            checkoutUrl: "https://mock-checkout.example.com/pay?session=cs_mock_...",
+            checkoutUrl:
+              "https://mock-checkout.example.com/pay?session=cs_mock_...",
           },
         },
         stripe: {
-          summary: "Real Stripe response (frontend must redirect to checkoutUrl)",
+          summary:
+            "Real Stripe response (frontend must redirect to checkoutUrl)",
           value: {
             checkoutSessionId: "cs_test_a1B2c3D4",
             checkoutUrl: "https://checkout.stripe.com/pay/cs_test_a1B2c3D4",
@@ -265,7 +283,8 @@ export class SubscriptionsController {
             effectiveAt: "2026-05-28T00:00:00.000Z",
             currentPlan: "GO_PLUS",
             newPlan: "PRO",
-            message: "Your plan will downgrade from GO+ to Artist Pro on 2026-05-28.",
+            message:
+              "Your plan will downgrade from GO+ to Artist Pro on 2026-05-28.",
           },
         },
       },
@@ -273,9 +292,13 @@ export class SubscriptionsController {
   })
   @ApiResponse({
     status: 400,
-    description: "Invalid plan code, or `SUBSCRIPTION_ALREADY_ACTIVE` (already on that plan).",
+    description:
+      "Invalid plan code, or `SUBSCRIPTION_ALREADY_ACTIVE` (already on that plan).",
   })
-  @ApiResponse({ status: 403, description: "`EMAIL_NOT_VERIFIED` — email address not confirmed." })
+  @ApiResponse({
+    status: 403,
+    description: "`EMAIL_NOT_VERIFIED` — email address not confirmed.",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Post("checkout")
   @HttpCode(HttpStatus.OK)
@@ -320,13 +343,14 @@ export class SubscriptionsController {
       "After the user finishes, they are redirected to the `returnUrl` (defaults to `/settings`).\n\n" +
       "The response also includes a safe `paymentMethodSummary` (brand, last4, expiry — never full card data) " +
       "suitable for displaying the saved card on the settings page without an extra API call.\n\n" +
-      "Pass `flow: \"payment_methods\"` in the body to open the payment-methods screen directly.",
+      'Pass `flow: "payment_methods"` in the body to open the payment-methods screen directly.',
   })
   @ApiBody({ type: PaymentMethodPortalDto, required: false })
   @ApiQuery({
     name: "returnUrl",
     required: false,
-    description: "Where to send the user after they close the portal (backward-compat query param).",
+    description:
+      "Where to send the user after they close the portal (backward-compat query param).",
   })
   @ApiResponse({
     status: 200,

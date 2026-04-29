@@ -311,8 +311,13 @@ export class TracksService {
     try {
       await this.uploadAudioFile(file.buffer, storageKey, mimeType);
     } catch (err) {
-      this.logger.error(`Audio upload to storage failed: ${err instanceof Error ? err.message : String(err)}`, err instanceof Error ? err.stack : undefined);
-      throw new BadRequestException("Failed to upload audio file. Please try again.");
+      this.logger.error(
+        `Audio upload to storage failed: ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new BadRequestException(
+        "Failed to upload audio file. Please try again.",
+      );
     }
 
     // --- upload cover art if provided ---

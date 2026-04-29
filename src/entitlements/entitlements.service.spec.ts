@@ -269,26 +269,43 @@ describe("EntitlementsService", () => {
       );
     });
 
-    it('PRO: 101st upload blocked (uploadedCount=100, uploadLimit=100)', async () => {
-      mockSubscriptionsService.getUploadQuota.mockResolvedValue({ uploadLimit: 100, uploadedCount: 100 });
-
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(ForbiddenException);
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'UPLOAD_LIMIT_REACHED' }),
+    it("PRO: 101st upload blocked (uploadedCount=100, uploadLimit=100)", async () => {
+      mockSubscriptionsService.getUploadQuota.mockResolvedValue({
+        uploadLimit: 100,
+        uploadedCount: 100,
       });
+
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject(
+        {
+          response: expect.objectContaining({ code: "UPLOAD_LIMIT_REACHED" }),
+        },
+      );
     });
 
-    it('GO_PLUS: 1001st upload blocked (uploadedCount=1000, uploadLimit=1000)', async () => {
-      mockSubscriptionsService.getUploadQuota.mockResolvedValue({ uploadLimit: 1000, uploadedCount: 1000 });
-
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(ForbiddenException);
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'UPLOAD_LIMIT_REACHED' }),
+    it("GO_PLUS: 1001st upload blocked (uploadedCount=1000, uploadLimit=1000)", async () => {
+      mockSubscriptionsService.getUploadQuota.mockResolvedValue({
+        uploadLimit: 1000,
+        uploadedCount: 1000,
       });
+
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject(
+        {
+          response: expect.objectContaining({ code: "UPLOAD_LIMIT_REACHED" }),
+        },
+      );
     });
 
-    it('thrown exception includes UPLOAD_LIMIT_REACHED code', async () => {
-      mockSubscriptionsService.getUploadQuota.mockResolvedValue({ uploadLimit: 3, uploadedCount: 3 });
+    it("thrown exception includes UPLOAD_LIMIT_REACHED code", async () => {
+      mockSubscriptionsService.getUploadQuota.mockResolvedValue({
+        uploadLimit: 3,
+        uploadedCount: 3,
+      });
 
       try {
         await service.assertCanUploadTrack(USER_ID);

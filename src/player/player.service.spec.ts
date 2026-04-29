@@ -329,7 +329,9 @@ describe("PlayerService", () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
         finishedTrack,
       );
-      (prismaMock.playlist.findFirst as jest.Mock).mockResolvedValue({ id: "pl-1" });
+      (prismaMock.playlist.findFirst as jest.Mock).mockResolvedValue({
+        id: "pl-1",
+      });
       (prismaMock.playEvent.create as jest.Mock).mockResolvedValue({});
       (prismaMock.playEvent.count as jest.Mock).mockResolvedValue(1);
 
