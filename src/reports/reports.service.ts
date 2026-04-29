@@ -240,7 +240,7 @@ export class ReportsService {
       select: { id: true },
     });
 
-    if (resolvedReports.length > 0) {
+    if ((resolvedReports ?? []).length > 0) {
       throw new BadRequestException({
         code: "INVALID_TRANSITION",
         message: "Cannot transition from RESOLVED status to another state.",
