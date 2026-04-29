@@ -40,7 +40,9 @@ jobs:
           key: ${{ secrets.PROD_EC2_SSH_KEY }}
           script: |
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            cd /home/ec2-user/dev  
+            cd /home/ec2-user/prod
             docker-compose pull
             docker-compose up -d
             docker system prune -a -f
+
+
