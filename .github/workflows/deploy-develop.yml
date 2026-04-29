@@ -37,10 +37,10 @@ jobs:
         with:
           host: ${{ secrets.PROD_EC2_HOST }} # New secret for Prod IP
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.PROD_EC2_SSH_KEY }}
           script: |
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            cd /home/ec2-user/dev  # Ensure this folder exists on Prod EC2
+            cd /home/ec2-user/dev  
             docker-compose pull
             docker-compose up -d
             docker system prune -a -f
