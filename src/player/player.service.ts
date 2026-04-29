@@ -8,6 +8,10 @@ import { ConfigService } from "@nestjs/config";
 import { TrackStatus, TrackVisibility } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../common/storage/storage.service";
+
+/** Default TTL for presigned audio stream URLs (1 hour). */
+const STREAM_URL_TTL_SECONDS = 3600;
 
 @Injectable()
 export class PlayerService {
@@ -20,6 +24,7 @@ export class PlayerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly storageService: StorageService,
   ) {
     this.storageProvider = this.config.get<"local" | "s3">(
       "storage.provider",
@@ -32,6 +37,23 @@ export class PlayerService {
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
     this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
+  }
+
+  /**
+   * Build a stream URL for a stored audio file.
+   *
+   * For S3: generates a short-lived presigned GET URL (STREAM_URL_TTL_SECONDS).
+   * This means clients cannot cache or share the URL beyond the TTL — the only
+   * way to get a fresh URL is to call this endpoint again with a valid token.
+   *
+   * For local storage: returns a plain URL under /uploads/tracks/ which is
+   * protected by the JWT auth middleware registered in main.ts.
+   */
+  private async buildStreamUrl(storageKey: string): Promise<string> {
+    if (this.storageService.isS3) {
+      return this.storageService.getPresignedUrl(storageKey, STREAM_URL_TTL_SECONDS);
+    }
+    return this.buildFileUrl(storageKey);
   }
 
   /** Convert a storage key like `tracks/abc.mp3` into a full URL. */
@@ -88,9 +110,12 @@ export class PlayerService {
 
     return {
       trackId,
-      streamUrl: file ? this.buildFileUrl(file.storageKey) : null,
+      streamUrl: file ? await this.buildStreamUrl(file.storageKey) : null,
       accessState: "PLAYABLE",
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      // For S3, expiresAt reflects the presigned URL TTL (real server-side expiry).
+      // For local storage, the /uploads/tracks auth middleware re-validates the
+      // access token on every request so there is no fixed expiry to advertise.
+      expiresAt: new Date(Date.now() + STREAM_URL_TTL_SECONDS * 1000).toISOString(),
     };
   }
 
@@ -456,9 +481,13 @@ export class PlayerService {
       select: { storageKey: true },
     });
 
+    // Preview clips are @Public() — they're intentionally accessible to unauthenticated
+    // users (free-tier 30-second previews). Return a proper URL, not the raw storage key.
+    // For local storage, /uploads/previews/ is served as a public static route.
+    // For S3, use a public CDN/S3 URL (not presigned) since these are meant for all users.
     return {
       trackId,
-      previewUrl: previewFile?.storageKey ?? null,
+      previewUrl: previewFile ? this.buildFileUrl(previewFile.storageKey) : null,
       previewDurationSeconds: 30,
       accessState: "PREVIEW",
     };

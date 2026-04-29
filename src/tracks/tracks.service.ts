@@ -800,7 +800,10 @@ export class TracksService {
           Key: storageKey,
           Body: buffer,
           ContentType: mimeType,
-          CacheControl: "public, max-age=31536000, immutable",
+          // Audio files are protected content — must not be publicly cached by CDN or
+          // browser. Using "private, no-cache" ensures each request goes through
+          // presigned-URL authorization, preventing cached delivery after logout.
+          CacheControl: "private, no-cache",
         }),
       );
     } else {
