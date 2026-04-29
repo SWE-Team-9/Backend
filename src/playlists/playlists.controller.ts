@@ -83,6 +83,8 @@ export class PlaylistsController {
     summary: 'Get my playlists',
     description: 'Returns playlists created by the authenticated user.',
   })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({
     status: 200,
     description: 'Playlists fetched successfully.',
@@ -151,6 +153,21 @@ export class PlaylistsController {
     status: 200,
     description: 'Recently played playlists fetched successfully.',
     type: GetRecentPlaylistsResponseDto,
+    schema: {
+      example: {
+        playlists: [
+          {
+            playlistId: 'pl_101',
+            title: 'Late Night Drive',
+            coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            owner: {
+              id: 'usr_1',
+              display_name: 'Ahmed Hassan',
+            },
+          },
+        ],
+      },
+    },
   })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ThrottlePolicy(60, 60_000)
@@ -266,6 +283,20 @@ export class PlaylistsController {
     status: 200,
     description: 'Editable playlist metadata fetched successfully.',
     type: GetPlaylistEditResponseDto,
+    schema: {
+      example: {
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        description: 'My favorite chill tracks',
+        visibility: 'PUBLIC',
+        slug: 'late-night-drive',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+        type: 'PLAYLIST',
+        releaseDate: '2026-03-01',
+        genreId: 12,
+        tags: ['chill', 'night-drive'],
+      },
+    },
   })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({ status: 403, description: 'Only playlist owner can access edit mode.' })
@@ -323,6 +354,12 @@ export class PlaylistsController {
     status: 200,
     description: 'Playlist cover uploaded successfully.',
     type: UploadPlaylistCoverResponseDto,
+    schema: {
+      example: {
+        message: 'Playlist cover uploaded successfully',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Invalid image file or file too large.' })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
