@@ -28,6 +28,7 @@ describe("DiscoveryService", () => {
             userProfile: {
               findMany: jest.fn(),
               findFirst: jest.fn(),
+              count: jest.fn(),
             },
             playlist: {
               findMany: jest.fn(),
@@ -59,6 +60,7 @@ describe("DiscoveryService", () => {
           description: "A test track",
           cover_art_url: "https://example.com/cover.jpg",
           uploader_id: "user-1",
+          total_count: BigInt(1),
         },
       ];
 
@@ -80,6 +82,7 @@ describe("DiscoveryService", () => {
           slug: "test-playlist",
           description: "A test playlist",
           cover_art_url: "https://example.com/playlist-cover.jpg",
+          total_count: BigInt(1),
         },
       ];
 
@@ -90,12 +93,12 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma.userProfile, "findMany")
         .mockResolvedValueOnce(mockUsers as any);
+      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(1);
 
       const result = await service.search(query);
 
       expect(result).toEqual({
-        query: "test",
-        results: {
+        data: {
           tracks: [
             {
               id: "track-1",
@@ -118,10 +121,10 @@ describe("DiscoveryService", () => {
             },
           ],
         },
-        totals: {
-          tracks: 1,
-          users: 1,
-          playlists: 1,
+        meta: {
+          current_page: 1,
+          total_results: 3,
+          total_pages: 1,
         },
       });
     });
@@ -130,23 +133,22 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
       jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(0);
 
       const result = await service.search("nonexistent");
 
       expect(result).toEqual({
-        query: "nonexistent",
-        results: {
+        data: {
           tracks: [],
           users: [],
           playlists: [],
         },
-        totals: {
-          tracks: 0,
-          users: 0,
-          playlists: 0,
+        meta: {
+          current_page: 1,
+          total_results: 0,
+          total_pages: 0,
         },
       });
     });
@@ -155,9 +157,9 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
       jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(0);
 
       await service.search("  multiple   words  ");
 

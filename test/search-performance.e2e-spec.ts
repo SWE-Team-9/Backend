@@ -25,7 +25,9 @@ function buildTrackRows() {
   }));
 }
 
-describe("Discovery search performance", () => {
+const describeIfDb = process.env.DATABASE_URL ? describe : describe.skip;
+
+describeIfDb("Discovery search performance", () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
@@ -110,13 +112,20 @@ describe("Discovery search performance", () => {
 
     const response = await request(app.getHttpServer())
       .get("/discovery/search")
-      .query({ q: "test" })
+      .query({ q: "test", type: "tracks", page: 1, limit: 20 })
       .expect(200);
 
     const elapsedMs = Date.now() - startedAt;
 
-    expect(response.body.results.tracks).toHaveLength(20);
-    expect(response.body.totals.tracks).toBe(20);
+    expect(response.body.data.tracks).toHaveLength(20);
+    expect(response.body.meta).toEqual(
+      expect.objectContaining({
+        current_page: 1,
+        total_results: expect.any(Number),
+        total_pages: expect.any(Number),
+      }),
+    );
+    expect(response.body.meta.total_results).toBeGreaterThan(0);
     expect(elapsedMs).toBeLessThan(500);
   });
 });
