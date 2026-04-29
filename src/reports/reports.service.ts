@@ -316,6 +316,7 @@ export class ReportsService {
     return this.prisma.report.update({
       where: { id: reportId },
       data: {
+        status: ReportStatus.UNDER_REVIEW,
         resolvedBy: adminId,
       },
     });
