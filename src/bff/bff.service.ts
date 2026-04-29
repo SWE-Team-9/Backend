@@ -163,7 +163,7 @@ export class BffService {
         this.subscriptionsService.getMySubscription(userId).catch(() => null),
         this.entitlementsService.getUserEntitlements(userId).catch(() => null),
         this.notificationsService.getPreferences(userId).catch(() => null),
-        this.prisma.session
+        this.prisma.userSession
           .count({ where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } })
           .catch(() => 0),
       ]);
