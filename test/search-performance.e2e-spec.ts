@@ -30,7 +30,7 @@ describe("Discovery search performance", () => {
   let prisma: PrismaService;
 
   beforeAll(async () => {
-    jest.setTimeout(120_000);
+    jest.setTimeout(180_000);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [DiscoveryController],
@@ -89,7 +89,9 @@ describe("Discovery search performance", () => {
         data: rows.slice(index, index + chunkSize),
       });
     }
-  }, 120_000);
+
+    await prisma.$executeRawUnsafe('ANALYZE tracks;');
+  }, 180_000);
 
   afterAll(async () => {
     await prisma.track.deleteMany({
