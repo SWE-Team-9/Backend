@@ -147,7 +147,10 @@ export class SubscriptionsService {
     private readonly mailService: MailService,
     @Inject(BILLING_PROVIDER) private readonly billing: IBillingProvider,
   ) {
-    this.storageProvider = this.config.get<'local' | 's3'>('storage.provider', 'local');
+    this.storageProvider = this.config.get<"local" | "s3">(
+      "storage.provider",
+      "local",
+    );
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
@@ -265,13 +268,17 @@ export class SubscriptionsService {
 
     // The paymentMethod JSON field may hold either card info or a pendingDowngrade
     // object (set when user schedules a downgrade in checkout()). Separate them.
-    const rawPaymentMethod = (sub as any).paymentMethod as Record<string, unknown> | null;
-    const pendingDowngrade = rawPaymentMethod?.pendingDowngrade as {
-      planCode: string;
-      planId: string;
-      planName: string;
-      effectiveAt: string;
-    } | null ?? null;
+    const rawPaymentMethod = (sub as any).paymentMethod as Record<
+      string,
+      unknown
+    > | null;
+    const pendingDowngrade =
+      (rawPaymentMethod?.pendingDowngrade as {
+        planCode: string;
+        planId: string;
+        planName: string;
+        effectiveAt: string;
+      } | null) ?? null;
     const paymentMethodData =
       rawPaymentMethod && typeof rawPaymentMethod.brand === "string"
         ? (rawPaymentMethod as unknown as PaymentMethodSummary)
@@ -747,7 +754,10 @@ export class SubscriptionsService {
   // ── GET /subscriptions/invoices ───────────────────────────────────────────
 
   async getInvoices(userId: string) {
-    const subs = await this.prisma.userSubscription.findMany({ where: { userId }, select: { id: true } });
+    const subs = await this.prisma.userSubscription.findMany({
+      where: { userId },
+      select: { id: true },
+    });
     if (!subs.length) return [];
     const invoices = await this.prisma.billingInvoice.findMany({
       where: { subscriptionId: { in: subs.map((s) => s.id) } },
@@ -784,8 +794,11 @@ export class SubscriptionsService {
 
   // ── POST /subscriptions/webhook ───────────────────────────────────────────
 
-  async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<{ received: boolean }> {
-    let event: ReturnType<IBillingProvider['constructWebhookEvent']>;
+  async handleStripeWebhook(
+    rawBody: Buffer,
+    signature: string,
+  ): Promise<{ received: boolean }> {
+    let event: ReturnType<IBillingProvider["constructWebhookEvent"]>;
     try {
       event = this.billing.constructWebhookEvent(rawBody, signature);
     } catch {
@@ -876,7 +889,9 @@ export class SubscriptionsService {
           }
           await this.prisma.userSubscription.update({
             where: { id: sub.id },
-            data: updateData as Parameters<typeof this.prisma.userSubscription.update>[0]["data"],
+            data: updateData as Parameters<
+              typeof this.prisma.userSubscription.update
+            >[0]["data"],
           });
           const invoiceId = obj["invoice"] as string | undefined;
           const amountPaid = (obj["amount_paid"] as number | undefined) ?? 0;
@@ -1219,13 +1234,15 @@ export class SubscriptionsService {
         where: { id: trackId, deletedAt: null },
         select: {
           files: {
-            where: { isCurrent: true, fileRole: { in: [FileRole.STREAM, FileRole.ORIGINAL] } },
+            where: {
+              isCurrent: true,
+              fileRole: { in: [FileRole.STREAM, FileRole.ORIGINAL] },
+            },
             select: { storageKey: true },
           },
         },
       });
-      const storageKey =
-        track?.files.find(() => true)?.storageKey ?? null;
+      const storageKey = track?.files.find(() => true)?.storageKey ?? null;
 
       if (storageKey) {
         const s3Res = await this.s3Client.send(
@@ -1420,7 +1437,12 @@ export class SubscriptionsService {
     trialEnd: Date | null;
     paymentMethodSummary: string | null;
     paymentMethod?: PaymentMethodSummary | null;
-    pendingDowngrade?: { planCode: string; planId: string; planName: string; effectiveAt: string } | null;
+    pendingDowngrade?: {
+      planCode: string;
+      planId: string;
+      planName: string;
+      effectiveAt: string;
+    } | null;
     latestInvoice: {
       id: string;
       amountPaidCents: number;

@@ -78,7 +78,10 @@ export class JwtAuthGuard extends AuthGuard("jwt-cookie") {
           typedUser.accountStatus === "SUSPENDED"
             ? "ACCOUNT_SUSPENDED"
             : "ACCOUNT_BANNED";
-        throw new ForbiddenException({ code, message: `Account ${typedUser.accountStatus.toLowerCase()}.` });
+        throw new ForbiddenException({
+          code,
+          message: `Account ${typedUser.accountStatus.toLowerCase()}.`,
+        });
       }
     }
 

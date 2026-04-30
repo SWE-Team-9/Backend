@@ -44,7 +44,12 @@ export class AdminReportsController {
 
   @Get(":id")
   @ApiOperation({ summary: "Get a single report with related appeals" })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Report UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Report UUID.",
+  })
   @ApiResponse({ status: 200, description: "Report fetched successfully." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden." })
@@ -70,7 +75,12 @@ export class AdminReportsController {
 
   @Patch(":id")
   @ApiOperation({ summary: "Update report status and resolution notes" })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Report UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Report UUID.",
+  })
   @ApiResponse({ status: 200, description: "Report updated successfully." })
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -86,7 +96,12 @@ export class AdminReportsController {
 
   @Patch(":id/assign")
   @ApiOperation({ summary: "Assign report to an admin" })
-  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Report UUID." })
+  @ApiParam({
+    name: "id",
+    type: "string",
+    format: "uuid",
+    description: "Report UUID.",
+  })
   @ApiResponse({ status: 200, description: "Report assigned successfully." })
   @ApiResponse({ status: 400, description: "Invalid assignee." })
   @ApiResponse({ status: 401, description: "Not authenticated." })

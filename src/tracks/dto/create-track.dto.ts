@@ -5,9 +5,9 @@ import {
   IsArray,
   IsDateString,
   ArrayMaxSize,
-} from 'class-validator';
-import { Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+} from "class-validator";
+import { Transform } from "class-transformer";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 //
 export class CreateTrackDto {
   @ApiProperty({
@@ -34,10 +34,10 @@ export class CreateTrackDto {
   })
   @IsOptional()
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') return undefined;
+    if (value === undefined || value === null || value === "") return undefined;
     if (Array.isArray(value)) return value.map(String);
     // Multipart sends a single tag as a plain string — wrap it in an array
-    if (typeof value === 'string') return [value];
+    if (typeof value === "string") return [value];
     return value;
   })
   @IsArray()

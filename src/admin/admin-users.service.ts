@@ -17,10 +17,7 @@ export class AdminUsersService {
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
   private cache = new Map<string, { data: unknown; expiresAt: number }>();
 
-  private async getCached<T>(
-    key: string,
-    fn: () => Promise<T>,
-  ): Promise<T> {
+  private async getCached<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const hit = this.cache.get(key);
     if (hit && hit.expiresAt > Date.now()) {
       return hit.data as T;
@@ -383,7 +380,9 @@ export class AdminUsersService {
         }),
         this.prisma.user.count({ where: { accountStatus: "SUSPENDED" } }),
         this.prisma.user.count({ where: { accountStatus: "BANNED" } }),
-        this.prisma.user.count({ where: { isVerified: true, deletedAt: null } }),
+        this.prisma.user.count({
+          where: { isVerified: true, deletedAt: null },
+        }),
         // Artist vs Listener breakdown (from UserProfile.accountType)
         this.prisma.userProfile.count({ where: { accountType: "ARTIST" } }),
         this.prisma.userProfile.count({ where: { accountType: "LISTENER" } }),
@@ -404,9 +403,11 @@ export class AdminUsersService {
         }),
         this.prisma.userSubscription.count({ where: { status: "ACTIVE" } }),
         this.prisma.trackFile.aggregate({ _sum: { fileSizeBytes: true } }),
-        this.prisma.report.count({ where: { status: "PENDING" } }),
-        this.prisma.report.count({ where: { status: "UNDER_REVIEW" } }),
-        this.prisma.report.count({
+        this.prisma.moderationReport.count({ where: { status: "PENDING" } }),
+        this.prisma.moderationReport.count({
+          where: { status: "UNDER_REVIEW" },
+        }),
+        this.prisma.moderationReport.count({
           where: { status: "RESOLVED", resolvedAt: { gte: weekAgo } },
         }),
         this.prisma.moderationAction.count({

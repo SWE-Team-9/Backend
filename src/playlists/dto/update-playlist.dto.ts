@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
@@ -11,32 +11,32 @@ import {
   MaxLength,
   Min,
   MinLength,
-} from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PlaylistType } from '@prisma/client';
+} from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { PlaylistType } from "@prisma/client";
 
 export class UpdatePlaylistDto {
   @ApiPropertyOptional({
-    description: 'Playlist title',
-    example: 'Late Night Drive Vol. 2',
+    description: "Playlist title",
+    example: "Late Night Drive Vol. 2",
     minLength: 1,
     maxLength: 100,
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   @MinLength(1)
   @MaxLength(100)
   title?: string;
 
   @ApiPropertyOptional({
-    description: 'Optional playlist description',
-    example: 'My favorite chill tracks',
+    description: "Optional playlist description",
+    example: "My favorite chill tracks",
     maxLength: 5000,
   })
   @IsOptional()
   @Transform(({ value }) => {
-    if (typeof value !== 'string') return value;
+    if (typeof value !== "string") return value;
     const trimmed = value.trim();
     return trimmed.length === 0 ? undefined : trimmed;
   })
@@ -45,32 +45,36 @@ export class UpdatePlaylistDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Playlist visibility',
-    enum: ['PUBLIC', 'SECRET', 'PRIVATE'],
-    example: 'PRIVATE',
+    description: "Playlist visibility",
+    enum: ["PUBLIC", "SECRET", "PRIVATE"],
+    example: "PRIVATE",
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
-  @IsIn(['PUBLIC', 'SECRET', 'PRIVATE'])
-  visibility?: 'PUBLIC' | 'SECRET' | 'PRIVATE';
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.toUpperCase().trim() : value,
+  )
+  @IsIn(["PUBLIC", "SECRET", "PRIVATE"])
+  visibility?: "PUBLIC" | "SECRET" | "PRIVATE";
 
   @ApiPropertyOptional({
-    description: 'Playlist type',
+    description: "Playlist type",
     enum: PlaylistType,
-    example: 'ALBUM',
+    example: "ALBUM",
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.toUpperCase().trim() : value,
+  )
   @IsEnum(PlaylistType)
   type?: PlaylistType;
 
   @ApiPropertyOptional({
-    description: 'Release date for the playlist',
-    example: '2026-03-01',
+    description: "Release date for the playlist",
+    example: "2026-03-01",
   })
   @IsOptional()
   @Transform(({ value }) => {
-    if (typeof value !== 'string') return value;
+    if (typeof value !== "string") return value;
     const trimmed = value.trim();
     return trimmed.length === 0 ? undefined : trimmed;
   })
@@ -78,7 +82,7 @@ export class UpdatePlaylistDto {
   releaseDate?: string;
 
   @ApiPropertyOptional({
-    description: 'Existing genre identifier from the genres table',
+    description: "Existing genre identifier from the genres table",
     example: 12,
   })
   @IsOptional()
@@ -88,16 +92,18 @@ export class UpdatePlaylistDto {
   genreId?: number;
 
   @ApiPropertyOptional({
-    description: 'Simple string tags',
-    example: ['chill', 'night-drive'],
+    description: "Simple string tags",
+    example: ["chill", "night-drive"],
     type: [String],
   })
   @IsOptional()
   @Transform(({ value }) => {
     if (!Array.isArray(value)) return value;
     return value
-      .map((item) => (typeof item === 'string' ? item.trim() : item))
-      .filter((item): item is string => typeof item === 'string' && item.length > 0)
+      .map((item) => (typeof item === "string" ? item.trim() : item))
+      .filter(
+        (item): item is string => typeof item === "string" && item.length > 0,
+      )
       .slice(0, 20);
   })
   @IsArray()

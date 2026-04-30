@@ -26,6 +26,8 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { PaginationQueryDto } from "../common/dto/pagination-query.dto";
 import { Public } from "../common/decorators/public.decorator";
 import { RegisterProgressDto, UpdateSessionDto } from "./dto";
+import { LoadQueueDto } from "./dto/load-queue.dto";
+import { JumpToTrackDto } from "./dto/jump-to-track.dto";
 import { PlayerService } from "./player.service";
 
 @ApiTags("Player")
@@ -123,7 +125,11 @@ export class PlayerController {
       },
     },
   })
-  @ApiQuery({ name: "playlistId", required: false, description: "Optional playlist context" })
+  @ApiQuery({
+    name: "playlistId",
+    required: false,
+    description: "Optional playlist context",
+  })
   markPlayed(
     @CurrentUser("userId") userId: string,
     @Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string,
@@ -318,5 +324,145 @@ export class PlayerController {
     @Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string,
   ) {
     return this.playerService.getTrackPreview(trackId);
+  }
+
+  // -- Queue management
+
+  // 12. POST /player/queue/load
+  @Post("queue/load")
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      "Load a playback queue (track / playlist / artist / explicit list). " +
+      "The backend becomes the sole owner of queue state.",
+  })
+  @ApiBody({ type: LoadQueueDto })
+  @ApiOkResponse({
+    description:
+      "Queue loaded. Returns the track that should start playing immediately.",
+    schema: {
+      example: {
+        currentTrack: {
+          trackId: "uuid",
+          title: "Layali",
+          artist: "Ahmed Hassan",
+          artistId: "uuid",
+          cover: "https://cdn.example.com/covers/xyz.jpg",
+          duration: 237,
+        },
+        currentIndex: 0,
+        queueLength: 12,
+        tracksUntilAd: 3,
+      },
+    },
+  })
+  loadQueue(@CurrentUser("userId") userId: string, @Body() body: LoadQueueDto) {
+    return this.playerService.loadQueueContext(userId, body);
+  }
+
+  // 13. POST /player/queue/next
+  @Post("queue/next")
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      "Advance the queue to the next track. " +
+      "Returns type=TRACK with track metadata, type=AD for an ad slot, " +
+      "or type=ENDED when the queue is finished.",
+  })
+  @ApiOkResponse({
+    description: "Next item in queue.",
+    schema: {
+      example: {
+        type: "TRACK",
+        track: {
+          trackId: "uuid",
+          title: "Sahar",
+          artist: "Hamza",
+          artistId: "uuid",
+          cover: null,
+          duration: 195,
+        },
+        currentIndex: 1,
+        queueLength: 12,
+        tracksUntilAd: 2,
+      },
+    },
+  })
+  nextTrack(@CurrentUser("userId") userId: string) {
+    return this.playerService.getNextTrackInQueue(userId);
+  }
+
+  // 14. POST /player/queue/previous
+  @Post("queue/previous")
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Go back to the previous track in the queue." })
+  @ApiOkResponse({
+    description: "Previous track in queue.",
+    schema: {
+      example: {
+        type: "TRACK",
+        track: {
+          trackId: "uuid",
+          title: "Neon Pulse",
+          artist: "Synthwave Ghost",
+          cover: null,
+        },
+        currentIndex: 0,
+        queueLength: 12,
+      },
+    },
+  })
+  previousTrack(@CurrentUser("userId") userId: string) {
+    return this.playerService.getPreviousTrackInQueue(userId);
+  }
+
+  // 15. GET /player/queue
+  @Get("queue")
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      "Get the current backend-managed queue (up to 100 tracks), " +
+      "current index, ad counter, and playback settings.",
+  })
+  @ApiOkResponse({
+    description: "Queue state.",
+    schema: {
+      example: {
+        queue: [
+          { trackId: "uuid", title: "Neon Pulse", artist: "Synthwave Ghost" },
+        ],
+        currentIndex: 0,
+        queueLength: 12,
+        tracksUntilAd: 3,
+        shuffle: false,
+        repeatMode: "OFF",
+      },
+    },
+  })
+  getQueue(@CurrentUser("userId") userId: string) {
+    return this.playerService.getQueueState(userId);
+  }
+
+  // 16. POST /player/queue/jump
+  @Post("queue/jump")
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      "Jump to a specific track in the current queue. " +
+      "Resets the ad counter.",
+  })
+  @ApiBody({ type: JumpToTrackDto })
+  @ApiOkResponse({
+    description: "Queue position updated. Returns the track to play.",
+  })
+  jumpToTrack(
+    @CurrentUser("userId") userId: string,
+    @Body() body: JumpToTrackDto,
+  ) {
+    return this.playerService.jumpToTrackInQueue(userId, body.trackId);
   }
 }

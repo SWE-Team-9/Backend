@@ -84,7 +84,12 @@ describe("AdminUsersService", () => {
         suspendedUntil: null,
         lastLoginAt: null,
         createdAt: new Date(),
-        profile: { displayName: "Test", handle: "test", avatarUrl: null, accountType: "FREE" },
+        profile: {
+          displayName: "Test",
+          handle: "test",
+          avatarUrl: null,
+          accountType: "FREE",
+        },
         subscriptions: [],
         _count: { tracks: 5, playlists: 2, followers: 10, following: 3 },
       };
@@ -120,7 +125,12 @@ describe("AdminUsersService", () => {
           isVerified: true,
           lastLoginAt: null,
           createdAt: new Date(),
-          profile: { displayName: "Alice", handle: "alice", avatarUrl: null, accountType: "FREE" },
+          profile: {
+            displayName: "Alice",
+            handle: "alice",
+            avatarUrl: null,
+            accountType: "FREE",
+          },
           _count: { tracks: 2, submittedReports: 0 },
         },
       ]);
@@ -130,6 +140,115 @@ describe("AdminUsersService", () => {
       expect(result.total).toBe(1);
       expect(result.users).toHaveLength(1);
       expect(result.users[0].handle).toBe("alice");
+    });
+  });
+
+  // ─── getOverviewStats — play-through rate ─────────────────────────────────────
+
+  describe("getOverviewStats — play_through_rate_pct", () => {
+    function setupOverviewMocks(totalPlays: number, completedPlays: number) {
+      mockPrisma.user.count.mockResolvedValue(10);
+      mockPrisma.userProfile.count.mockResolvedValue(5);
+      mockPrisma.track.count.mockResolvedValue(20);
+      mockPrisma.playlist.count.mockResolvedValue(3);
+      mockPrisma.comment.count.mockResolvedValue(50);
+      mockPrisma.like.count.mockResolvedValue(100);
+      mockPrisma.repost.count.mockResolvedValue(30);
+      // playEvent.count is called twice: total then completed
+      mockPrisma.playEvent.count
+        .mockResolvedValueOnce(totalPlays)
+        .mockResolvedValueOnce(completedPlays);
+      mockPrisma.userSubscription.count.mockResolvedValue(0);
+      mockPrisma.trackFile.aggregate.mockResolvedValue({
+        _sum: { fileSizeBytes: BigInt(0) },
+      });
+      mockPrisma.moderationReport.count.mockResolvedValue(0);
+      mockPrisma.moderationAction.count.mockResolvedValue(0);
+    }
+
+    it("returns 0 when total plays is 0 (no division by zero)", async () => {
+      setupOverviewMocks(0, 0);
+      const result = await service.getOverviewStats();
+      expect(result.engagement.play_through_rate_pct).toBe(0);
+    });
+
+    it("returns 100 when all plays are completed (completionRatio >= 0.90)", async () => {
+      setupOverviewMocks(50, 50);
+      const result = await service.getOverviewStats();
+      expect(result.engagement.play_through_rate_pct).toBe(100);
+    });
+
+    it("returns correct rate when exactly 90% of plays completed", async () => {
+      setupOverviewMocks(100, 90);
+      const result = await service.getOverviewStats();
+      expect(result.engagement.play_through_rate_pct).toBe(90);
+    });
+
+    it("returns correct rate when fewer than 90% of plays completed", async () => {
+      setupOverviewMocks(100, 45);
+      const result = await service.getOverviewStats();
+      expect(result.engagement.play_through_rate_pct).toBe(45);
+    });
+
+    it("returns correct rate for partial completion (mixed plays)", async () => {
+      // 200 total plays, 160 completed → 80%
+      setupOverviewMocks(200, 160);
+      const result = await service.getOverviewStats();
+      expect(result.engagement.play_through_rate_pct).toBe(80);
+    });
+
+    it("returns correct total and completed play event counts", async () => {
+      setupOverviewMocks(500, 300);
+      const result = await service.getOverviewStats();
+      expect(result.engagement.total_play_events).toBe(500);
+      expect(result.engagement.completed_play_events).toBe(300);
+    });
+
+    it("aggregates storage from track_files and returns 0 when no files", async () => {
+      setupOverviewMocks(10, 5);
+      const result = await service.getOverviewStats();
+      expect(result.billing.total_storage_bytes).toBe(0);
+    });
+
+    it("aggregates storage correctly when files exist", async () => {
+      mockPrisma.user.count.mockResolvedValue(1);
+      mockPrisma.userProfile.count.mockResolvedValue(1);
+      mockPrisma.track.count.mockResolvedValue(1);
+      mockPrisma.playlist.count.mockResolvedValue(0);
+      mockPrisma.comment.count.mockResolvedValue(0);
+      mockPrisma.like.count.mockResolvedValue(0);
+      mockPrisma.repost.count.mockResolvedValue(0);
+      mockPrisma.playEvent.count.mockResolvedValue(0).mockResolvedValueOnce(0);
+      mockPrisma.userSubscription.count.mockResolvedValue(0);
+      mockPrisma.moderationReport.count.mockResolvedValue(0);
+      mockPrisma.moderationAction.count.mockResolvedValue(0);
+      // 500 MB in bytes
+      mockPrisma.trackFile.aggregate.mockResolvedValue({
+        _sum: { fileSizeBytes: BigInt(500 * 1024 * 1024) },
+      });
+      (service as unknown as { cache: Map<string, unknown> }).cache.clear();
+      const result = await service.getOverviewStats();
+      expect(result.billing.total_storage_bytes).toBe(500 * 1024 * 1024);
+    });
+
+    it("returns artist_to_listener_ratio as 0 when no artists or listeners", async () => {
+      mockPrisma.user.count.mockResolvedValue(0);
+      mockPrisma.userProfile.count.mockResolvedValue(0);
+      mockPrisma.track.count.mockResolvedValue(0);
+      mockPrisma.playlist.count.mockResolvedValue(0);
+      mockPrisma.comment.count.mockResolvedValue(0);
+      mockPrisma.like.count.mockResolvedValue(0);
+      mockPrisma.repost.count.mockResolvedValue(0);
+      mockPrisma.playEvent.count.mockResolvedValue(0);
+      mockPrisma.userSubscription.count.mockResolvedValue(0);
+      mockPrisma.trackFile.aggregate.mockResolvedValue({
+        _sum: { fileSizeBytes: null },
+      });
+      mockPrisma.moderationReport.count.mockResolvedValue(0);
+      mockPrisma.moderationAction.count.mockResolvedValue(0);
+      (service as unknown as { cache: Map<string, unknown> }).cache.clear();
+      const result = await service.getOverviewStats();
+      expect(result.users.artist_to_listener_ratio).toBe(0);
     });
   });
 

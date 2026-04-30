@@ -306,9 +306,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
     await this.stripeService.reactivateSubscription(
       params.providerSubscriptionId,
     );
-    this.logger.debug(
-      `[Stripe] Resumed ${params.providerSubscriptionId}`,
-    );
+    this.logger.debug(`[Stripe] Resumed ${params.providerSubscriptionId}`);
   }
 
   /**
@@ -356,8 +354,9 @@ export class RealStripeBillingProvider implements IBillingProvider {
   async retrieveSubscription(
     providerSubscriptionId: string,
   ): Promise<ProviderSubscriptionResult> {
-    const sub =
-      await this.stripeService.retrieveSubscription(providerSubscriptionId);
+    const sub = await this.stripeService.retrieveSubscription(
+      providerSubscriptionId,
+    );
     return mapStripeSubscription(sub);
   }
 
@@ -368,8 +367,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
    * Throws if the signature is invalid or the payload cannot be parsed.
    */
   constructWebhookEvent(rawBody: Buffer, signature: string): WebhookEvent {
-    const webhookSecret =
-      this.config.get<string>("stripe.webhookSecret") ?? "";
+    const webhookSecret = this.config.get<string>("stripe.webhookSecret") ?? "";
     const event = this.stripeService.constructWebhookEvent(
       rawBody,
       signature,

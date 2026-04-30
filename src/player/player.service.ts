@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -6,6 +7,8 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TrackStatus, TrackVisibility } from "@prisma/client";
+
+import { LoadQueueDto } from "./dto/load-queue.dto";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage/storage.service";
@@ -43,7 +46,7 @@ export class PlayerService {
    * Build a stream URL for a stored audio file.
    *
    * For S3: generates a short-lived presigned GET URL (STREAM_URL_TTL_SECONDS).
-   * This means clients cannot cache or share the URL beyond the TTL — the only
+   * This means clients cannot cache or share the URL beyond the TTL - the only
    * way to get a fresh URL is to call this endpoint again with a valid token.
    *
    * For local storage: returns a plain URL under /uploads/tracks/ which is
@@ -51,7 +54,10 @@ export class PlayerService {
    */
   private async buildStreamUrl(storageKey: string): Promise<string> {
     if (this.storageService.isS3) {
-      return this.storageService.getPresignedUrl(storageKey, STREAM_URL_TTL_SECONDS);
+      return this.storageService.getPresignedUrl(
+        storageKey,
+        STREAM_URL_TTL_SECONDS,
+      );
     }
     return this.buildFileUrl(storageKey);
   }
@@ -115,7 +121,9 @@ export class PlayerService {
       // For S3, expiresAt reflects the presigned URL TTL (real server-side expiry).
       // For local storage, the /uploads/tracks auth middleware re-validates the
       // access token on every request so there is no fixed expiry to advertise.
-      expiresAt: new Date(Date.now() + STREAM_URL_TTL_SECONDS * 1000).toISOString(),
+      expiresAt: new Date(
+        Date.now() + STREAM_URL_TTL_SECONDS * 1000,
+      ).toISOString(),
     };
   }
 
@@ -481,17 +489,462 @@ export class PlayerService {
       select: { storageKey: true },
     });
 
-    // Preview clips are @Public() — they're intentionally accessible to unauthenticated
+    // Preview clips are @Public() - they're intentionally accessible to unauthenticated
     // users (free-tier 30-second previews). Return a proper URL, not the raw storage key.
     // For local storage, /uploads/previews/ is served as a public static route.
     // For S3, use a public CDN/S3 URL (not presigned) since these are meant for all users.
     return {
       trackId,
-      previewUrl: previewFile ? this.buildFileUrl(previewFile.storageKey) : null,
+      previewUrl: previewFile
+        ? this.buildFileUrl(previewFile.storageKey)
+        : null,
       previewDurationSeconds: 30,
       accessState: "PREVIEW",
     };
   }
+
+  // -- Queue management
+
+  /** Ads injected every N real tracks (MVP: static, no audio URL). */
+  private readonly AD_EVERY_N_TRACKS = 3;
+
+  private readonly STATIC_ADS = [
+    {
+      adId: "ad_001",
+      title: "Upgrade to IQA3 Premium - No Ads",
+      durationSeconds: 15,
+      clickUrl: null as string | null,
+    },
+    {
+      adId: "ad_002",
+      title: "Share your music on IQA3",
+      durationSeconds: 15,
+      clickUrl: null as string | null,
+    },
+  ] as const;
+
+  private getNextAd() {
+    return this.STATIC_ADS[Math.floor(Math.random() * this.STATIC_ADS.length)];
+  }
+
+  /** Lightweight track metadata used in queue/next/prev responses. */
+  private async buildQueueTrackMetadata(trackId: string) {
+    const track = await this.prisma.track.findUnique({
+      where: { id: trackId },
+      select: {
+        id: true,
+        title: true,
+        durationMs: true,
+        coverArtUrl: true,
+        uploader: {
+          select: {
+            id: true,
+            profile: {
+              select: { displayName: true, handle: true, avatarUrl: true },
+            },
+          },
+        },
+        primaryGenre: { select: { name: true } },
+      },
+    });
+
+    if (!track) return null;
+
+    return {
+      trackId: track.id,
+      title: track.title,
+      artist:
+        track.uploader.profile?.displayName ??
+        track.uploader.profile?.handle ??
+        "Unknown Artist",
+      artistId: track.uploader.id,
+      artistHandle: track.uploader.profile?.handle ?? null,
+      artistAvatarUrl: track.uploader.profile?.avatarUrl ?? null,
+      cover: track.coverArtUrl ?? null,
+      duration: track.durationMs ? Math.round(track.durationMs / 1000) : null,
+      genre: track.primaryGenre?.name ?? null,
+    };
+  }
+
+  // 12. POST /player/queue/load
+  async loadQueueContext(userId: string, dto: LoadQueueDto) {
+    let trackIds: string[] = [];
+
+    switch (dto.contextType) {
+      case "TRACK": {
+        if (!dto.startTrackId) {
+          throw new BadRequestException(
+            "startTrackId is required for TRACK context",
+          );
+        }
+        await this.findTrackOrFail(dto.startTrackId);
+        trackIds = [dto.startTrackId];
+        break;
+      }
+
+      case "PLAYLIST": {
+        if (!dto.contextId) {
+          throw new BadRequestException(
+            "contextId (playlistId) is required for PLAYLIST context",
+          );
+        }
+        const playlist = await this.prisma.playlist.findFirst({
+          where: { id: dto.contextId, deletedAt: null },
+          select: {
+            tracks: {
+              where: {
+                track: {
+                  status: TrackStatus.FINISHED,
+                  visibility: TrackVisibility.PUBLIC,
+                  deletedAt: null,
+                },
+              },
+              orderBy: { position: "asc" },
+              select: { trackId: true },
+            },
+          },
+        });
+        if (!playlist) {
+          throw new NotFoundException({
+            code: "PLAYLIST_NOT_FOUND",
+            message: "Playlist not found.",
+          });
+        }
+        trackIds = playlist.tracks.map((t) => t.trackId);
+        break;
+      }
+
+      case "ARTIST": {
+        if (!dto.contextId) {
+          throw new BadRequestException(
+            "contextId (artistUserId) is required for ARTIST context",
+          );
+        }
+        const tracks = await this.prisma.track.findMany({
+          where: {
+            uploaderId: dto.contextId,
+            status: TrackStatus.FINISHED,
+            visibility: TrackVisibility.PUBLIC,
+            deletedAt: null,
+          },
+          orderBy: { publishedAt: "desc" },
+          select: { id: true },
+          take: 100,
+        });
+        trackIds = tracks.map((t) => t.id);
+        break;
+      }
+
+      case "CONTEXT_IDS": {
+        if (!dto.trackIds?.length) {
+          throw new BadRequestException(
+            "trackIds is required for CONTEXT_IDS context",
+          );
+        }
+        trackIds = dto.trackIds;
+        break;
+      }
+    }
+
+    if (!trackIds.length) {
+      throw new BadRequestException(
+        "No playable tracks found for the given context",
+      );
+    }
+
+    // Server-side shuffle
+    if (dto.shuffle) {
+      for (let i = trackIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [trackIds[i], trackIds[j]] = [trackIds[j], trackIds[i]];
+      }
+    }
+
+    // Determine start index
+    let startIndex = 0;
+    if (dto.startTrackId) {
+      const idx = trackIds.indexOf(dto.startTrackId);
+      if (idx >= 0) startIndex = idx;
+    }
+
+    await this.prisma.playerSession.upsert({
+      where: { userId },
+      update: {
+        queueTrackIds: trackIds,
+        currentQueueIndex: startIndex,
+        realTracksSinceLastAd: 0,
+        queueContext: { type: dto.contextType, id: dto.contextId ?? null },
+        shuffle: dto.shuffle ?? false,
+        currentTrackId: trackIds[startIndex],
+      },
+      create: {
+        userId,
+        queueTrackIds: trackIds,
+        currentQueueIndex: startIndex,
+        realTracksSinceLastAd: 0,
+        queueContext: { type: dto.contextType, id: dto.contextId ?? null },
+        shuffle: dto.shuffle ?? false,
+        currentTrackId: trackIds[startIndex],
+      },
+    });
+
+    const startTrack = await this.buildQueueTrackMetadata(trackIds[startIndex]);
+
+    return {
+      currentTrack: startTrack,
+      currentIndex: startIndex,
+      queueLength: trackIds.length,
+      tracksUntilAd: this.AD_EVERY_N_TRACKS,
+    };
+  }
+
+  // 13. POST /player/queue/next
+  async getNextTrackInQueue(userId: string) {
+    const session = await this.prisma.playerSession.findUnique({
+      where: { userId },
+    });
+
+    if (!session || !session.queueTrackIds.length) {
+      throw new NotFoundException({
+        code: "NO_QUEUE",
+        message: "No queue loaded. Call POST /player/queue/load first.",
+      });
+    }
+
+    const {
+      queueTrackIds,
+      currentQueueIndex,
+      realTracksSinceLastAd,
+      repeatMode,
+    } = session;
+
+    // Inject ad every AD_EVERY_N_TRACKS real tracks
+    if (
+      realTracksSinceLastAd > 0 &&
+      realTracksSinceLastAd % this.AD_EVERY_N_TRACKS === 0
+    ) {
+      await this.prisma.playerSession.update({
+        where: { userId },
+        data: { realTracksSinceLastAd: 0 },
+      });
+
+      return {
+        type: "AD" as const,
+        ad: this.getNextAd(),
+        currentIndex: currentQueueIndex,
+        queueLength: queueTrackIds.length,
+        tracksUntilAd: this.AD_EVERY_N_TRACKS,
+      };
+    }
+
+    // Advance to next track
+    const isLastTrack = currentQueueIndex >= queueTrackIds.length - 1;
+    let nextIndex: number;
+
+    if (isLastTrack) {
+      if (repeatMode === "ALL") {
+        nextIndex = 0;
+      } else {
+        // Queue ended (OFF or ONE - user pressed NEXT explicitly, so advance past)
+        return {
+          type: "ENDED" as const,
+          currentIndex: currentQueueIndex,
+          queueLength: queueTrackIds.length,
+        };
+      }
+    } else {
+      nextIndex = currentQueueIndex + 1;
+    }
+
+    const newRealTracksSinceLastAd = realTracksSinceLastAd + 1;
+    const nextTrackId = queueTrackIds[nextIndex];
+
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: {
+        currentQueueIndex: nextIndex,
+        currentTrackId: nextTrackId,
+        realTracksSinceLastAd: newRealTracksSinceLastAd,
+      },
+    });
+
+    const trackMetadata = await this.buildQueueTrackMetadata(nextTrackId);
+    if (!trackMetadata) {
+      throw new NotFoundException({
+        code: "TRACK_NOT_FOUND",
+        message: "Next track in queue no longer exists.",
+      });
+    }
+
+    return {
+      type: "TRACK" as const,
+      track: trackMetadata,
+      currentIndex: nextIndex,
+      queueLength: queueTrackIds.length,
+      tracksUntilAd: this.AD_EVERY_N_TRACKS - newRealTracksSinceLastAd,
+    };
+  }
+
+  // 14. POST /player/queue/previous
+  async getPreviousTrackInQueue(userId: string) {
+    const session = await this.prisma.playerSession.findUnique({
+      where: { userId },
+    });
+
+    if (!session || !session.queueTrackIds.length) {
+      throw new NotFoundException({
+        code: "NO_QUEUE",
+        message: "No queue loaded. Call POST /player/queue/load first.",
+      });
+    }
+
+    const { queueTrackIds, currentQueueIndex, repeatMode } = session;
+
+    let prevIndex: number;
+    if (currentQueueIndex <= 0) {
+      prevIndex = repeatMode === "ALL" ? queueTrackIds.length - 1 : 0;
+    } else {
+      prevIndex = currentQueueIndex - 1;
+    }
+
+    const prevTrackId = queueTrackIds[prevIndex];
+
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: { currentQueueIndex: prevIndex, currentTrackId: prevTrackId },
+    });
+
+    const trackMetadata = await this.buildQueueTrackMetadata(prevTrackId);
+    if (!trackMetadata) {
+      throw new NotFoundException({
+        code: "TRACK_NOT_FOUND",
+        message: "Previous track in queue no longer exists.",
+      });
+    }
+
+    return {
+      type: "TRACK" as const,
+      track: trackMetadata,
+      currentIndex: prevIndex,
+      queueLength: queueTrackIds.length,
+    };
+  }
+
+  // 15. GET /player/queue
+  async getQueueState(userId: string) {
+    const session = await this.prisma.playerSession.findUnique({
+      where: { userId },
+    });
+
+    if (!session || !session.queueTrackIds.length) {
+      return {
+        queue: [],
+        currentIndex: 0,
+        queueLength: 0,
+        tracksUntilAd: this.AD_EVERY_N_TRACKS,
+        shuffle: false,
+        repeatMode: "OFF",
+      };
+    }
+
+    // Cap display at 100 to avoid huge responses
+    const displayIds = session.queueTrackIds.slice(0, 100);
+
+    const tracks = await this.prisma.track.findMany({
+      where: { id: { in: displayIds } },
+      select: {
+        id: true,
+        title: true,
+        durationMs: true,
+        coverArtUrl: true,
+        uploader: {
+          select: {
+            id: true,
+            profile: {
+              select: { displayName: true, handle: true, avatarUrl: true },
+            },
+          },
+        },
+        primaryGenre: { select: { name: true } },
+      },
+    });
+
+    const trackMap = new Map(tracks.map((t) => [t.id, t]));
+    const queue = displayIds
+      .map((id) => {
+        const t = trackMap.get(id);
+        if (!t) return null;
+        return {
+          trackId: t.id,
+          title: t.title,
+          artist:
+            t.uploader.profile?.displayName ??
+            t.uploader.profile?.handle ??
+            "Unknown Artist",
+          artistId: t.uploader.id,
+          artistHandle: t.uploader.profile?.handle ?? null,
+          artistAvatarUrl: t.uploader.profile?.avatarUrl ?? null,
+          cover: t.coverArtUrl ?? null,
+          duration: t.durationMs ? Math.round(t.durationMs / 1000) : null,
+          genre: t.primaryGenre?.name ?? null,
+        };
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null);
+
+    return {
+      queue,
+      currentIndex: session.currentQueueIndex,
+      queueLength: session.queueTrackIds.length,
+      tracksUntilAd:
+        this.AD_EVERY_N_TRACKS -
+        (session.realTracksSinceLastAd % this.AD_EVERY_N_TRACKS),
+      shuffle: session.shuffle,
+      repeatMode: session.repeatMode,
+    };
+  }
+
+  // 16. POST /player/queue/jump
+  async jumpToTrackInQueue(userId: string, trackId: string) {
+    const session = await this.prisma.playerSession.findUnique({
+      where: { userId },
+    });
+
+    if (!session || !session.queueTrackIds.length) {
+      throw new NotFoundException({
+        code: "NO_QUEUE",
+        message: "No queue loaded. Call POST /player/queue/load first.",
+      });
+    }
+
+    const index = session.queueTrackIds.indexOf(trackId);
+    if (index === -1) {
+      throw new NotFoundException({
+        code: "TRACK_NOT_IN_QUEUE",
+        message: "Track is not in the current queue.",
+      });
+    }
+
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: {
+        currentQueueIndex: index,
+        currentTrackId: trackId,
+        realTracksSinceLastAd: 0,
+      },
+    });
+
+    const trackMetadata = await this.buildQueueTrackMetadata(trackId);
+
+    return {
+      type: "TRACK" as const,
+      track: trackMetadata,
+      currentIndex: index,
+      queueLength: session.queueTrackIds.length,
+      tracksUntilAd: this.AD_EVERY_N_TRACKS,
+    };
+  }
+
+  // -- Private helpers
 
   private async findTrackOrFail(trackId: string) {
     const track = await this.prisma.track.findUnique({

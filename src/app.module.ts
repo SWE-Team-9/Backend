@@ -30,6 +30,7 @@ import { MessagesModule } from "./messages/messages.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { AdminModule } from "./admin/admin.module";
 import { EntitlementsModule } from "./entitlements/entitlements.module";
+import { BffModule } from "./bff/bff.module";
 
 @Module({
   imports: [
@@ -76,7 +77,8 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
     StripeModule,
     PaymentMethodsModule,
-    EntitlementsModule,  // GET /entitlements/me
+    EntitlementsModule, // GET /entitlements/me
+    BffModule, // BFF aggregate endpoints: /app/bootstrap, /pages/profile/:handle, /pages/settings
   ],
   controllers: [AppController],
   providers: [

@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module } from "@nestjs/common";
 
-import { PlaylistsController } from './playlists.controller';
-import { PlaylistsService } from './playlists.service';
-import { StorageModule } from '../common/storage/storage.module';
+import { PlaylistsController } from "./playlists.controller";
+import { PlaylistsService } from "./playlists.service";
+import { StorageModule } from "../common/storage/storage.module";
 
 @Module({
   imports: [StorageModule],

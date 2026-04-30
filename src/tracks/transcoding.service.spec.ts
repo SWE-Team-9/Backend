@@ -120,7 +120,7 @@ describe("TranscodingService", () => {
       ffmpegMock.on.mockImplementation(function (
         this: any,
         event: string,
-        cb: Function,
+        cb: (...args: unknown[]) => unknown,
       ) {
         if (event === "codecData") {
           cb({ duration: "00:03:30.00" });
@@ -141,7 +141,7 @@ describe("TranscodingService", () => {
         on: jest.fn().mockImplementation(function (
           this: any,
           event: string,
-          cb: Function,
+          cb: (...args: unknown[]) => unknown,
         ) {
           if (event === "data") {
             // 400 bytes = 200 samples of 16-bit PCM
@@ -173,7 +173,7 @@ describe("TranscodingService", () => {
       ffmpegMock.on.mockImplementation(function (
         this: any,
         event: string,
-        cb: Function,
+        cb: (...args: unknown[]) => unknown,
       ) {
         if (event === "error") {
           setTimeout(() => cb(new Error("ffmpeg crash")), 0);
@@ -196,7 +196,7 @@ describe("TranscodingService", () => {
       ffmpegMock.on.mockImplementation(function (
         this: any,
         event: string,
-        cb: Function,
+        cb: (...args: unknown[]) => unknown,
       ) {
         if (event === "end") {
           setTimeout(() => cb(), 0);
@@ -208,7 +208,7 @@ describe("TranscodingService", () => {
         on: jest.fn().mockImplementation(function (
           this: any,
           event: string,
-          cb: Function,
+          cb: (...args: unknown[]) => unknown,
         ) {
           if (event === "data") {
             cb(Buffer.alloc(400));
@@ -241,7 +241,7 @@ describe("TranscodingService", () => {
       ffmpegMock.on.mockImplementation(function (
         this: any,
         event: string,
-        cb: Function,
+        cb: (...args: unknown[]) => unknown,
       ) {
         if (event === "end") {
           setTimeout(() => cb(), 0);
@@ -259,7 +259,7 @@ describe("TranscodingService", () => {
         on: jest.fn().mockImplementation(function (
           this: any,
           event: string,
-          cb: Function,
+          cb: (...args: unknown[]) => unknown,
         ) {
           if (event === "data") {
             cb(pcm);
@@ -288,7 +288,7 @@ describe("TranscodingService", () => {
       ffmpegMock.on.mockImplementation(function (
         this: any,
         event: string,
-        cb: Function,
+        cb: (...args: unknown[]) => unknown,
       ) {
         if (event === "error") {
           setTimeout(() => cb(new Error("boom")), 0);
@@ -310,7 +310,7 @@ describe("TranscodingService", () => {
       ffmpegMock.on.mockImplementation(function (
         this: any,
         event: string,
-        cb: Function,
+        cb: (...args: unknown[]) => unknown,
       ) {
         if (event === "codecData") {
           cb({ duration: "00:03:30.50" }); // 3 min 30.5 sec = 210500 ms
@@ -325,7 +325,7 @@ describe("TranscodingService", () => {
         on: jest.fn().mockImplementation(function (
           this: any,
           event: string,
-          cb: Function,
+          cb: (...args: unknown[]) => unknown,
         ) {
           if (event === "data") {
             cb(Buffer.alloc(400));

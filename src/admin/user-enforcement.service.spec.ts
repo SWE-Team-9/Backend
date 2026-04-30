@@ -170,9 +170,7 @@ describe("UserEnforcementService", () => {
         currentPassword: "correct-pw",
       });
 
-      expect(
-        mockNotificationsService.createNotification,
-      ).toHaveBeenCalledWith(
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
         expect.objectContaining({ recipientId: TARGET_ID, actorId: ADMIN_ID }),
       );
     });
@@ -284,7 +282,10 @@ describe("UserEnforcementService", () => {
       // userSession.updateMany should be called with revokedAt (not deleteMany)
       expect(mockPrisma.userSession.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ userId: TARGET_ID, revokedAt: null }),
+          where: expect.objectContaining({
+            userId: TARGET_ID,
+            revokedAt: null,
+          }),
           data: expect.objectContaining({ revokedAt: expect.any(Date) }),
         }),
       );

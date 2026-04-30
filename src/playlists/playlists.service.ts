@@ -5,13 +5,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { PlaylistType, PlaylistVisibility, Prisma } from '@prisma/client';
-import { randomBytes, randomUUID } from 'crypto';
-import { instanceToPlain, plainToInstance } from 'class-transformer';
+} from "@nestjs/common";
+import { PlaylistType, PlaylistVisibility, Prisma } from "@prisma/client";
+import { randomBytes, randomUUID } from "crypto";
+import { instanceToPlain, plainToInstance } from "class-transformer";
 
-import { StorageService } from '../common/storage/storage.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from "../common/storage/storage.service";
+import { PrismaService } from "../prisma/prisma.service";
 
 import {
   AddTrackToPlaylistDto,
@@ -29,8 +29,8 @@ import {
   ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
   UploadPlaylistCoverResponseDto,
-} from './dto';
-import { PlaylistEntity } from './entities/playlist.entity';
+} from "./dto";
+import { PlaylistEntity } from "./entities/playlist.entity";
 
 @Injectable()
 export class PlaylistsService {
@@ -49,10 +49,14 @@ export class PlaylistsService {
     const visibility = dto.visibility;
     const secretToken =
       visibility === PlaylistVisibility.SECRET
-        ? randomBytes(24).toString('hex')
+        ? randomBytes(24).toString("hex")
         : null;
 
-    const uniqueTrackIds = this.validateTrackIdArray(dto.trackIds, 'trackIds', true);
+    const uniqueTrackIds = this.validateTrackIdArray(
+      dto.trackIds,
+      "trackIds",
+      true,
+    );
 
     const tracks = await this.prisma.track.findMany({
       where: {
@@ -65,17 +69,18 @@ export class PlaylistsService {
     if (tracks.length !== uniqueTrackIds.length) {
       const foundIds = new Set(tracks.map((track) => track.id));
       const missingIds = uniqueTrackIds.filter((id) => !foundIds.has(id));
-      throw this.notFound('TRACK_NOT_FOUND', `Track not found: ${missingIds.join(', ')}`);
+      throw this.notFound(
+        "TRACK_NOT_FOUND",
+        `Track not found: ${missingIds.join(", ")}`,
+      );
     }
 
-    let playlist:
-      | {
-          id: string;
-          title: string;
-          visibility: PlaylistVisibility;
-          secretToken: string | null;
-        }
-      | null = null;
+    let playlist: {
+      id: string;
+      title: string;
+      visibility: PlaylistVisibility;
+      secretToken: string | null;
+    } | null = null;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const slug = await this.generateUniqueSlug(dto.title);
@@ -121,10 +126,13 @@ export class PlaylistsService {
     }
 
     if (!playlist) {
-      throw this.conflict('PLAYLIST_CREATE_FAILED', 'Unable to create playlist. Please retry.');
+      throw this.conflict(
+        "PLAYLIST_CREATE_FAILED",
+        "Unable to create playlist. Please retry.",
+      );
     }
 
-    this.logAudit('playlist.create', userId, playlist.id, {
+    this.logAudit("playlist.create", userId, playlist.id, {
       tracksCount: uniqueTrackIds.length,
       visibility: playlist.visibility,
     });
@@ -142,20 +150,20 @@ export class PlaylistsService {
       return false;
     }
 
-    if (error.code !== 'P2002') {
+    if (error.code !== "P2002") {
       return false;
     }
 
     const target = error.meta?.target;
     if (Array.isArray(target)) {
-      return target.includes('slug');
+      return target.includes("slug");
     }
 
-    return typeof target === 'string' && target.includes('slug');
+    return typeof target === "string" && target.includes("slug");
   }
 
   private async generateUniqueSlug(title: string): Promise<string> {
-    const baseSlug = this.slugify(title) || 'playlist';
+    const baseSlug = this.slugify(title) || "playlist";
 
     const baseExists = await this.prisma.playlist.findFirst({
       where: { slug: baseSlug },
@@ -167,7 +175,7 @@ export class PlaylistsService {
     }
 
     for (let i = 0; i < 10; i += 1) {
-      const suffix = randomBytes(3).toString('hex');
+      const suffix = randomBytes(3).toString("hex");
       const candidate = `${baseSlug}-${suffix}`;
       const exists = await this.prisma.playlist.findFirst({
         where: { slug: candidate },
@@ -185,12 +193,14 @@ export class PlaylistsService {
   private slugify(value: string): string {
     return value
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
       .slice(0, 80);
   }
 
-  private async generateUniqueSecretToken(excludePlaylistId?: string): Promise<string> {
+  private async generateUniqueSecretToken(
+    excludePlaylistId?: string,
+  ): Promise<string> {
     for (let i = 0; i < 5; i += 1) {
       const candidate = randomUUID();
       const existing = await this.prisma.playlist.findFirst({
@@ -206,7 +216,10 @@ export class PlaylistsService {
       }
     }
 
-    throw this.conflict('SECRET_TOKEN_GENERATION_FAILED', 'Failed to generate a unique secret token.');
+    throw this.conflict(
+      "SECRET_TOKEN_GENERATION_FAILED",
+      "Failed to generate a unique secret token.",
+    );
   }
 
   private sanitizePlaylistOutput(
@@ -232,7 +245,7 @@ export class PlaylistsService {
         secretToken: playlist.secretToken,
         owner: {
           id: playlist.owner.id,
-          display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
+          display_name: playlist.owner.profile?.displayName ?? "Unknown User",
         },
         tracks: playlist.tracks.map(({ track }) => ({
           trackId: track.id,
@@ -242,8 +255,10 @@ export class PlaylistsService {
       { excludeExtraneousValues: true },
     );
 
-    const groups = requesterUserId === playlist.ownerId ? ['owner'] : [];
-    const plain = instanceToPlain(entity, { groups }) as GetPlaylistDetailsResponseDto & {
+    const groups = requesterUserId === playlist.ownerId ? ["owner"] : [];
+    const plain = instanceToPlain(entity, {
+      groups,
+    }) as GetPlaylistDetailsResponseDto & {
       secretToken?: string | null;
     };
 
@@ -261,9 +276,13 @@ export class PlaylistsService {
     requesterUserId?: string,
     tracksQuery: PlaylistTracksQueryDto = {},
   ): Promise<GetPlaylistDetailsResponseDto> {
-    const shouldPaginate = tracksQuery.limit !== undefined || tracksQuery.offset !== undefined;
+    const shouldPaginate =
+      tracksQuery.limit !== undefined || tracksQuery.offset !== undefined;
     const tracksLimit = shouldPaginate
-      ? Math.min(tracksQuery.limit ?? this.defaultTrackLimit, this.maxTrackLimit)
+      ? Math.min(
+          tracksQuery.limit ?? this.defaultTrackLimit,
+          this.maxTrackLimit,
+        )
       : undefined;
     const tracksOffset = shouldPaginate ? (tracksQuery.offset ?? 0) : undefined;
 
@@ -300,7 +319,7 @@ export class PlaylistsService {
           },
         },
         orderBy: {
-          position: 'asc',
+          position: "asc",
         },
         ...(tracksOffset !== undefined ? { skip: tracksOffset } : {}),
         ...(tracksLimit !== undefined ? { take: tracksLimit } : {}),
@@ -316,7 +335,7 @@ export class PlaylistsService {
     ]);
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     return this.sanitizePlaylistOutput(
@@ -336,7 +355,10 @@ export class PlaylistsService {
     return this.findOne(playlistId, requesterUserId, tracksQuery);
   }
 
-  async getEditDetails(userId: string, playlistId: string): Promise<GetPlaylistEditResponseDto> {
+  async getEditDetails(
+    userId: string,
+    playlistId: string,
+  ): Promise<GetPlaylistEditResponseDto> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         id: playlistId,
@@ -359,11 +381,14 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only edit your own playlists.');
+      throw this.forbidden(
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only edit your own playlists.",
+      );
     }
 
     return {
@@ -374,7 +399,9 @@ export class PlaylistsService {
       slug: playlist.slug,
       coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
       type: playlist.type,
-      releaseDate: playlist.releaseDate ? new Date(playlist.releaseDate as Date).toISOString() : null,
+      releaseDate: playlist.releaseDate
+        ? new Date(playlist.releaseDate as Date).toISOString()
+        : null,
       genreId: playlist.genreId,
       tags: playlist.tags ?? [],
     };
@@ -396,11 +423,14 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only update your own playlists.');
+      throw this.forbidden(
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only update your own playlists.",
+      );
     }
 
     const data: Record<string, unknown> = {};
@@ -419,7 +449,9 @@ export class PlaylistsService {
 
     if (dto.visibility !== undefined) {
       const normalizedVisibility =
-        dto.visibility === 'PRIVATE' ? PlaylistVisibility.SECRET : dto.visibility;
+        dto.visibility === "PRIVATE"
+          ? PlaylistVisibility.SECRET
+          : dto.visibility;
 
       data.visibility = normalizedVisibility;
 
@@ -451,7 +483,7 @@ export class PlaylistsService {
         });
 
         if (!genre) {
-          throw this.notFound('GENRE_NOT_FOUND', 'Genre not found.');
+          throw this.notFound("GENRE_NOT_FOUND", "Genre not found.");
         }
 
         data.genreId = genre.id;
@@ -459,14 +491,19 @@ export class PlaylistsService {
     }
 
     if (dto.tags !== undefined) {
-      data.tags = Array.from(new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean)));
+      data.tags = Array.from(
+        new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean)),
+      );
     }
 
     if (Object.keys(data).length === 0) {
-      throw this.badRequest('PLAYLIST_UPDATE_EMPTY', 'At least one field must be provided for update.');
+      throw this.badRequest(
+        "PLAYLIST_UPDATE_EMPTY",
+        "At least one field must be provided for update.",
+      );
     }
 
-    const updated = await this.prisma.playlist.update({
+    const updated = (await this.prisma.playlist.update({
       where: { id: playlist.id },
       data: data as any,
       select: {
@@ -493,7 +530,7 @@ export class PlaylistsService {
             },
           },
           orderBy: {
-            position: 'asc',
+            position: "asc",
           },
           select: {
             track: {
@@ -505,15 +542,15 @@ export class PlaylistsService {
           },
         },
       } as any,
-    }) as any;
+    })) as any;
 
-    this.logAudit('playlist.update', userId, playlist.id, {
+    this.logAudit("playlist.update", userId, playlist.id, {
       changedFields: Object.keys(data),
       visibility: updated.visibility,
     });
 
     return {
-      message: 'Playlist updated successfully',
+      message: "Playlist updated successfully",
       playlist: this.sanitizePlaylistOutput(updated, userId),
     };
   }
@@ -535,23 +572,26 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only edit your own playlists.');
+      throw this.forbidden(
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only edit your own playlists.",
+      );
     }
 
     this.validateCoverUpload(file);
 
     const uploaded = await this.storageService.upload(file.buffer, {
       userId,
-      type: 'cover',
+      type: "cover",
       mimeType: file.mimetype,
       originalName: file.originalname,
     });
 
-    const updated = await this.prisma.playlist.update({
+    const updated = (await this.prisma.playlist.update({
       where: { id: playlist.id },
       data: {
         coverImageUrl: uploaded.url,
@@ -560,14 +600,14 @@ export class PlaylistsService {
       select: {
         coverImageUrl: true,
       } as any,
-    }) as any;
+    })) as any;
 
-    this.logAudit('playlist.cover.upload', userId, playlist.id, {
+    this.logAudit("playlist.cover.upload", userId, playlist.id, {
       coverImageUrl: updated.coverImageUrl,
     });
 
     return {
-      message: 'Playlist cover uploaded successfully',
+      message: "Playlist cover uploaded successfully",
       coverImageUrl: updated.coverImageUrl,
     };
   }
@@ -585,11 +625,14 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only delete your own playlists.');
+      throw this.forbidden(
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only delete your own playlists.",
+      );
     }
 
     await this.prisma.playlist.update({
@@ -597,27 +640,29 @@ export class PlaylistsService {
       data: { deletedAt: new Date() },
     });
 
-    this.logAudit('playlist.delete', userId, playlist.id);
+    this.logAudit("playlist.delete", userId, playlist.id);
   }
 
-  async getRecentPlaylists(userId: string, limit = 10): Promise<GetRecentPlaylistsResponseDto> {
+  async getRecentPlaylists(
+    userId: string,
+    limit = 10,
+  ): Promise<GetRecentPlaylistsResponseDto> {
     const take = Math.min(Math.max(limit ?? 10, 1), 50);
 
     const recentPlaylists = await this.prisma.playEvent.groupBy({
-      by: ['playlistId'],
+      by: ["playlistId"],
       where: {
         userId,
         playlistId: {
           not: null,
         },
-        
       },
       _max: {
         startedAt: true,
       },
       orderBy: {
         _max: {
-          startedAt: 'desc',
+          startedAt: "desc",
         },
       },
       take,
@@ -656,25 +701,32 @@ export class PlaylistsService {
       },
     });
 
-    const playlistMap = new Map(playlists.map((playlist) => [playlist.id, playlist]));
+    const playlistMap = new Map(
+      playlists.map((playlist) => [playlist.id, playlist]),
+    );
 
     return {
       playlists: playlistIds
         .map((playlistId) => playlistMap.get(playlistId))
-        .filter((playlist): playlist is NonNullable<typeof playlist> => Boolean(playlist))
+        .filter((playlist): playlist is NonNullable<typeof playlist> =>
+          Boolean(playlist),
+        )
         .map((playlist) => ({
           playlistId: playlist.id,
           title: playlist.title,
           coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
           owner: {
             id: playlist.owner.id,
-            display_name: playlist.owner.profile?.displayName ?? 'Unknown User',
+            display_name: playlist.owner.profile?.displayName ?? "Unknown User",
           },
         })),
     };
   }
 
-  async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
+  async likePlaylist(
+    userId: string,
+    playlistId: string,
+  ): Promise<{ message: string }> {
     const playlistIdResult = await this.prisma.$transaction(async (tx) => {
       const playlist = await tx.playlist.findFirst({
         where: {
@@ -687,7 +739,7 @@ export class PlaylistsService {
       });
 
       if (!playlist) {
-        throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+        throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
       }
 
       const existingLike = await tx.playlistLike.findUnique({
@@ -703,7 +755,10 @@ export class PlaylistsService {
       });
 
       if (existingLike) {
-        throw this.conflict('PLAYLIST_ALREADY_LIKED', 'Playlist already liked.');
+        throw this.conflict(
+          "PLAYLIST_ALREADY_LIKED",
+          "Playlist already liked.",
+        );
       }
 
       try {
@@ -714,8 +769,14 @@ export class PlaylistsService {
           },
         });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          throw this.conflict('PLAYLIST_ALREADY_LIKED', 'Playlist already liked.');
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          throw this.conflict(
+            "PLAYLIST_ALREADY_LIKED",
+            "Playlist already liked.",
+          );
         }
 
         throw error;
@@ -724,34 +785,40 @@ export class PlaylistsService {
       return playlist.id;
     });
 
-    this.logAudit('playlist.like', userId, playlistIdResult);
+    this.logAudit("playlist.like", userId, playlistIdResult);
 
     return {
-      message: 'Playlist liked successfully',
+      message: "Playlist liked successfully",
     };
   }
 
   private validateCoverUpload(file: Express.Multer.File): void {
     if (!file || !file.buffer) {
-      throw this.badRequest('PLAYLIST_COVER_REQUIRED', 'Cover image file is required.');
+      throw this.badRequest(
+        "PLAYLIST_COVER_REQUIRED",
+        "Cover image file is required.",
+      );
     }
 
-    if (!file.mimetype?.startsWith('image/')) {
+    if (!file.mimetype?.startsWith("image/")) {
       throw this.badRequest(
-        'INVALID_COVER_MIME_TYPE',
-        'Only image uploads are allowed for playlist covers.',
+        "INVALID_COVER_MIME_TYPE",
+        "Only image uploads are allowed for playlist covers.",
       );
     }
 
     if (file.size > this.maxCoverUploadBytes) {
       throw this.badRequest(
-        'PLAYLIST_COVER_TOO_LARGE',
-        'Playlist cover image must be 5 MB or smaller.',
+        "PLAYLIST_COVER_TOO_LARGE",
+        "Playlist cover image must be 5 MB or smaller.",
       );
     }
   }
 
-  async unlikePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
+  async unlikePlaylist(
+    userId: string,
+    playlistId: string,
+  ): Promise<{ message: string }> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         id: playlistId,
@@ -763,7 +830,7 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     await this.prisma.playlistLike.deleteMany({
@@ -773,10 +840,10 @@ export class PlaylistsService {
       },
     });
 
-    this.logAudit('playlist.unlike', userId, playlist.id);
+    this.logAudit("playlist.unlike", userId, playlist.id);
 
     return {
-      message: 'Playlist unliked successfully',
+      message: "Playlist unliked successfully",
     };
   }
 
@@ -798,11 +865,14 @@ export class PlaylistsService {
       });
 
       if (!playlist) {
-        throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+        throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
       }
 
       if (playlist.ownerId !== userId) {
-        throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only modify your own playlists.');
+        throw this.forbidden(
+          "PLAYLIST_OWNER_REQUIRED",
+          "You can only modify your own playlists.",
+        );
       }
 
       const track = await tx.track.findFirst({
@@ -814,7 +884,7 @@ export class PlaylistsService {
       });
 
       if (!track) {
-        throw this.notFound('TRACK_NOT_FOUND', 'Track not found.');
+        throw this.notFound("TRACK_NOT_FOUND", "Track not found.");
       }
 
       const stats = await tx.playlistTrack.aggregate({
@@ -825,7 +895,7 @@ export class PlaylistsService {
 
       if ((stats._count._all ?? 0) >= this.maxPlaylistTracks) {
         throw this.conflict(
-          'PLAYLIST_MAX_TRACKS_REACHED',
+          "PLAYLIST_MAX_TRACKS_REACHED",
           `Playlist cannot exceed ${this.maxPlaylistTracks} tracks.`,
         );
       }
@@ -841,10 +911,13 @@ export class PlaylistsService {
       } catch (error) {
         if (
           (error instanceof Prisma.PrismaClientKnownRequestError ||
-            typeof (error as { code?: string })?.code === 'string') &&
-          (error as { code?: string }).code === 'P2002'
+            typeof (error as { code?: string })?.code === "string") &&
+          (error as { code?: string }).code === "P2002"
         ) {
-          throw this.conflict('TRACK_ALREADY_IN_PLAYLIST', 'Track already exists in this playlist.');
+          throw this.conflict(
+            "TRACK_ALREADY_IN_PLAYLIST",
+            "Track already exists in this playlist.",
+          );
         }
         throw error;
       }
@@ -855,12 +928,12 @@ export class PlaylistsService {
       };
     });
 
-    this.logAudit('playlist.track.add', userId, result.playlistId, {
+    this.logAudit("playlist.track.add", userId, result.playlistId, {
       trackId: result.trackId,
     });
 
     return {
-      message: 'Track added to playlist successfully',
+      message: "Track added to playlist successfully",
       playlistId: result.playlistId,
       trackId: result.trackId,
     };
@@ -883,11 +956,14 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only modify your own playlists.');
+      throw this.forbidden(
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only modify your own playlists.",
+      );
     }
 
     const playlistTrack = await this.prisma.playlistTrack.findUnique({
@@ -903,7 +979,10 @@ export class PlaylistsService {
     });
 
     if (!playlistTrack) {
-      throw this.notFound('PLAYLIST_TRACK_NOT_FOUND', 'Track is not in this playlist.');
+      throw this.notFound(
+        "PLAYLIST_TRACK_NOT_FOUND",
+        "Track is not in this playlist.",
+      );
     }
 
     await this.prisma.$transaction([
@@ -930,17 +1009,21 @@ export class PlaylistsService {
       }),
     ]);
 
-    this.logAudit('playlist.track.remove', userId, playlist.id, { trackId });
+    this.logAudit("playlist.track.remove", userId, playlist.id, { trackId });
 
     return {
-      message: 'Track removed from playlist successfully',
+      message: "Track removed from playlist successfully",
     };
   }
 
-  async reorderTracks(userId: string, playlistId: string, dto: ReorderPlaylistTracksDto) {
+  async reorderTracks(
+    userId: string,
+    playlistId: string,
+    dto: ReorderPlaylistTracksDto,
+  ) {
     const orderedTrackIds = this.validateTrackIdArray(
       dto.orderedTrackIds,
-      'orderedTrackIds',
+      "orderedTrackIds",
       true,
     );
 
@@ -950,11 +1033,14 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only reorder your own playlists.');
+      throw this.forbidden(
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only reorder your own playlists.",
+      );
     }
 
     const existing = await this.prisma.playlistTrack.findMany({
@@ -967,14 +1053,14 @@ export class PlaylistsService {
     const unknownIds = orderedTrackIds.filter((id) => !existingIds.has(id));
     if (unknownIds.length > 0) {
       throw this.notFound(
-        'PLAYLIST_TRACK_NOT_FOUND',
-        `Track IDs not found in this playlist: ${unknownIds.join(', ')}`,
+        "PLAYLIST_TRACK_NOT_FOUND",
+        `Track IDs not found in this playlist: ${unknownIds.join(", ")}`,
       );
     }
 
     if (orderedTrackIds.length !== existingIds.size) {
       throw this.badRequest(
-        'PLAYLIST_REORDER_INCOMPLETE',
+        "PLAYLIST_REORDER_INCOMPLETE",
         `orderedTrackIds must include all ${existingIds.size} tracks currently in the playlist.`,
       );
     }
@@ -983,7 +1069,7 @@ export class PlaylistsService {
       // Build CASE WHEN statement for position updates
       const caseStatements = orderedTrackIds
         .map((trackId, index) => `WHEN '${trackId}' THEN ${index}`)
-        .join(' ');
+        .join(" ");
 
       await this.prisma.$executeRaw(
         Prisma.sql`
@@ -996,18 +1082,18 @@ export class PlaylistsService {
         `,
       );
     } catch (error) {
-      this.logger.error('Reorder failed:', error);
+      this.logger.error("Reorder failed:", error);
       throw this.badRequest(
-        'PLAYLIST_REORDER_FAILED',
-        'Failed to reorder tracks. Please ensure all track IDs are valid.',
+        "PLAYLIST_REORDER_FAILED",
+        "Failed to reorder tracks. Please ensure all track IDs are valid.",
       );
     }
 
-    this.logAudit('playlist.tracks.reorder', userId, playlist.id, {
+    this.logAudit("playlist.tracks.reorder", userId, playlist.id, {
       tracksCount: orderedTrackIds.length,
     });
 
-    return { message: 'Playlist reordered successfully' };
+    return { message: "Playlist reordered successfully" };
   }
 
   async getMyPlaylists(userId: string, query: PlaylistPaginationQueryDto) {
@@ -1025,7 +1111,7 @@ export class PlaylistsService {
       this.prisma.playlist.findMany({
         where,
         orderBy: {
-          createdAt: 'desc',
+          createdAt: "desc",
         },
         skip,
         take: limit,
@@ -1059,7 +1145,9 @@ export class PlaylistsService {
     };
   }
 
-  async resolveSecret(secretToken: string): Promise<ResolveSecretPlaylistResponseDto> {
+  async resolveSecret(
+    secretToken: string,
+  ): Promise<ResolveSecretPlaylistResponseDto> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         secretToken,
@@ -1073,14 +1161,17 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_SECRET_NOT_FOUND', 'Secret playlist not found.');
+      throw this.notFound(
+        "PLAYLIST_SECRET_NOT_FOUND",
+        "Secret playlist not found.",
+      );
     }
 
     return {
       playlistId: playlist.id,
       title: playlist.title,
-      visibility: 'PRIVATE',
-      message: 'Access granted via secret token',
+      visibility: "PRIVATE",
+      message: "Access granted via secret token",
     };
   }
 
@@ -1103,34 +1194,39 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
     if (playlist.ownerId !== userId) {
       throw this.forbidden(
-        'PLAYLIST_OWNER_REQUIRED',
-        'You can only access embed code for your own playlists.',
+        "PLAYLIST_OWNER_REQUIRED",
+        "You can only access embed code for your own playlists.",
       );
     }
 
     const embedBaseUrl = this.resolveEmbedBaseUrl();
-    const embedUrl = new URL(`${embedBaseUrl.replace(/\/+$/, '')}/${playlist.id}`);
+    const embedUrl = new URL(
+      `${embedBaseUrl.replace(/\/+$/, "")}/${playlist.id}`,
+    );
 
-    if (playlist.visibility === PlaylistVisibility.SECRET && playlist.secretToken) {
-      embedUrl.searchParams.set('token', playlist.secretToken);
+    if (
+      playlist.visibility === PlaylistVisibility.SECRET &&
+      playlist.secretToken
+    ) {
+      embedUrl.searchParams.set("token", playlist.secretToken);
     }
 
     if (query.theme) {
-      embedUrl.searchParams.set('theme', query.theme);
+      embedUrl.searchParams.set("theme", query.theme);
     }
     if (query.autoplay !== undefined) {
-      embedUrl.searchParams.set('autoplay', String(query.autoplay));
+      embedUrl.searchParams.set("autoplay", String(query.autoplay));
     }
     if (query.start !== undefined) {
-      embedUrl.searchParams.set('start', String(query.start));
+      embedUrl.searchParams.set("start", String(query.start));
     }
     if (query.hideArtwork !== undefined) {
-      embedUrl.searchParams.set('hideArtwork', String(query.hideArtwork));
+      embedUrl.searchParams.set("hideArtwork", String(query.hideArtwork));
     }
 
     const embedCode = `<iframe src="${embedUrl.toString()}"></iframe>`;
@@ -1147,7 +1243,7 @@ export class PlaylistsService {
       return explicitBaseUrl;
     }
 
-    return 'https://example.com/embed/playlists';
+    return "https://example.com/embed/playlists";
   }
 
   private validateTrackIdArray(
@@ -1156,23 +1252,32 @@ export class PlaylistsService {
     requireNonEmpty: boolean,
   ): string[] {
     if (!Array.isArray(trackIds)) {
-      throw this.badRequest('INVALID_TRACK_IDS', `${fieldName} must be an array of track IDs.`);
+      throw this.badRequest(
+        "INVALID_TRACK_IDS",
+        `${fieldName} must be an array of track IDs.`,
+      );
     }
 
     if (requireNonEmpty && trackIds.length === 0) {
-      throw this.badRequest('EMPTY_TRACK_IDS', 'Playlist must start with at least one track.');
+      throw this.badRequest(
+        "EMPTY_TRACK_IDS",
+        "Playlist must start with at least one track.",
+      );
     }
 
     if (trackIds.length > this.maxPlaylistTracks) {
       throw this.badRequest(
-        'TRACK_IDS_TOO_LARGE',
+        "TRACK_IDS_TOO_LARGE",
         `${fieldName} cannot contain more than ${this.maxPlaylistTracks} IDs.`,
       );
     }
 
     const uniqueTrackIds = Array.from(new Set(trackIds));
     if (uniqueTrackIds.length !== trackIds.length) {
-      throw this.badRequest('DUPLICATE_TRACK_IDS', `${fieldName} must not contain duplicate values.`);
+      throw this.badRequest(
+        "DUPLICATE_TRACK_IDS",
+        `${fieldName} must not contain duplicate values.`,
+      );
     }
 
     return uniqueTrackIds;
@@ -1186,7 +1291,7 @@ export class PlaylistsService {
   ): void {
     this.logger.log(
       JSON.stringify({
-        event: 'playlist.audit',
+        event: "playlist.audit",
         action,
         userId,
         playlistId,

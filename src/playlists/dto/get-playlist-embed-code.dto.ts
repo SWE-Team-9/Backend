@@ -1,6 +1,15 @@
-import { Type } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from "class-validator";
 
 export class GetPlaylistEmbedCodeParamsDto {
   @IsString()
@@ -9,10 +18,10 @@ export class GetPlaylistEmbedCodeParamsDto {
 }
 
 export class GetPlaylistEmbedCodeQueryDto {
-  @ApiPropertyOptional({ enum: ['light', 'dark'], example: 'dark' })
+  @ApiPropertyOptional({ enum: ["light", "dark"], example: "dark" })
   @IsOptional()
-  @IsIn(['light', 'dark'])
-  theme?: 'light' | 'dark';
+  @IsIn(["light", "dark"])
+  theme?: "light" | "dark";
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
