@@ -78,6 +78,7 @@ import { BffModule } from "./bff/bff.module";
     StripeModule,
     PaymentMethodsModule,
     EntitlementsModule, // GET /entitlements/me
+    BffModule, // BFF aggregate endpoints: /app/bootstrap, /pages/profile/:handle, /pages/settings
   ],
   controllers: [AppController],
   providers: [
