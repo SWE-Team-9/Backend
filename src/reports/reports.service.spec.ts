@@ -26,6 +26,7 @@ const mockPrisma = {
   track: { findUnique: jest.fn() },
   user: { findUnique: jest.fn() },
   playlist: { findUnique: jest.fn() },
+  comment: { findUnique: jest.fn() },
   $transaction: jest.fn(),
 };
 
@@ -90,10 +91,50 @@ describe("ReportsService", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it("throws BadRequestException for invalid target type", async () => {
+    it("throws NotFoundException when target comment does not exist", async () => {
+      mockPrisma.comment.findUnique.mockResolvedValueOnce(null);
       await expect(
         service.createReport(REPORTER_ID, {
-          targetType: "COMMENT" as ReportTargetType,
+          targetType: ReportTargetType.COMMENT,
+          targetId: "no-comment",
+          reason: "SPAM",
+          description: "test",
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("creates report for a COMMENT target", async () => {
+      mockPrisma.comment.findUnique.mockResolvedValueOnce({ id: "comment-1" });
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null);
+      const mockReport = {
+        id: "report-comment-1",
+        reporterId: REPORTER_ID,
+        targetType: ReportTargetType.COMMENT,
+        targetId: "comment-1",
+        reason: "INAPPROPRIATE",
+        status: ReportStatus.PENDING,
+        createdAt: new Date(),
+      };
+      mockPrisma.report.create.mockResolvedValueOnce(mockReport);
+
+      const result = await service.createReport(REPORTER_ID, {
+        targetType: ReportTargetType.COMMENT,
+        targetId: "comment-1",
+        reason: "INAPPROPRIATE",
+        description: "offensive comment",
+      });
+
+      expect(result.targetType).toBe(ReportTargetType.COMMENT);
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        "report.created",
+        expect.objectContaining({ targetType: ReportTargetType.COMMENT }),
+      );
+    });
+
+    it("throws BadRequestException for truly invalid target type", async () => {
+      await expect(
+        service.createReport(REPORTER_ID, {
+          targetType: "UNKNOWN_TYPE" as ReportTargetType,
           targetId: "some-id",
           reason: "SPAM",
           description: "test",
@@ -210,16 +251,35 @@ describe("ReportsService", () => {
       );
     });
 
-    it("returns report with appeals", async () => {
+    it("returns report with appeals and resolved target info", async () => {
       const mockReport = {
         id: "r1",
-        reporter: { id: "u1", email: "a@b.com" },
+        targetType: ReportTargetType.TRACK,
+        targetId: "track-1",
+        reason: "SPAM",
+        status: ReportStatus.PENDING,
+        description: "test",
+        createdAt: new Date(),
+        resolvedAt: null,
+        resolvedBy: null,
+        reporter: {
+          id: "u1",
+          email: "a@b.com",
+          profile: { displayName: "Alice", handle: "alice" },
+        },
         adminResolution: null,
         appeals: [],
       };
       mockPrisma.report.findUnique.mockResolvedValueOnce(mockReport);
+      mockPrisma.track.findUnique.mockResolvedValueOnce({
+        title: "Night Drive",
+        uploader: { profile: { handle: "artist1" } },
+      });
       const result = await service.getReportById("r1");
       expect(result.id).toBe("r1");
+      expect(result.reporter?.display_name).toBe("Alice");
+      expect(result.category).toBe("SPAM");
+      expect(result.target.title).toBe("Night Drive");
     });
   });
 
@@ -229,7 +289,9 @@ describe("ReportsService", () => {
     it("throws NotFoundException when report not found", async () => {
       mockPrisma.report.findUnique.mockResolvedValueOnce(null);
       await expect(
-        service.updateReport("no-id", "admin-1", { status: ReportStatus.RESOLVED }),
+        service.updateReport("no-id", "admin-1", {
+          status: ReportStatus.RESOLVED,
+        }),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -253,7 +315,11 @@ describe("ReportsService", () => {
 
     it("sets resolvedAt and resolvedBy when status is RESOLVED", async () => {
       mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1" });
-      const updatedReport = { id: "r1", status: "RESOLVED", resolvedAt: new Date() };
+      const updatedReport = {
+        id: "r1",
+        status: "RESOLVED",
+        resolvedAt: new Date(),
+      };
       mockPrisma.report.update.mockResolvedValueOnce(updatedReport);
       mockPrisma.appeal.updateMany.mockResolvedValueOnce({ count: 0 });
 
@@ -299,7 +365,10 @@ describe("ReportsService", () => {
         id: "admin-1",
         systemRole: "ADMIN",
       });
-      mockPrisma.report.update.mockResolvedValueOnce({ id: "r1", resolvedBy: "admin-1" });
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: "r1",
+        resolvedBy: "admin-1",
+      });
 
       const result = await service.assignReport("r1", "admin-1");
       expect(result.resolvedBy).toBe("admin-1");
@@ -328,9 +397,10 @@ describe("ReportsService", () => {
     });
 
     it("updates multiple reports in a transaction", async () => {
-      // Mock the findMany call that checks for RESOLVED reports
-      mockPrisma.report.findMany.mockResolvedValueOnce([]);
-      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 2 }]);
+      mockPrisma.$transaction.mockResolvedValueOnce([
+        { count: 3 },
+        { count: 2 },
+      ]);
 
       const result = await service.bulkUpdateReports("admin-1", {
         reportIds: ["r1", "r2", "r3"],

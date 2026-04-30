@@ -232,6 +232,7 @@ enum ReportTargetType {
   TRACK
   USER
   PLAYLIST
+  COMMENT
 }
 
 enum ReportReason {
