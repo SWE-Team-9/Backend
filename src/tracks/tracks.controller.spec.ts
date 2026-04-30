@@ -234,6 +234,25 @@ describe("TracksController", () => {
         UUID,
         "user-1",
         expect.objectContaining({ title: "Updated Title" }),
+        undefined,
+      );
+    });
+
+    it("should accept optional coverArt and pass file to service", async () => {
+      await request(app.getHttpServer())
+        .put(`/tracks/${UUID}`)
+        .field("title", "Updated With Cover")
+        .attach("coverArt", Buffer.from("fake-image"), {
+          filename: "cover.png",
+          contentType: "image/png",
+        })
+        .expect(200);
+
+      expect(svc.updateTrack).toHaveBeenCalledWith(
+        UUID,
+        "user-1",
+        expect.objectContaining({ title: "Updated With Cover" }),
+        expect.objectContaining({ originalname: "cover.png" }),
       );
     });
 

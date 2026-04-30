@@ -157,6 +157,7 @@ function buildPrismaMock() {
     },
     genre: {
       findFirst: jest.fn(),
+      upsert: jest.fn(),
     },
     user: {
       findUnique: jest.fn(),
@@ -340,6 +341,28 @@ describe("TracksService", () => {
           file,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it("should auto-create missing canonical genre (islamic)", async () => {
+      prisma.genre.findFirst.mockResolvedValue(null);
+      prisma.genre.upsert.mockResolvedValue({ id: 33 });
+
+      const file = buildMulterFile();
+      await service.uploadTrack(
+        USER_ID,
+        { title: "Nasheed", genre: "islamic" },
+        file,
+      );
+
+      expect(prisma.genre.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: "islamic" },
+          create: expect.objectContaining({ slug: "islamic", name: "Islamic" }),
+        }),
+      );
+
+      const createCall = prisma.track.create.mock.calls[0][0];
+      expect(createCall.data.primaryGenreId).toBe(33);
     });
 
     it("should work without optional genre and tags", async () => {
@@ -911,6 +934,44 @@ describe("TracksService", () => {
 
       const updateCall = prisma.track.update.mock.calls[0][0];
       expect(updateCall.data.slug).toBe("new-title");
+    });
+
+    it("should update coverArtUrl when optional coverArt file is provided", async () => {
+      const coverUrl = "https://cdn.example.com/cover/updated.png";
+      storageServiceMock.upload.mockResolvedValue({
+        url: coverUrl,
+        key: "cover/updated.png",
+      });
+      prisma.track.update.mockResolvedValue(
+        buildTrackRecord({ coverArtUrl: coverUrl }),
+      );
+
+      const coverArtFile = buildMulterFile({
+        fieldname: "coverArt",
+        originalname: "updated.png",
+        mimetype: "image/png",
+      });
+
+      const result = await service.updateTrack(
+        TRACK_ID,
+        USER_ID,
+        { title: "With Cover" },
+        coverArtFile,
+      );
+
+      expect(storageServiceMock.upload).toHaveBeenCalledWith(
+        coverArtFile.buffer,
+        expect.objectContaining({
+          userId: USER_ID,
+          type: "cover",
+          mimeType: "image/png",
+          originalName: "updated.png",
+        }),
+      );
+
+      const updateCall = prisma.track.update.mock.calls[0][0];
+      expect(updateCall.data.coverArtUrl).toBe(coverUrl);
+      expect(result.coverArtUrl).toBe(coverUrl);
     });
   });
 

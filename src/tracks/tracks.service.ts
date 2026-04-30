@@ -84,6 +84,44 @@ function slugify(text: string): string {
     .slice(0, 80);
 }
 
+const CANONICAL_GENRE_NAMES: Record<string, string> = {
+  electronic: "Electronic",
+  "hip-hop": "Hip-Hop",
+  pop: "Pop",
+  rock: "Rock",
+  alternative: "Alternative",
+  ambient: "Ambient",
+  classical: "Classical",
+  jazz: "Jazz",
+  "r-b-soul": "R&B / Soul",
+  metal: "Metal",
+  "folk-singer-songwriter": "Folk / Singer-Songwriter",
+  country: "Country",
+  reggaeton: "Reggaeton",
+  dancehall: "Dancehall",
+  "drum-bass": "Drum & Bass",
+  house: "House",
+  techno: "Techno",
+  "deep-house": "Deep House",
+  trance: "Trance",
+  "lo-fi": "Lo-Fi",
+  indie: "Indie",
+  punk: "Punk",
+  blues: "Blues",
+  latin: "Latin",
+  afrobeat: "Afrobeat",
+  trap: "Trap",
+  experimental: "Experimental",
+  world: "World",
+  gospel: "Gospel",
+  "spoken-word": "Spoken Word",
+  quran: "Quran",
+  sha3by: "Sha3by",
+  islamic: "Islamic",
+};
+
+const CANONICAL_GENRE_SLUGS = new Set(Object.keys(CANONICAL_GENRE_NAMES));
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Select objects - control exactly what leaves the service
 // ──────────────────────────────────────────────────────────────────────────────
@@ -241,6 +279,50 @@ export class TracksService {
     }
   }
 
+  private async resolveGenreId(input: string): Promise<number | null> {
+    const normalizedInput = input.trim();
+    const normalizedSlug = slugify(normalizedInput);
+
+    // Frontend dropdown includes "None" as a sentinel for no genre.
+    if (!normalizedSlug || normalizedSlug === "none") {
+      return null;
+    }
+
+    const existingGenre = await this.prisma.genre.findFirst({
+      where: {
+        OR: [
+          { name: { equals: normalizedInput, mode: "insensitive" } },
+          { slug: { equals: normalizedSlug, mode: "insensitive" } },
+        ],
+      },
+    });
+
+    if (existingGenre) {
+      return existingGenre.id;
+    }
+
+    if (!CANONICAL_GENRE_SLUGS.has(normalizedSlug)) {
+      throw new BadRequestException(`Genre "${input}" not found.`);
+    }
+
+    // Auto-heal environments where seed data is incomplete.
+    const ensuredGenre = await this.prisma.genre.upsert({
+      where: { slug: normalizedSlug },
+      update: {},
+      create: {
+        slug: normalizedSlug,
+        name: CANONICAL_GENRE_NAMES[normalizedSlug] ?? normalizedInput,
+      },
+      select: { id: true },
+    });
+
+    this.logger.warn(
+      `Missing canonical genre "${normalizedSlug}" was auto-created during track write.`,
+    );
+
+    return ensuredGenre.id;
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // UPLOAD
   // ──────────────────────────────────────────────────────────────────────────
@@ -288,18 +370,7 @@ export class TracksService {
     // --- resolve genre (optional) ---
     let genreId: number | null = null;
     if (dto.genre) {
-      const genre = await this.prisma.genre.findFirst({
-        where: {
-          OR: [
-            { name: { equals: dto.genre, mode: "insensitive" } },
-            { slug: { equals: slugify(dto.genre), mode: "insensitive" } },
-          ],
-        },
-      });
-      if (!genre) {
-        throw new BadRequestException(`Genre "${dto.genre}" not found.`);
-      }
-      genreId = genre.id;
+      genreId = await this.resolveGenreId(dto.genre);
     }
 
     // --- upload audio to storage ---
@@ -458,7 +529,12 @@ export class TracksService {
   // UPDATE TRACK METADATA
   // ──────────────────────────────────────────────────────────────────────────
 
-  async updateTrack(trackId: string, userId: string, dto: UpdateTrackDto) {
+  async updateTrack(
+    trackId: string,
+    userId: string,
+    dto: UpdateTrackDto,
+    coverArtFile?: Express.Multer.File,
+  ) {
     const track = await this.findOwnedTrack(trackId, userId);
 
     // Block edits while the track is still being processed
@@ -478,19 +554,19 @@ export class TracksService {
       if (dto.genre === null || dto.genre === "") {
         genreId = null;
       } else {
-        const genre = await this.prisma.genre.findFirst({
-          where: {
-            OR: [
-              { name: { equals: dto.genre, mode: "insensitive" } },
-              { slug: { equals: slugify(dto.genre), mode: "insensitive" } },
-            ],
-          },
-        });
-        if (!genre) {
-          throw new BadRequestException(`Genre "${dto.genre}" not found.`);
-        }
-        genreId = genre.id;
+        genreId = await this.resolveGenreId(dto.genre);
       }
+    }
+
+    let coverArtUrl: string | undefined = undefined;
+    if (coverArtFile && coverArtFile.buffer) {
+      const coverResult = await this.storageService.upload(coverArtFile.buffer, {
+        userId,
+        type: "cover",
+        mimeType: coverArtFile.mimetype,
+        originalName: coverArtFile.originalname,
+      });
+      coverArtUrl = coverResult.url;
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -507,6 +583,9 @@ export class TracksService {
         data.primaryGenre = genreId
           ? { connect: { id: genreId } }
           : { disconnect: true };
+      }
+      if (coverArtUrl !== undefined) {
+        data.coverArtUrl = coverArtUrl;
       }
 
       const updatedTrack = await tx.track.update({
