@@ -34,6 +34,9 @@ describe("DiscoveryService", () => {
               findMany: jest.fn(),
               findFirst: jest.fn(),
             },
+            like: {
+              findMany: jest.fn(),
+            },
             $queryRaw: jest.fn(),
           },
         },
@@ -217,6 +220,7 @@ describe("DiscoveryService", () => {
             recentPlays: 100,
             recentLikes: 50,
             velocityScore: 200,
+            liked: false,
           },
         ],
       });
@@ -250,8 +254,9 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma.userProfile, "findMany")
         .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma.like, "findMany").mockResolvedValueOnce([]);
 
-      const result = await service.trending(10, 30);
+      const result = await service.trending(10, 30, "user-123");
 
       expect(result.windowDays).toBe(30);
       expect(result.items).toHaveLength(1);
@@ -269,6 +274,7 @@ describe("DiscoveryService", () => {
         recentPlays: 50,
         recentLikes: 25,
         velocityScore: 100,
+        liked: false,
       });
     });
 

@@ -177,7 +177,7 @@ export class DiscoveryService {
     };
   }
 
-  async trending(limit = 20, windowDays = 7) {
+  async trending(limit = 20, windowDays = 7, userId?: string) {
     const rawRows = await this.prisma.$queryRaw<
       Array<{
         id: string;
@@ -234,6 +234,23 @@ export class DiscoveryService {
       uploaderProfiles.map((profile) => [profile.userId, profile]),
     );
 
+    // Fetch user likes if userId provided
+    const userLikeMap = new Map<string, boolean>();
+    if (userId && rawRows.length > 0) {
+      const trackIds = rawRows.map((row) => row.id);
+      const userLikes = await this.prisma.like.findMany({
+        where: {
+          userId,
+          trackId: { in: trackIds },
+        },
+        select: { trackId: true },
+      });
+
+      userLikes.forEach((like) => {
+        userLikeMap.set(like.trackId, true);
+      });
+    }
+
     return {
       windowDays,
       items: rawRows.map((row) => ({
@@ -246,6 +263,7 @@ export class DiscoveryService {
         recentPlays: Number(row.recent_plays),
         recentLikes: Number(row.recent_likes),
         velocityScore: row.velocity_score,
+        liked: userLikeMap.get(row.id) ?? false,
       })),
     };
   }

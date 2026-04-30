@@ -26,7 +26,20 @@ function buildDiscoveryServiceMock(): {
     }),
     trending: jest.fn().mockResolvedValue({
       windowDays: 7,
-      items: [],
+      items: [
+        {
+          id: "track-1",
+          title: "Trending Track",
+          slug: "trending-track",
+          coverArtUrl: "https://example.com/cover.jpg",
+          uploaderId: "user-1",
+          uploader: { userId: "user-1", handle: "artist", displayName: "Artist" },
+          recentPlays: 100,
+          recentLikes: 50,
+          velocityScore: 200,
+          liked: false,
+        },
+      ],
     }),
     resolveResource: jest.fn().mockResolvedValue({
       matched: true,
@@ -175,8 +188,17 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
         .query({ limit: 10, windowDays: 7 })
         .expect(200);
 
-      expect(discoveryServiceMock.trending).toHaveBeenCalledWith(10, 7);
+      expect(discoveryServiceMock.trending).toHaveBeenCalledWith(10, 7, USER_ID);
       expect(res.body).toHaveProperty("items");
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toEqual(
+        expect.objectContaining({
+          id: "track-1",
+          title: "Trending Track",
+          liked: false,
+          velocityScore: 200,
+        }),
+      );
     });
 
     it("GET /discovery/resolve should resolve resource url", async () => {
