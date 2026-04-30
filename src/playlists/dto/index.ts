@@ -8,16 +8,10 @@ export {
   RecentPlaylistOwnerDto,
 } from "./get-recent-playlists.dto";
 export { UploadPlaylistCoverResponseDto } from "./upload-playlist-cover-response.dto";
-export {
-  AddTrackToPlaylistDto,
-  AddTrackToPlaylistResponseDto,
-} from "./add-track-to-playlist.dto";
+export { AddTrackToPlaylistDto, AddTrackToPlaylistResponseDto } from "./add-track-to-playlist.dto";
 export { ReorderPlaylistTracksDto } from "./reorder-playlist-tracks.dto";
 export { PlaylistPaginationQueryDto } from "./pagination-query.dto";
-export {
-  GetMyPlaylistsResponseDto,
-  MyPlaylistItemDto,
-} from "./get-my-playlists-response.dto";
+export { GetMyPlaylistsResponseDto, MyPlaylistItemDto } from "./get-my-playlists-response.dto";
 export { GetPlaylistDetailsParamsDto } from "./get-playlist-details-params.dto";
 export {
   ResolveSecretPlaylistParamsDto,

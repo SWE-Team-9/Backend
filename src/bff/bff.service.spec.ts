@@ -210,7 +210,12 @@ describe("BffService", () => {
       mockPrisma.repost.findMany.mockResolvedValue([]);
       mockPrisma.user.findUnique.mockResolvedValue({
         id: "viewer-1",
-        profile: { handle: "viewer", displayName: "Viewer", avatarUrl: null, accountType: "LISTENER" },
+        profile: {
+          handle: "viewer",
+          displayName: "Viewer",
+          avatarUrl: null,
+          accountType: "LISTENER",
+        },
       });
 
       const result = await service.getProfilePageData("testuser", "viewer-1", 1, 10);
@@ -231,7 +236,12 @@ describe("BffService", () => {
       mockPrisma.repost.findMany.mockResolvedValue([]);
       mockPrisma.user.findUnique.mockResolvedValue({
         id: "user-1",
-        profile: { handle: "testuser", displayName: "Test User", avatarUrl: null, accountType: "LISTENER" },
+        profile: {
+          handle: "testuser",
+          displayName: "Test User",
+          avatarUrl: null,
+          accountType: "LISTENER",
+        },
       });
 
       const result = await service.getProfilePageData("testuser", "user-1", 1, 10);
@@ -252,7 +262,12 @@ describe("BffService", () => {
       mockPrisma.repost.findMany.mockResolvedValue([]);
       mockPrisma.user.findUnique.mockResolvedValue({
         id: "viewer-1",
-        profile: { handle: "viewer", displayName: "Viewer", avatarUrl: null, accountType: "LISTENER" },
+        profile: {
+          handle: "viewer",
+          displayName: "Viewer",
+          avatarUrl: null,
+          accountType: "LISTENER",
+        },
       });
 
       const result = await service.getProfilePageData("testuser", "viewer-1", 1, 10);
@@ -266,9 +281,9 @@ describe("BffService", () => {
         new NotFoundException("Profile not found."),
       );
 
-      await expect(
-        service.getProfilePageData("ghost", undefined, 1, 10),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getProfilePageData("ghost", undefined, 1, 10)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -281,7 +296,10 @@ describe("BffService", () => {
       mockSubscriptionsService.getMySubscription.mockResolvedValue(mockSubscription);
       mockEntitlementsService.getUserEntitlements.mockResolvedValue(mockEntitlements);
       mockNotificationsService.getPreferences.mockResolvedValue({
-        likes: true, comments: true, follows: true, reposts: true,
+        likes: true,
+        comments: true,
+        follows: true,
+        reposts: true,
       });
       mockPrisma.userSession.count.mockResolvedValue(2);
 
@@ -291,7 +309,10 @@ describe("BffService", () => {
       expect(result.subscription).toEqual(mockSubscription);
       expect(result.entitlements).toEqual(mockEntitlements);
       expect(result.notificationPreferences).toEqual({
-        likes: true, comments: true, follows: true, reposts: true,
+        likes: true,
+        comments: true,
+        follows: true,
+        reposts: true,
       });
       expect(result.sessionsSummary.count).toBe(2);
     });

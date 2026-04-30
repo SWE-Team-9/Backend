@@ -159,9 +159,7 @@ export class AdminReportsController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden." })
   @ApiResponse({ status: 404, description: "Report not found." })
-  getReportById(
-    @Param("id", new ParseUUIDPipe({ version: "4" })) reportId: string,
-  ) {
+  getReportById(@Param("id", new ParseUUIDPipe({ version: "4" })) reportId: string) {
     return this.reportsService.getReportById(reportId);
   }
 
@@ -201,10 +199,7 @@ export class AdminReportsController {
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 403, description: "Forbidden." })
-  bulkUpdateReports(
-    @CurrentUser("userId") adminId: string,
-    @Body() dto: BulkUpdateReportsDto,
-  ) {
+  bulkUpdateReports(@CurrentUser("userId") adminId: string, @Body() dto: BulkUpdateReportsDto) {
     return this.reportsService.bulkUpdateReports(adminId, dto);
   }
 

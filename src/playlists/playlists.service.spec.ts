@@ -17,9 +17,7 @@ function buildPrismaMock() {
     $transaction: jest
       .fn()
       .mockImplementation((fnOrQueries: any) =>
-        typeof fnOrQueries === "function"
-          ? fnOrQueries(prismaMock)
-          : Promise.all(fnOrQueries),
+        typeof fnOrQueries === "function" ? fnOrQueries(prismaMock) : Promise.all(fnOrQueries),
       ),
     playlist: {
       create: jest.fn(),
@@ -151,9 +149,7 @@ describe("PlaylistsService", () => {
     });
 
     it("throws when an initial track does not exist", async () => {
-      prisma.track.findMany.mockResolvedValue([
-        { id: "trk_123", title: "Layali" },
-      ]);
+      prisma.track.findMany.mockResolvedValue([{ id: "trk_123", title: "Layali" }]);
 
       await expect(
         service.create("usr_1", {
@@ -165,10 +161,7 @@ describe("PlaylistsService", () => {
     });
 
     it("allows initial tracks with same title if IDs are different", async () => {
-      prisma.track.findMany.mockResolvedValue([
-        { id: "trk_123" },
-        { id: "trk_456" },
-      ]);
+      prisma.track.findMany.mockResolvedValue([{ id: "trk_123" }, { id: "trk_456" }]);
       prisma.playlist.findFirst.mockResolvedValue(null);
       prisma.playlist.create.mockResolvedValue({
         id: "pl_101",
@@ -247,9 +240,7 @@ describe("PlaylistsService", () => {
 
     it("throws when playlist does not exist", async () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
-      await expect(service.getDetails("missing")).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(service.getDetails("missing")).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -333,9 +324,9 @@ describe("PlaylistsService", () => {
 
     it("throws when playlist missing", async () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
-      await expect(
-        service.update("usr_1", "missing", { title: "x" }),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.update("usr_1", "missing", { title: "x" })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it("throws when user is not owner", async () => {
@@ -345,9 +336,9 @@ describe("PlaylistsService", () => {
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
       });
-      await expect(
-        service.update("usr_1", "pl_101", { title: "x" }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.update("usr_1", "pl_101", { title: "x" })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
 
     it("throws when no update fields provided", async () => {
@@ -357,9 +348,9 @@ describe("PlaylistsService", () => {
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
       });
-      await expect(
-        service.update("usr_1", "pl_101", {}),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.update("usr_1", "pl_101", {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it("updates new editable playlist metadata fields", async () => {
@@ -382,7 +373,7 @@ describe("PlaylistsService", () => {
       });
 
       await service.update("usr_1", "pl_101", {
-        type: "ALBUM" as any,
+        type: "ALBUM",
         releaseDate: "2026-03-01",
         genreId: 12,
         tags: ["chill", "chill", "night-drive"],
@@ -551,9 +542,7 @@ describe("PlaylistsService", () => {
 
     it("throws when playlist missing", async () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
-      await expect(service.remove("usr_1", "missing")).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(service.remove("usr_1", "missing")).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it("throws when non-owner tries deleting", async () => {
@@ -561,9 +550,7 @@ describe("PlaylistsService", () => {
         id: "pl_101",
         ownerId: "usr_x",
       });
-      await expect(service.remove("usr_1", "pl_101")).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(service.remove("usr_1", "pl_101")).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 
@@ -599,18 +586,18 @@ describe("PlaylistsService", () => {
       prisma.playlist.findFirst.mockResolvedValue({ id: "pl_101" });
       prisma.playlistLike.findUnique.mockResolvedValue({ userId: "usr_1" });
 
-      await expect(
-        service.likePlaylist("usr_1", "pl_101"),
-      ).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.likePlaylist("usr_1", "pl_101")).rejects.toBeInstanceOf(
+        ConflictException,
+      );
       expect(prisma.playlistLike.create).not.toHaveBeenCalled();
     });
 
     it("throws when playlist is missing", async () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.likePlaylist("usr_1", "missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.likePlaylist("usr_1", "missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -633,9 +620,9 @@ describe("PlaylistsService", () => {
     it("throws when playlist is missing", async () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.unlikePlaylist("usr_1", "missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unlikePlaylist("usr_1", "missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -709,9 +696,9 @@ describe("PlaylistsService", () => {
       });
       prisma.playlistTrack.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.removeTrack("usr_1", "pl_101", "trk_999"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.removeTrack("usr_1", "pl_101", "trk_999")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -721,10 +708,7 @@ describe("PlaylistsService", () => {
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.playlistTrack.findMany.mockResolvedValue([
-        { trackId: "trk_8" },
-        { trackId: "trk_3" },
-      ]);
+      prisma.playlistTrack.findMany.mockResolvedValue([{ trackId: "trk_8" }, { trackId: "trk_3" }]);
       prisma.$executeRaw.mockResolvedValue(2);
 
       const result = await service.reorderTracks("usr_1", "pl_101", {
@@ -740,10 +724,7 @@ describe("PlaylistsService", () => {
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.playlistTrack.findMany.mockResolvedValue([
-        { trackId: "trk_8" },
-        { trackId: "trk_3" },
-      ]);
+      prisma.playlistTrack.findMany.mockResolvedValue([{ trackId: "trk_8" }, { trackId: "trk_3" }]);
 
       await expect(
         service.reorderTracks("usr_1", "pl_101", {
@@ -823,9 +804,7 @@ describe("PlaylistsService", () => {
 
     it("throws when secret token is invalid", async () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
-      await expect(service.resolveSecret("bad")).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(service.resolveSecret("bad")).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -840,8 +819,7 @@ describe("PlaylistsService", () => {
 
       expect(result).toEqual({
         playlistId: "pl_101",
-        embedCode:
-          '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+        embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
       });
     });
 
@@ -851,9 +829,9 @@ describe("PlaylistsService", () => {
         ownerId: "usr_2",
       });
 
-      await expect(
-        service.getEmbedCode("usr_1", "pl_101"),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.getEmbedCode("usr_1", "pl_101")).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
   });
 });

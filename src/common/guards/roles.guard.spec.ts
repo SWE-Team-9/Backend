@@ -33,19 +33,14 @@ describe("RolesGuard", () => {
   ): ExecutionContext {
     jest
       .spyOn(reflector, "getAllAndOverride")
-      .mockImplementation((key: unknown) =>
-        key === ROLES_KEY ? requiredRoles : undefined,
-      );
+      .mockImplementation((key: unknown) => (key === ROLES_KEY ? requiredRoles : undefined));
 
     return {
       getHandler: jest.fn().mockReturnValue(() => {}),
       getClass: jest.fn().mockReturnValue(() => {}),
       switchToHttp: () => ({
         getRequest: () => ({
-          user:
-            userRole !== undefined
-              ? { userId: "user-123", role: userRole }
-              : undefined,
+          user: userRole !== undefined ? { userId: "user-123", role: userRole } : undefined,
         }),
       }),
     } as unknown as ExecutionContext;
@@ -70,17 +65,12 @@ describe("RolesGuard", () => {
     });
 
     it("should consult both handler and class metadata via the ROLES_KEY", () => {
-      const spy = jest
-        .spyOn(reflector, "getAllAndOverride")
-        .mockReturnValue(undefined as any);
+      const spy = jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(undefined);
 
       const ctx = buildContext("USER", undefined);
       guard.canActivate(ctx);
 
-      expect(spy).toHaveBeenCalledWith(ROLES_KEY, [
-        expect.any(Function),
-        expect.any(Function),
-      ]);
+      expect(spy).toHaveBeenCalledWith(ROLES_KEY, [expect.any(Function), expect.any(Function)]);
     });
   });
 
@@ -151,10 +141,7 @@ describe("RolesGuard", () => {
         fail("Expected ForbiddenException to be thrown");
       } catch (err: unknown) {
         expect(err).toBeInstanceOf(ForbiddenException);
-        const response = (err as ForbiddenException).getResponse() as Record<
-          string,
-          unknown
-        >;
+        const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
         expect(response.code).toBe("FORBIDDEN");
       }
     });
@@ -167,10 +154,7 @@ describe("RolesGuard", () => {
         fail("Expected ForbiddenException to be thrown");
       } catch (err: unknown) {
         expect(err).toBeInstanceOf(ForbiddenException);
-        const response = (err as ForbiddenException).getResponse() as Record<
-          string,
-          unknown
-        >;
+        const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
         expect(typeof response.message).toBe("string");
         expect((response.message as string).length).toBeGreaterThan(0);
       }
@@ -183,10 +167,7 @@ describe("RolesGuard", () => {
         guard.canActivate(ctx);
         fail("Expected ForbiddenException to be thrown");
       } catch (err: unknown) {
-        const response = (err as ForbiddenException).getResponse() as Record<
-          string,
-          unknown
-        >;
+        const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
         // Security: do not hint at which roles would be accepted
         expect(response.message).not.toContain("ADMIN");
       }
@@ -244,10 +225,7 @@ describe("RolesGuard", () => {
         guard.canActivate(ctx);
         fail("Expected ForbiddenException to be thrown");
       } catch (err: unknown) {
-        const response = (err as ForbiddenException).getResponse() as Record<
-          string,
-          unknown
-        >;
+        const response = (err as ForbiddenException).getResponse() as Record<string, unknown>;
         expect(response.code).toBe("FORBIDDEN");
       }
     });

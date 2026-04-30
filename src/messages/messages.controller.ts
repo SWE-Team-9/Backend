@@ -10,13 +10,7 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import {
-  ApiCookieAuth,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { MessagesService } from "./messages.service";
 import { SendMessageDto } from "./dto/send-message.dto";
@@ -41,10 +35,7 @@ export class MessagesController {
   @ApiResponse({ status: 200, description: "Paginated conversations list." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Get("conversations")
-  getConversations(
-    @CurrentUser("userId") userId: string,
-    @Query() query: ConversationQueryDto,
-  ) {
+  getConversations(@CurrentUser("userId") userId: string, @Query() query: ConversationQueryDto) {
     return this.messagesService.getConversations(
       userId,
       query.archived ?? false,
@@ -71,17 +62,13 @@ export class MessagesController {
     @CurrentUser("userId") userId: string,
     @Body() dto: DirectConversationDto,
   ) {
-    return this.messagesService.getOrCreateDirectConversation(
-      userId,
-      dto.receiverId,
-    );
+    return this.messagesService.getOrCreateDirectConversation(userId, dto.receiverId);
   }
 
   // GET /api/v1/messages/conversations/:id
   @ApiOperation({
     summary: "Get conversation messages",
-    description:
-      "Returns a paginated list of messages within a specific conversation.",
+    description: "Returns a paginated list of messages within a specific conversation.",
   })
   @ApiParam({
     name: "id",
@@ -116,8 +103,7 @@ export class MessagesController {
   // PATCH /api/v1/messages/conversations/:id/read
   @ApiOperation({
     summary: "Mark conversation as read",
-    description:
-      "Marks all messages in a conversation as read for the authenticated user.",
+    description: "Marks all messages in a conversation as read for the authenticated user.",
   })
   @ApiParam({
     name: "id",
@@ -187,8 +173,7 @@ export class MessagesController {
   // PATCH /api/v1/messages/conversations/:id/unarchive
   @ApiOperation({
     summary: "Unarchive conversation",
-    description:
-      "Restores an archived conversation back to the active conversation list.",
+    description: "Restores an archived conversation back to the active conversation list.",
   })
   @ApiParam({
     name: "id",
@@ -211,8 +196,7 @@ export class MessagesController {
   // GET /api/v1/messages/unread-count
   @ApiOperation({
     summary: "Get unread message count",
-    description:
-      "Returns the total number of unread messages across all conversations.",
+    description: "Returns the total number of unread messages across all conversations.",
   })
   @ApiResponse({
     status: 200,
@@ -235,33 +219,21 @@ export class MessagesController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Receiver not found." })
   @Post()
-  sendMessage(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: SendMessageDto,
-  ) {
+  sendMessage(@CurrentUser("userId") userId: string, @Body() dto: SendMessageDto) {
     return this.messagesService.sendMessage(userId, dto.receiverId, dto.text);
   }
 
   // POST /api/v1/messages/share/track
   @ApiOperation({
     summary: "Share a track via message",
-    description:
-      "Sends a track share as a message to another user, with an optional text caption.",
+    description: "Sends a track share as a message to another user, with an optional text caption.",
   })
   @ApiResponse({ status: 201, description: "Track share message sent." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Receiver or track not found." })
   @Post("share/track")
-  shareTrack(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: ShareTrackDto,
-  ) {
-    return this.messagesService.shareTrack(
-      userId,
-      dto.receiverId,
-      dto.trackId,
-      dto.text,
-    );
+  shareTrack(@CurrentUser("userId") userId: string, @Body() dto: ShareTrackDto) {
+    return this.messagesService.shareTrack(userId, dto.receiverId, dto.trackId, dto.text);
   }
 
   // POST /api/v1/messages/share/playlist
@@ -274,16 +246,8 @@ export class MessagesController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Receiver or playlist not found." })
   @Post("share/playlist")
-  sharePlaylist(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: SharePlaylistDto,
-  ) {
-    return this.messagesService.sharePlaylist(
-      userId,
-      dto.receiverId,
-      dto.playlistId,
-      dto.text,
-    );
+  sharePlaylist(@CurrentUser("userId") userId: string, @Body() dto: SharePlaylistDto) {
+    return this.messagesService.sharePlaylist(userId, dto.receiverId, dto.playlistId, dto.text);
   }
 
   // DELETE /api/v1/messages/:id

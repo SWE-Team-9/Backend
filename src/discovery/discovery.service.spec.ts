@@ -93,9 +93,7 @@ describe("DiscoveryService", () => {
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce(mockTracks)
         .mockResolvedValueOnce(mockPlaylists);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockUsers as any);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockUsers as any);
       jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(1);
 
       const result = await service.search(query);
@@ -194,12 +192,8 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockProfiles as any);
 
       const result = await service.trending();
 
@@ -248,12 +242,8 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockProfiles as any);
       jest.spyOn(prisma.like, "findMany").mockResolvedValueOnce([]);
 
       const result = await service.trending(10, 30, "user-123");
@@ -292,9 +282,7 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
       jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
 
       const result = await service.trending();
@@ -347,12 +335,8 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockProfiles as any);
 
       const result = await service.trending();
 
@@ -382,9 +366,7 @@ describe("DiscoveryService", () => {
           handle: "johndoe",
         };
 
-        jest
-          .spyOn(prisma.userProfile, "findFirst")
-          .mockResolvedValueOnce(mockUserProfile as any);
+        jest.spyOn(prisma.userProfile, "findFirst").mockResolvedValueOnce(mockUserProfile as any);
 
         const result = await service.resolveResource("johndoe");
 
@@ -402,9 +384,7 @@ describe("DiscoveryService", () => {
       });
 
       it("should return not matched when user is not found", async () => {
-        jest
-          .spyOn(prisma.userProfile, "findFirst")
-          .mockResolvedValueOnce(null);
+        jest.spyOn(prisma.userProfile, "findFirst").mockResolvedValueOnce(null);
 
         const result = await service.resolveResource("nonexistent");
 
@@ -417,9 +397,7 @@ describe("DiscoveryService", () => {
           handle: "jane",
         };
 
-        jest
-          .spyOn(prisma.userProfile, "findFirst")
-          .mockResolvedValueOnce(mockUserProfile as any);
+        jest.spyOn(prisma.userProfile, "findFirst").mockResolvedValueOnce(mockUserProfile as any);
 
         const result = await service.resolveResource("/jane");
 
@@ -439,9 +417,7 @@ describe("DiscoveryService", () => {
           slug: "my-track",
         };
 
-        jest
-          .spyOn(prisma.track, "findFirst")
-          .mockResolvedValueOnce(mockTrack as any);
+        jest.spyOn(prisma.track, "findFirst").mockResolvedValueOnce(mockTrack as any);
 
         const result = await service.resolveResource("johndoe/my-track");
 
@@ -467,9 +443,7 @@ describe("DiscoveryService", () => {
 
       it("should return not matched when track is not found", async () => {
         jest.spyOn(prisma.track, "findFirst").mockResolvedValueOnce(null);
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(null);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(null);
 
         const result = await service.resolveResource("johndoe/nonexistent");
 
@@ -484,9 +458,7 @@ describe("DiscoveryService", () => {
           slug: "my-playlist",
         };
 
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(mockPlaylist as any);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(mockPlaylist as any);
 
         const result = await service.resolveResource("johndoe/sets/my-playlist");
 
@@ -517,13 +489,9 @@ describe("DiscoveryService", () => {
         };
 
         jest.spyOn(prisma.track, "findFirst").mockResolvedValueOnce(null);
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(mockPlaylist as any);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(mockPlaylist as any);
 
-        const result = await service.resolveResource(
-          "johndoe/another-playlist"
-        );
+        const result = await service.resolveResource("johndoe/another-playlist");
 
         expect(result).toEqual({
           matched: true,
@@ -534,9 +502,7 @@ describe("DiscoveryService", () => {
       });
 
       it("should return not matched when playlist is not found", async () => {
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(null);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(null);
 
         const result = await service.resolveResource("johndoe/sets/nonexistent");
 
@@ -617,9 +583,7 @@ describe("DiscoveryService", () => {
           slug: "test-playlist",
         };
 
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(mockPlaylist as any);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(mockPlaylist as any);
 
         const result = await service.resolveResource("user/SETS/test-playlist");
 

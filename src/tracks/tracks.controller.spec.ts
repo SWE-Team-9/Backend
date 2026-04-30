@@ -29,14 +29,10 @@ function buildServiceMock() {
   return {
     uploadTrack: jest.fn().mockResolvedValue(mockTrackResponse),
     getTrackById: jest.fn().mockResolvedValue(mockTrackResponse),
-    getTrackStatus: jest
-      .fn()
-      .mockResolvedValue({ trackId: UUID, status: "PROCESSING" }),
+    getTrackStatus: jest.fn().mockResolvedValue({ trackId: UUID, status: "PROCESSING" }),
     updateTrack: jest.fn().mockResolvedValue(mockTrackResponse),
     deleteTrack: jest.fn().mockResolvedValue(undefined),
-    changeVisibility: jest
-      .fn()
-      .mockResolvedValue({ ...mockTrackResponse, visibility: "PUBLIC" }),
+    changeVisibility: jest.fn().mockResolvedValue({ ...mockTrackResponse, visibility: "PUBLIC" }),
     getUserTracks: jest.fn().mockResolvedValue({
       artist: null,
       page: 1,
@@ -44,12 +40,8 @@ function buildServiceMock() {
       totalTracks: 0,
       tracks: [],
     }),
-    getWaveform: jest
-      .fn()
-      .mockResolvedValue({ trackId: UUID, waveformData: [0.1, 0.5] }),
-    handleTranscodingCallback: jest
-      .fn()
-      .mockResolvedValue({ trackId: UUID, status: "FINISHED" }),
+    getWaveform: jest.fn().mockResolvedValue({ trackId: UUID, waveformData: [0.1, 0.5] }),
+    handleTranscodingCallback: jest.fn().mockResolvedValue({ trackId: UUID, status: "FINISHED" }),
     getTrackBySecretToken: jest.fn().mockResolvedValue({
       ...mockTrackResponse,
       message: "Access granted via secret token",
@@ -153,13 +145,8 @@ describe("TracksController", () => {
         .get("/tracks/secret/V1StGXR8_Z5jdHi6B-myT-RQ")
         .expect(200);
 
-      expect(svc.getTrackBySecretToken).toHaveBeenCalledWith(
-        "V1StGXR8_Z5jdHi6B-myT-RQ",
-      );
-      expect(res.body).toHaveProperty(
-        "message",
-        "Access granted via secret token",
-      );
+      expect(svc.getTrackBySecretToken).toHaveBeenCalledWith("V1StGXR8_Z5jdHi6B-myT-RQ");
+      expect(res.body).toHaveProperty("message", "Access granted via secret token");
     });
   });
 
@@ -185,9 +172,7 @@ describe("TracksController", () => {
   // ── GET /tracks/:trackId ───────────────────────────────────────────────
   describe("GET /tracks/:trackId", () => {
     it("should return 200 and pass trackId + requesterId", async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/tracks/${UUID}`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/tracks/${UUID}`).expect(200);
 
       expect(svc.getTrackById).toHaveBeenCalledWith(UUID, "user-1");
       expect(res.body).toHaveProperty("trackId", UUID);
@@ -201,9 +186,7 @@ describe("TracksController", () => {
   // ── GET /tracks/:trackId/status ────────────────────────────────────────
   describe("GET /tracks/:trackId/status", () => {
     it("should return 200 and pass trackId + requesterId", async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/tracks/${UUID}/status`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/tracks/${UUID}/status`).expect(200);
 
       expect(svc.getTrackStatus).toHaveBeenCalledWith(UUID, "user-1");
       expect(res.body).toHaveProperty("status", "PROCESSING");
@@ -213,9 +196,7 @@ describe("TracksController", () => {
   // ── GET /tracks/:trackId/waveform ──────────────────────────────────────
   describe("GET /tracks/:trackId/waveform", () => {
     it("should return 200 and pass trackId", async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/tracks/${UUID}/waveform`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/tracks/${UUID}/waveform`).expect(200);
 
       expect(svc.getWaveform).toHaveBeenCalledWith(UUID);
       expect(res.body).toHaveProperty("waveformData", [0.1, 0.5]);
@@ -257,10 +238,7 @@ describe("TracksController", () => {
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .put("/tracks/bad-id")
-        .send({ title: "X" })
-        .expect(400);
+      await request(app.getHttpServer()).put("/tracks/bad-id").send({ title: "X" }).expect(400);
     });
 
     it("should strip unknown fields (whitelist)", async () => {
@@ -292,11 +270,7 @@ describe("TracksController", () => {
         .send({ visibility: "PUBLIC" })
         .expect(200);
 
-      expect(svc.changeVisibility).toHaveBeenCalledWith(
-        UUID,
-        "user-1",
-        "PUBLIC",
-      );
+      expect(svc.changeVisibility).toHaveBeenCalledWith(UUID, "user-1", "PUBLIC");
       expect(res.body).toHaveProperty("visibility", "PUBLIC");
     });
 
@@ -308,10 +282,7 @@ describe("TracksController", () => {
     });
 
     it("should return 400 when visibility field is missing", async () => {
-      await request(app.getHttpServer())
-        .patch(`/tracks/${UUID}/visibility`)
-        .send({})
-        .expect(400);
+      await request(app.getHttpServer()).patch(`/tracks/${UUID}/visibility`).send({}).expect(400);
     });
   });
 });

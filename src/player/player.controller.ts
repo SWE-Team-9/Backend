@@ -73,9 +73,7 @@ export class PlayerController {
       },
     },
   })
-  getPlaybackState(
-    @Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string,
-  ) {
+  getPlaybackState(@Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string) {
     return this.playerService.getPlaybackState(trackId);
   }
 
@@ -171,11 +169,7 @@ export class PlayerController {
     @CurrentUser("userId") userId: string,
     @Query() pagination: PaginationQueryDto,
   ) {
-    return this.playerService.getRecentlyPlayed(
-      userId,
-      pagination.page,
-      pagination.limit,
-    );
+    return this.playerService.getRecentlyPlayed(userId, pagination.page, pagination.limit);
   }
 
   // 6. GET /player/history
@@ -204,15 +198,8 @@ export class PlayerController {
       },
     },
   })
-  getHistory(
-    @CurrentUser("userId") userId: string,
-    @Query() pagination: PaginationQueryDto,
-  ) {
-    return this.playerService.getHistory(
-      userId,
-      pagination.page,
-      pagination.limit,
-    );
+  getHistory(@CurrentUser("userId") userId: string, @Query() pagination: PaginationQueryDto) {
+    return this.playerService.getHistory(userId, pagination.page, pagination.limit);
   }
 
   // 7. DELETE /player/history
@@ -286,10 +273,7 @@ export class PlayerController {
     },
   })
   @HttpCode(HttpStatus.OK)
-  updateSession(
-    @CurrentUser("userId") userId: string,
-    @Body() body: UpdateSessionDto,
-  ) {
+  updateSession(@CurrentUser("userId") userId: string, @Body() body: UpdateSessionDto) {
     return this.playerService.updateSession(userId, body);
   }
 
@@ -297,10 +281,7 @@ export class PlayerController {
   @Post("session")
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  updateSessionBeacon(
-    @CurrentUser("userId") userId: string,
-    @Body() body: UpdateSessionDto,
-  ) {
+  updateSessionBeacon(@CurrentUser("userId") userId: string, @Body() body: UpdateSessionDto) {
     return this.playerService.updateSession(userId, body);
   }
 
@@ -320,9 +301,7 @@ export class PlayerController {
       },
     },
   })
-  getTrackPreview(
-    @Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string,
-  ) {
+  getTrackPreview(@Param("trackId", new ParseUUIDPipe({ version: "4" })) trackId: string) {
     return this.playerService.getTrackPreview(trackId);
   }
 
@@ -339,8 +318,7 @@ export class PlayerController {
   })
   @ApiBody({ type: LoadQueueDto })
   @ApiOkResponse({
-    description:
-      "Queue loaded. Returns the track that should start playing immediately.",
+    description: "Queue loaded. Returns the track that should start playing immediately.",
     schema: {
       example: {
         currentTrack: {
@@ -431,9 +409,7 @@ export class PlayerController {
     description: "Queue state.",
     schema: {
       example: {
-        queue: [
-          { trackId: "uuid", title: "Neon Pulse", artist: "Synthwave Ghost" },
-        ],
+        queue: [{ trackId: "uuid", title: "Neon Pulse", artist: "Synthwave Ghost" }],
         currentIndex: 0,
         queueLength: 12,
         tracksUntilAd: 3,
@@ -451,18 +427,13 @@ export class PlayerController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary:
-      "Jump to a specific track in the current queue. " +
-      "Resets the ad counter.",
+    summary: "Jump to a specific track in the current queue. " + "Resets the ad counter.",
   })
   @ApiBody({ type: JumpToTrackDto })
   @ApiOkResponse({
     description: "Queue position updated. Returns the track to play.",
   })
-  jumpToTrack(
-    @CurrentUser("userId") userId: string,
-    @Body() body: JumpToTrackDto,
-  ) {
+  jumpToTrack(@CurrentUser("userId") userId: string, @Body() body: JumpToTrackDto) {
     return this.playerService.jumpToTrackInQueue(userId, body.trackId);
   }
 }

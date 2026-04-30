@@ -22,25 +22,18 @@ function cookieExtractor(req: Request): string | null {
 const bearerExtractor = ExtractJwt.fromAuthHeaderAsBearerToken();
 
 @Injectable()
-export class JwtCookieStrategy extends PassportStrategy(
-  Strategy,
-  "jwt-cookie",
-) {
+export class JwtCookieStrategy extends PassportStrategy(Strategy, "jwt-cookie") {
   constructor(
     configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
     super({
       // Try the httpOnly cookie first; fall back to Authorization: Bearer.
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        cookieExtractor,
-        bearerExtractor,
-      ]),
+      jwtFromRequest: ExtractJwt.fromExtractors([cookieExtractor, bearerExtractor]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>("security.jwtSecret"),
       issuer: configService.get<string>("security.jwtIssuer") ?? "spotly-api",
-      audience:
-        configService.get<string>("security.jwtAudience") ?? "spotly-client",
+      audience: configService.get<string>("security.jwtAudience") ?? "spotly-client",
     });
   }
 
@@ -63,11 +56,7 @@ export class JwtCookieStrategy extends PassportStrategy(
       });
 
       // Deny: session revoked, expired, or unknown
-      if (
-        !session ||
-        session.revokedAt !== null ||
-        session.expiresAt < new Date()
-      ) {
+      if (session?.revokedAt !== null || session.expiresAt < new Date()) {
         return null;
       }
 

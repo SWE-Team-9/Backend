@@ -1,10 +1,10 @@
 import {
-  IsString,
-  IsOptional,
-  MaxLength,
+  ArrayMaxSize,
   IsArray,
   IsDateString,
-  ArrayMaxSize,
+  IsOptional,
+  IsString,
+  MaxLength,
 } from "class-validator";
 import { Transform } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";

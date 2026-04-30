@@ -39,10 +39,10 @@ import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
 import { TracksService } from "./tracks.service";
 import {
   CreateTrackDto,
-  UpdateTrackDto,
-  TrackVisibilityDto,
   PaginationQueryDto,
+  TrackVisibilityDto,
   TranscodingCallbackDto,
+  UpdateTrackDto,
 } from "./dto";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -63,21 +63,14 @@ const UPLOAD_OPTIONS = {
       if (AUDIO_MIMES.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(
-          new BadRequestException(
-            "Only MP3 and WAV audio files are allowed.",
-          ) as unknown as Error,
-          false,
-        );
+        cb(new BadRequestException("Only MP3 and WAV audio files are allowed."), false);
       }
     } else if (file.fieldname === "coverArt") {
       if (IMAGE_MIMES.includes(file.mimetype)) {
         cb(null, true);
       } else {
         cb(
-          new BadRequestException(
-            "Only JPEG, PNG, and WebP images are allowed for cover art.",
-          ) as unknown as Error,
+          new BadRequestException("Only JPEG, PNG, and WebP images are allowed for cover art."),
           false,
         );
       }
@@ -118,8 +111,7 @@ export class TracksController {
         coverArt: {
           type: "string",
           format: "binary",
-          description:
-            "Optional cover art image (JPEG, PNG, or WebP, max 15 MB)",
+          description: "Optional cover art image (JPEG, PNG, or WebP, max 15 MB)",
         },
         title: { type: "string", maxLength: 100, example: "Ya Ana" },
         genre: {
@@ -247,8 +239,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 404,
-    description:
-      "Token is invalid, expired (track switched visibility), or track was deleted.",
+    description: "Token is invalid, expired (track switched visibility), or track was deleted.",
     schema: {
       example: {
         statusCode: 404,
@@ -325,8 +316,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 409,
-    description:
-      "Track is not in PROCESSING state (already finished or failed).",
+    description: "Track is not in PROCESSING state (already finished or failed).",
     schema: {
       example: {
         statusCode: 409,
@@ -405,8 +395,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 404,
-    description:
-      "Track not found, deleted, or private (and requester is not the owner).",
+    description: "Track not found, deleted, or private (and requester is not the owner).",
     schema: {
       example: {
         statusCode: 404,
@@ -417,10 +406,7 @@ export class TracksController {
   })
   @Get(":trackId")
   @Public()
-  async getTrack(
-    @Param("trackId", ParseUUIDPipe) trackId: string,
-    @Req() req: Request,
-  ) {
+  async getTrack(@Param("trackId", ParseUUIDPipe) trackId: string, @Req() req: Request) {
     const requesterId = (req as any).user?.userId;
     return this.tracksService.getTrackById(trackId, requesterId);
   }
@@ -461,10 +447,7 @@ export class TracksController {
   })
   @Get(":trackId/status")
   @Public()
-  async getTrackStatus(
-    @Param("trackId", ParseUUIDPipe) trackId: string,
-    @Req() req: Request,
-  ) {
+  async getTrackStatus(@Param("trackId", ParseUUIDPipe) trackId: string, @Req() req: Request) {
     const requesterId = (req as any).user?.userId;
     return this.tracksService.getTrackStatus(trackId, requesterId);
   }
@@ -608,9 +591,7 @@ export class TracksController {
       transformOptions: { enableImplicitConversion: true },
     }),
   )
-  @UseInterceptors(
-    FileFieldsInterceptor([{ name: "coverArt", maxCount: 1 }], UPLOAD_OPTIONS),
-  )
+  @UseInterceptors(FileFieldsInterceptor([{ name: "coverArt", maxCount: 1 }], UPLOAD_OPTIONS))
   async updateTrack(
     @Param("trackId", ParseUUIDPipe) trackId: string,
     @CurrentUser("userId") userId: string,

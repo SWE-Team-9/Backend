@@ -147,9 +147,7 @@ describe("PlayerController", () => {
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .get("/player/tracks/bad/source")
-        .expect(400);
+      await request(app.getHttpServer()).get("/player/tracks/bad/source").expect(400);
     });
   });
 
@@ -173,13 +171,7 @@ describe("PlayerController", () => {
         .send({ positionSeconds: 97, durationSeconds: 240, isCompleted: false })
         .expect(200);
 
-      expect(svc.registerProgress).toHaveBeenCalledWith(
-        "user-1",
-        UUID,
-        97,
-        240,
-        false,
-      );
+      expect(svc.registerProgress).toHaveBeenCalledWith("user-1", UUID, 97, 240, false);
       expect(res.body.message).toBe("Playback progress saved successfully");
     });
 
@@ -214,18 +206,14 @@ describe("PlayerController", () => {
   // ── GET /player/history/recent ─────────────────────────────────────
   describe("GET /player/history/recent", () => {
     it("should return 200 with recently played", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/player/history/recent")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/player/history/recent").expect(200);
 
       expect(svc.getRecentlyPlayed).toHaveBeenCalledWith("user-1", 1, 20);
       expect(res.body.tracks).toHaveLength(1);
     });
 
     it("should forward page and limit", async () => {
-      await request(app.getHttpServer())
-        .get("/player/history/recent?page=2&limit=10")
-        .expect(200);
+      await request(app.getHttpServer()).get("/player/history/recent?page=2&limit=10").expect(200);
 
       expect(svc.getRecentlyPlayed).toHaveBeenCalledWith("user-1", 2, 10);
     });
@@ -234,9 +222,7 @@ describe("PlayerController", () => {
   // ── GET /player/history ────────────────────────────────────────────
   describe("GET /player/history", () => {
     it("should return 200 with listening history", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/player/history")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/player/history").expect(200);
 
       expect(svc.getHistory).toHaveBeenCalledWith("user-1", 1, 20);
       expect(res.body.history).toHaveLength(1);
@@ -246,9 +232,7 @@ describe("PlayerController", () => {
   // ── DELETE /player/history ─────────────────────────────────────────
   describe("DELETE /player/history", () => {
     it("should return 200 and clear history", async () => {
-      const res = await request(app.getHttpServer())
-        .delete("/player/history")
-        .expect(200);
+      const res = await request(app.getHttpServer()).delete("/player/history").expect(200);
 
       expect(svc.clearHistory).toHaveBeenCalledWith("user-1");
       expect(res.body.message).toBe("Listening history cleared successfully");
@@ -270,9 +254,7 @@ describe("PlayerController", () => {
   // ── GET /player/session ────────────────────────────────────────────
   describe("GET /player/session", () => {
     it("should return 200 with player session", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/player/session")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/player/session").expect(200);
 
       expect(svc.getSession).toHaveBeenCalledWith("user-1");
       expect(res.body.isPlaying).toBe(true);
@@ -327,9 +309,7 @@ describe("PlayerController", () => {
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .get("/player/tracks/bad-id/preview")
-        .expect(400);
+      await request(app.getHttpServer()).get("/player/tracks/bad-id/preview").expect(400);
     });
   });
 });

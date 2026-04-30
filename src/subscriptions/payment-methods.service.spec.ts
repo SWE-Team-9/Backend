@@ -29,10 +29,7 @@ import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
 import { SubscriptionsService } from "./subscriptions.service";
-import {
-  BILLING_PROVIDER,
-  PaymentMethodSummary,
-} from "../billing/billing-provider.interface";
+import { BILLING_PROVIDER, PaymentMethodSummary } from "../billing/billing-provider.interface";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -212,9 +209,7 @@ describe("Payment Methods Management (service)", () => {
     mockPrisma.paymentEvent.findUnique.mockResolvedValue(null);
     mockPrisma.paymentEvent.create.mockResolvedValue({ id: "evt-pm" });
     mockBillingProvider.getOrCreateCustomer.mockResolvedValue(CUSTOMER_ID);
-    mockBillingProvider.createBillingPortalSession.mockResolvedValue(
-      MOCK_PORTAL_RESULT,
-    );
+    mockBillingProvider.createBillingPortalSession.mockResolvedValue(MOCK_PORTAL_RESULT);
     mockMailService.sendPaymentMethodUpdatedEmail.mockResolvedValue(undefined);
   });
 
@@ -308,9 +303,7 @@ describe("Payment Methods Management (service)", () => {
       await service.createBillingPortal(USER_ID, {
         returnUrl: "https://app.example.com/billing",
       });
-      expect(
-        mockBillingProvider.createBillingPortalSession,
-      ).toHaveBeenCalledWith(
+      expect(mockBillingProvider.createBillingPortalSession).toHaveBeenCalledWith(
         expect.objectContaining({
           returnUrl: "https://app.example.com/billing",
         }),
@@ -319,9 +312,7 @@ describe("Payment Methods Management (service)", () => {
 
     it("throws NotFoundException when user does not exist", async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
-      await expect(service.createBillingPortal(USER_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.createBillingPortal(USER_ID)).rejects.toThrow(NotFoundException);
     });
 
     it("paymentMethodSummary brand/last4/expiry fields are safe (no raw token)", async () => {
@@ -363,9 +354,7 @@ describe("Payment Methods Management (service)", () => {
     }
 
     it("returns structured paymentMethod object when one is stored", async () => {
-      mockPrisma.userSubscription.findFirst.mockResolvedValue(
-        makeSubWithPM(MOCK_PAYMENT_METHOD),
-      );
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(makeSubWithPM(MOCK_PAYMENT_METHOD));
       mockPrisma.track.count.mockResolvedValue(5);
       const result = await service.getMySubscription(USER_ID);
       expect(result.paymentMethod).toMatchObject({
@@ -377,9 +366,7 @@ describe("Payment Methods Management (service)", () => {
     });
 
     it("derives paymentMethodSummary string from structured paymentMethod", async () => {
-      mockPrisma.userSubscription.findFirst.mockResolvedValue(
-        makeSubWithPM(MOCK_PAYMENT_METHOD),
-      );
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(makeSubWithPM(MOCK_PAYMENT_METHOD));
       mockPrisma.track.count.mockResolvedValue(5);
       const result = await service.getMySubscription(USER_ID);
       // The string summary is derived from the JSON object
@@ -388,9 +375,7 @@ describe("Payment Methods Management (service)", () => {
     });
 
     it("paymentMethodSummary is null when no paymentMethod stored", async () => {
-      mockPrisma.userSubscription.findFirst.mockResolvedValue(
-        makeSubWithPM(null),
-      );
+      mockPrisma.userSubscription.findFirst.mockResolvedValue(makeSubWithPM(null));
       mockPrisma.track.count.mockResolvedValue(5);
       const result = await service.getMySubscription(USER_ID);
       expect(result.paymentMethod).toBeNull();
@@ -423,9 +408,7 @@ describe("Payment Methods Management (service)", () => {
     }
 
     beforeEach(() => {
-      mockBillingProvider.constructWebhookEvent.mockReturnValue(
-        makeWebhookEvent(),
-      );
+      mockBillingProvider.constructWebhookEvent.mockReturnValue(makeWebhookEvent());
       mockPrisma.userSubscription.findFirst.mockImplementation((args: any) => {
         if (args?.where?.stripeCustomerId === CUSTOMER_ID) {
           return Promise.resolve({ id: SUB_ID, userId: USER_ID });

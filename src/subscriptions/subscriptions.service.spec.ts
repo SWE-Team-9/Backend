@@ -5,12 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import {
-  FileRole,
-  InvoiceStatus,
-  SubscriptionStatus,
-  SubscriptionTier,
-} from "@prisma/client";
+import { FileRole, InvoiceStatus, SubscriptionStatus, SubscriptionTier } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -55,8 +50,7 @@ function makeActiveSub(
     trialStart: null,
     trialEnd: null,
     stripeCustomerId: (overrides.stripeCustomerId as string) ?? "cus_mock_test",
-    stripeSubscriptionId:
-      (overrides.stripeSubscriptionId as string) ?? "sub_mock_test",
+    stripeSubscriptionId: (overrides.stripeSubscriptionId as string) ?? "sub_mock_test",
     plan: {
       tier,
       uploadLimit,
@@ -67,11 +61,7 @@ function makeActiveSub(
   };
 }
 
-function makePlan(
-  tier: SubscriptionTier,
-  uploadLimit = 100,
-  id = "plan-uuid-4444",
-) {
+function makePlan(tier: SubscriptionTier, uploadLimit = 100, id = "plan-uuid-4444") {
   return {
     id,
     code: "pro-monthly",
@@ -277,11 +267,9 @@ describe("SubscriptionsService", () => {
         canViewReceipts: true,
       },
     });
-    mockBillingProvider.constructWebhookEvent.mockImplementation(
-      (buf: Buffer) => {
-        return JSON.parse(buf.toString());
-      },
-    );
+    mockBillingProvider.constructWebhookEvent.mockImplementation((buf: Buffer) => {
+      return JSON.parse(buf.toString());
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────────
@@ -564,17 +552,13 @@ describe("SubscriptionsService", () => {
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(plan);
       mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(existing);
 
-      await expect(service.subscribe(USER_ID, dto)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.subscribe(USER_ID, dto)).rejects.toThrow(ConflictException);
     });
 
     it("throws BadRequestException when no active plan is found for the requested tier", async () => {
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(null);
 
-      await expect(service.subscribe(USER_ID, dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.subscribe(USER_ID, dto)).rejects.toThrow(BadRequestException);
       await expect(service.subscribe(USER_ID, dto)).rejects.toMatchObject({
         message: expect.stringContaining("No active plan"),
       });
@@ -642,9 +626,7 @@ describe("SubscriptionsService", () => {
     it("throws ConflictException when user has no active subscription", async () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
 
-      await expect(service.cancelSubscription(USER_ID, dto)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.cancelSubscription(USER_ID, dto)).rejects.toThrow(ConflictException);
     });
 
     it("sets cancelAtPeriodEnd=true and returns accessUntil", async () => {
@@ -676,10 +658,7 @@ describe("SubscriptionsService", () => {
   // ────────────────────────────────────────────────────────────────────────
 
   describe("handleStripeWebhook", () => {
-    function makeWebhookEvent(
-      type: string,
-      overrides: Record<string, unknown> = {},
-    ) {
+    function makeWebhookEvent(type: string, overrides: Record<string, unknown> = {}) {
       return {
         id: `evt_mock_${type.replace(/\./g, "_")}`,
         type,
@@ -687,10 +666,7 @@ describe("SubscriptionsService", () => {
       };
     }
 
-    function makeWebhookBuffer(
-      type: string,
-      overrides: Record<string, unknown> = {},
-    ): Buffer {
+    function makeWebhookBuffer(type: string, overrides: Record<string, unknown> = {}): Buffer {
       return Buffer.from(JSON.stringify(makeWebhookEvent(type, overrides)));
     }
 
@@ -700,13 +676,9 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.update.mockResolvedValue({});
       mockPrisma.billingInvoice.findUnique.mockResolvedValue(null);
       mockPrisma.billingInvoice.create.mockResolvedValue({ id: "inv-id" });
-      mockBillingProvider.constructWebhookEvent.mockImplementation(
-        (_buf: Buffer) => {
-          return JSON.parse(_buf.toString()) as ReturnType<
-            typeof makeWebhookEvent
-          >;
-        },
-      );
+      mockBillingProvider.constructWebhookEvent.mockImplementation((_buf: Buffer) => {
+        return JSON.parse(_buf.toString()) as ReturnType<typeof makeWebhookEvent>;
+      });
     });
 
     it("returns { received: true } for any event", async () => {
@@ -761,10 +733,7 @@ describe("SubscriptionsService", () => {
         profile: { displayName: "Test User" },
       });
 
-      await service.handleStripeWebhook(
-        makeWebhookBuffer("invoice.payment_failed"),
-        "",
-      );
+      await service.handleStripeWebhook(makeWebhookBuffer("invoice.payment_failed"), "");
 
       // Status should be PAST_DUE (grace period - user keeps access)
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
@@ -791,10 +760,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(sub);
       mockPrisma.track.findMany.mockResolvedValue([]); // applyPlanLimitToTracks
 
-      await service.handleStripeWebhook(
-        makeWebhookBuffer("customer.subscription.deleted"),
-        "",
-      );
+      await service.handleStripeWebhook(makeWebhookBuffer("customer.subscription.deleted"), "");
 
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -817,10 +783,7 @@ describe("SubscriptionsService", () => {
         id: "existing-evt",
       }); // already exists
 
-      await service.handleStripeWebhook(
-        makeWebhookBuffer("invoice.payment_succeeded"),
-        "",
-      );
+      await service.handleStripeWebhook(makeWebhookBuffer("invoice.payment_succeeded"), "");
 
       // Should not create a duplicate PaymentEvent
       expect(mockPrisma.paymentEvent.create).not.toHaveBeenCalled();
@@ -835,18 +798,14 @@ describe("SubscriptionsService", () => {
     it("throws ForbiddenException (DOWNLOAD_NOT_ALLOWED) when user has no subscription", async () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
 
-      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(ForbiddenException);
     });
 
     it("throws ForbiddenException (DOWNLOAD_NOT_ALLOWED) when user has FREE tier subscription", async () => {
       const freeSub = makeActiveSub(SubscriptionTier.FREE, FREE_UPLOAD_LIMIT);
       mockPrisma.userSubscription.findFirst.mockResolvedValue(freeSub);
 
-      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(ForbiddenException);
     });
 
     it("returns local download URL for PRO users with local storage", async () => {
@@ -868,9 +827,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(sub);
       mockPrisma.track.findFirst.mockResolvedValue(null);
 
-      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(NotFoundException);
     });
 
     it("throws NotFoundException when track has no audio files", async () => {
@@ -878,9 +835,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(sub);
       mockPrisma.track.findFirst.mockResolvedValue(makeTrack({ files: [] }));
 
-      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(NotFoundException);
     });
 
     it("prefers STREAM file over ORIGINAL when both are available", async () => {
@@ -970,8 +925,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
       mockPrisma.track.count.mockResolvedValue(FREE_UPLOAD_LIMIT);
 
-      const { uploadLimit, uploadedCount } =
-        await service.getUploadQuota(USER_ID);
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
 
       expect(uploadedCount).toBe(uploadLimit); // at limit, 0 remaining
     });
@@ -982,8 +936,7 @@ describe("SubscriptionsService", () => {
       );
       mockPrisma.track.count.mockResolvedValue(100);
 
-      const { uploadLimit, uploadedCount } =
-        await service.getUploadQuota(USER_ID);
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
 
       expect(uploadLimit).toBe(100);
       expect(uploadedCount).toBe(100);
@@ -995,8 +948,7 @@ describe("SubscriptionsService", () => {
       );
       mockPrisma.track.count.mockResolvedValue(1000);
 
-      const { uploadLimit, uploadedCount } =
-        await service.getUploadQuota(USER_ID);
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
 
       expect(uploadLimit).toBe(1000);
       expect(uploadedCount).toBe(1000); // at limit, 0 remaining → upload blocked
@@ -1006,8 +958,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
       mockPrisma.track.count.mockResolvedValue(FREE_UPLOAD_LIMIT); // 3/3
 
-      const { uploadLimit, uploadedCount } =
-        await service.getUploadQuota(USER_ID);
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
 
       // The service consumer (TracksService / EntitlementsService) blocks when uploadedCount >= uploadLimit
       expect(uploadedCount).toBeGreaterThanOrEqual(uploadLimit);
@@ -1068,15 +1019,11 @@ describe("SubscriptionsService", () => {
       });
 
       it("GO_PLUS uploadLimit > PRO uploadLimit", () => {
-        expect(PLAN_CONFIG.GO_PLUS.uploadLimit).toBeGreaterThan(
-          PLAN_CONFIG.PRO.uploadLimit,
-        );
+        expect(PLAN_CONFIG.GO_PLUS.uploadLimit).toBeGreaterThan(PLAN_CONFIG.PRO.uploadLimit);
       });
 
       it("GO_PLUS trialDays > PRO trialDays", () => {
-        expect(PLAN_CONFIG.GO_PLUS.trialDays).toBeGreaterThan(
-          PLAN_CONFIG.PRO.trialDays,
-        );
+        expect(PLAN_CONFIG.GO_PLUS.trialDays).toBeGreaterThan(PLAN_CONFIG.PRO.trialDays);
       });
     });
 
@@ -1094,9 +1041,9 @@ describe("SubscriptionsService", () => {
 
       it("throws NotFoundException when user does not exist", async () => {
         mockPrisma.user.findUnique.mockResolvedValue(null);
-        await expect(
-          service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO }),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toThrow(
+          NotFoundException,
+        );
       });
 
       it("throws ForbiddenException(EMAIL_NOT_VERIFIED) for unverified users", async () => {
@@ -1113,16 +1060,16 @@ describe("SubscriptionsService", () => {
       });
 
       it("throws BadRequestException for invalid plan code", async () => {
-        await expect(
-          service.checkout(USER_ID, { planCode: "INVALID" as any }),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.checkout(USER_ID, { planCode: "INVALID" as any })).rejects.toThrow(
+          BadRequestException,
+        );
       });
 
       it("throws BadRequestException when no active plan record in DB", async () => {
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(null);
-        await expect(
-          service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO }),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toThrow(
+          BadRequestException,
+        );
       });
 
       it("charges full price on non-trial subscription", async () => {
@@ -1152,9 +1099,7 @@ describe("SubscriptionsService", () => {
           trialDays: 7,
           amountDueNowCents: 0,
           renewsAt: FUTURE.toISOString(),
-          trialEndsAt: new Date(
-            Date.now() + 7 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
+          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         });
 
         await service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO });
@@ -1267,9 +1212,7 @@ describe("SubscriptionsService", () => {
           }),
         );
         // No new billing session created
-        expect(
-          mockBillingProvider.createCheckoutSession,
-        ).not.toHaveBeenCalled();
+        expect(mockBillingProvider.createCheckoutSession).not.toHaveBeenCalled();
       });
 
       it("throws ConflictException(SUBSCRIPTION_ALREADY_ACTIVE) on duplicate active same-plan", async () => {
@@ -1287,11 +1230,7 @@ describe("SubscriptionsService", () => {
       });
 
       it("updates (not creates) sub when upgrading to different plan", async () => {
-        const goPlusPlan = makePlan(
-          SubscriptionTier.GO_PLUS,
-          1000,
-          "plan-uuid-GOPLUS",
-        );
+        const goPlusPlan = makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-uuid-GOPLUS");
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
         mockPrisma.userSubscription.findFirst.mockResolvedValue(
           makeActiveSub(SubscriptionTier.PRO, 100),
@@ -1327,9 +1266,7 @@ describe("SubscriptionsService", () => {
     describe("resumeSubscription()", () => {
       it("throws NotFoundException when no active subscription", async () => {
         mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
-        await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(
-          NotFoundException,
-        );
+        await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(NotFoundException);
       });
 
       it("throws ConflictException(SUBSCRIPTION_NOT_CANCELED) when sub is not set to cancel", async () => {
@@ -1338,13 +1275,11 @@ describe("SubscriptionsService", () => {
             cancelAtPeriodEnd: false,
           }),
         );
-        await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject(
-          {
-            response: expect.objectContaining({
-              code: "SUBSCRIPTION_NOT_CANCELED",
-            }),
-          },
-        );
+        await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: "SUBSCRIPTION_NOT_CANCELED",
+          }),
+        });
       });
 
       it("calls billing.resumeSubscription and clears cancelAtPeriodEnd flag", async () => {
@@ -1432,9 +1367,7 @@ describe("SubscriptionsService", () => {
         mockPrisma.userSubscription.findFirst.mockResolvedValue(
           makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true }),
         );
-        await expect(
-          service.cancelSubscription(USER_ID, dto),
-        ).rejects.toMatchObject({
+        await expect(service.cancelSubscription(USER_ID, dto)).rejects.toMatchObject({
           response: expect.objectContaining({
             code: "SUBSCRIPTION_ALREADY_CANCELED",
           }),
@@ -1469,11 +1402,7 @@ describe("SubscriptionsService", () => {
 
     describe("changePlan()", () => {
       const proPlan = makePlan(SubscriptionTier.PRO, 100, "plan-uuid-PRO");
-      const goPlusPlan = makePlan(
-        SubscriptionTier.GO_PLUS,
-        1000,
-        "plan-uuid-GOPLUS",
-      );
+      const goPlusPlan = makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-uuid-GOPLUS");
 
       it("throws NotFoundException when no active subscription", async () => {
         mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
@@ -1499,9 +1428,9 @@ describe("SubscriptionsService", () => {
           makeActiveSub(SubscriptionTier.PRO, 100),
         );
 
-        await expect(
-          service.changePlan(USER_ID, { planCode: "FREE" as any }),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.changePlan(USER_ID, { planCode: "FREE" as any })).rejects.toThrow(
+          BadRequestException,
+        );
       });
 
       it("throws BadRequestException when target plan not found in DB", async () => {
@@ -1632,9 +1561,7 @@ describe("SubscriptionsService", () => {
       it("throws NotFoundException when user not found", async () => {
         mockPrisma.user.findUnique.mockResolvedValue(null);
         mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
-        await expect(service.createBillingPortal(USER_ID)).rejects.toThrow(
-          NotFoundException,
-        );
+        await expect(service.createBillingPortal(USER_ID)).rejects.toThrow(NotFoundException);
       });
 
       it("returns portalUrl from billing provider", async () => {
@@ -1671,9 +1598,7 @@ describe("SubscriptionsService", () => {
           returnUrl: "https://app.example.com/return",
         });
 
-        expect(
-          mockBillingProvider.createBillingPortalSession,
-        ).toHaveBeenCalledWith(
+        expect(mockBillingProvider.createBillingPortalSession).toHaveBeenCalledWith(
           expect.objectContaining({
             returnUrl: "https://app.example.com/return",
           }),
@@ -1696,9 +1621,7 @@ describe("SubscriptionsService", () => {
       });
 
       it("returns mapped invoice list", async () => {
-        mockPrisma.userSubscription.findMany.mockResolvedValue([
-          { id: "sub-1" },
-        ]);
+        mockPrisma.userSubscription.findMany.mockResolvedValue([{ id: "sub-1" }]);
         mockPrisma.billingInvoice.findMany.mockResolvedValue([
           {
             id: "inv-1",
@@ -1732,9 +1655,7 @@ describe("SubscriptionsService", () => {
 
       it("formats dueAt and paidAt as ISO strings", async () => {
         const testDate = new Date("2024-03-01T12:00:00Z");
-        mockPrisma.userSubscription.findMany.mockResolvedValue([
-          { id: "sub-1" },
-        ]);
+        mockPrisma.userSubscription.findMany.mockResolvedValue([{ id: "sub-1" }]);
         mockPrisma.billingInvoice.findMany.mockResolvedValue([
           {
             id: "inv-1",
@@ -1759,9 +1680,7 @@ describe("SubscriptionsService", () => {
       });
 
       it("handles null dueAt and paidAt without crashing", async () => {
-        mockPrisma.userSubscription.findMany.mockResolvedValue([
-          { id: "sub-1" },
-        ]);
+        mockPrisma.userSubscription.findMany.mockResolvedValue([{ id: "sub-1" }]);
         mockPrisma.billingInvoice.findMany.mockResolvedValue([
           {
             id: "inv-1",
@@ -1803,10 +1722,7 @@ describe("SubscriptionsService", () => {
     // ─────────────────────────────────────────────────────────────────────────
 
     describe("handleStripeWebhook() - extended", () => {
-      function makeWebhookBuf(
-        type: string,
-        overrides: Record<string, unknown> = {},
-      ): Buffer {
+      function makeWebhookBuf(type: string, overrides: Record<string, unknown> = {}): Buffer {
         return Buffer.from(
           JSON.stringify({
             id: `evt_ext_${type.replace(/\./g, "_")}_${Date.now()}`,
@@ -1853,10 +1769,7 @@ describe("SubscriptionsService", () => {
       });
 
       it("checkout.session.completed marks subscription ACTIVE", async () => {
-        await service.handleStripeWebhook(
-          makeWebhookBuf("checkout.session.completed"),
-          "",
-        );
+        await service.handleStripeWebhook(makeWebhookBuf("checkout.session.completed"), "");
 
         expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -1869,14 +1782,11 @@ describe("SubscriptionsService", () => {
 
       it("invoice.payment_failed sets paymentFailureGraceEndsAt to now + GRACE_PERIOD_DAYS", async () => {
         const before = Date.now();
-        await service.handleStripeWebhook(
-          makeWebhookBuf("invoice.payment_failed"),
-          "",
-        );
+        await service.handleStripeWebhook(makeWebhookBuf("invoice.payment_failed"), "");
         const after = Date.now();
 
         const updateCall = mockPrisma.userSubscription.update.mock.calls[0][0];
-        const graceEndsAt = (updateCall.data as any).paymentFailureGraceEndsAt;
+        const graceEndsAt = updateCall.data.paymentFailureGraceEndsAt;
         expect(graceEndsAt).toBeInstanceOf(Date);
         const expectedMin = before + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
         const expectedMax = after + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
@@ -1885,10 +1795,7 @@ describe("SubscriptionsService", () => {
       });
 
       it("invoice.payment_action_required sets status to PAST_DUE", async () => {
-        await service.handleStripeWebhook(
-          makeWebhookBuf("invoice.payment_action_required"),
-          "",
-        );
+        await service.handleStripeWebhook(makeWebhookBuf("invoice.payment_action_required"), "");
 
         expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -1966,10 +1873,7 @@ describe("SubscriptionsService", () => {
       });
 
       it("customer.subscription.deleted revokes offline downloads", async () => {
-        await service.handleStripeWebhook(
-          makeWebhookBuf("customer.subscription.deleted"),
-          "",
-        );
+        await service.handleStripeWebhook(makeWebhookBuf("customer.subscription.deleted"), "");
 
         expect(mockPrisma.offlineDownload.updateMany).toHaveBeenCalledWith(
           expect.objectContaining({ where: { userId: USER_ID } }),
@@ -1983,10 +1887,7 @@ describe("SubscriptionsService", () => {
         }));
         mockPrisma.track.findMany.mockResolvedValue(tracks);
 
-        await service.handleStripeWebhook(
-          makeWebhookBuf("customer.subscription.deleted"),
-          "",
-        );
+        await service.handleStripeWebhook(makeWebhookBuf("customer.subscription.deleted"), "");
 
         // 5 tracks > FREE_UPLOAD_LIMIT(3) -> 2 tracks should be hidden
         expect(mockPrisma.track.updateMany).toHaveBeenCalledWith(
@@ -2065,9 +1966,7 @@ describe("SubscriptionsService", () => {
 
         const result = await service.getOfflineTrack(USER_ID, TRACK_ID);
 
-        expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(
-          Date.now(),
-        );
+        expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
       });
 
       it("upserts OfflineDownload audit record", async () => {
@@ -2175,7 +2074,7 @@ describe("SubscriptionsService", () => {
         // Only one updateMany call - for tracks to restore (none fit)
         // t2 is already hidden, so no re-hide needed
         const hideCalls = mockPrisma.track.updateMany.mock.calls.filter(
-          (c) => (c[0] as any).data.hiddenByPlanLimit === true,
+          (c) => c[0].data.hiddenByPlanLimit === true,
         );
         expect(hideCalls).toHaveLength(0);
       });
@@ -2429,9 +2328,7 @@ describe("SubscriptionsService", () => {
     it("throws ForbiddenException with code DOWNLOAD_NOT_ALLOWED for FREE user", async () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.getOfflineTrack(USER_ID, TRACK_ID),
-      ).rejects.toMatchObject({
+      await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toMatchObject({
         response: expect.objectContaining({ code: "DOWNLOAD_NOT_ALLOWED" }),
       });
     });
@@ -2453,8 +2350,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // FREE plan
       mockPrisma.track.count.mockResolvedValue(FREE_UPLOAD_LIMIT); // at limit
 
-      const { uploadLimit, uploadedCount } =
-        await service.getUploadQuota(USER_ID);
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
 
       // EntitlementsService blocks when uploadedCount >= uploadLimit (UPLOAD_LIMIT_REACHED)
       expect(uploadedCount).toBeGreaterThanOrEqual(uploadLimit);
@@ -2464,8 +2360,7 @@ describe("SubscriptionsService", () => {
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null); // FREE plan
       mockPrisma.track.count.mockResolvedValue(1); // below limit
 
-      const { uploadLimit, uploadedCount } =
-        await service.getUploadQuota(USER_ID);
+      const { uploadLimit, uploadedCount } = await service.getUploadQuota(USER_ID);
 
       expect(uploadedCount).toBeLessThan(uploadLimit);
     });

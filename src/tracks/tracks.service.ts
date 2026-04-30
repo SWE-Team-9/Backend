@@ -1,23 +1,17 @@
 import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage/storage.service";
 
-import {
-  TrackVisibility,
-  TrackStatus,
-  FileRole,
-  FileStatus,
-  Prisma,
-} from "@prisma/client";
+import { FileRole, FileStatus, Prisma, TrackStatus, TrackVisibility } from "@prisma/client";
 import { nanoid } from "nanoid";
 import { CreateTrackDto } from "./dto/create-track.dto";
 import { UpdateTrackDto } from "./dto/update-track.dto";
@@ -27,11 +21,7 @@ import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 import { randomUUID } from "crypto";
 import * as path from "path";
 import * as fs from "fs";
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Audio file validation
@@ -242,14 +232,8 @@ export class TracksService {
     private readonly storageService: StorageService,
     private readonly subscriptionsService: SubscriptionsService,
   ) {
-    this.storageProvider = this.config.get<"local" | "s3">(
-      "storage.provider",
-      "local",
-    );
-    this.localUploadDir = this.config.get<string>(
-      "storage.localUploadDir",
-      "./uploads",
-    );
+    this.storageProvider = this.config.get<"local" | "s3">("storage.provider", "local");
+    this.localUploadDir = this.config.get<string>("storage.localUploadDir", "./uploads");
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
@@ -257,17 +241,11 @@ export class TracksService {
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
     this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
-    this.transcodingApiKey = this.config.get<string>(
-      "app.transcodingApiKey",
-      "",
-    );
+    this.transcodingApiKey = this.config.get<string>("app.transcodingApiKey", "");
 
     if (this.storageProvider === "s3") {
       const accessKeyId = this.config.get<string>("storage.awsAccessKeyId", "");
-      const secretAccessKey = this.config.get<string>(
-        "storage.awsSecretAccessKey",
-        "",
-      );
+      const secretAccessKey = this.config.get<string>("storage.awsSecretAccessKey", "");
       this.s3Client = new S3Client({
         region: this.s3Region,
         ...(accessKeyId && secretAccessKey
@@ -342,18 +320,16 @@ export class TracksService {
     coverArtFile?: Express.Multer.File,
   ) {
     // --- upload quota guard ---
-    const { uploadLimit, uploadedCount } =
-      await this.subscriptionsService.getUploadQuota(userId);
+    const { uploadLimit, uploadedCount } = await this.subscriptionsService.getUploadQuota(userId);
     if (uploadedCount >= uploadLimit) {
       throw new ForbiddenException({
         code: "UPLOAD_LIMIT_REACHED",
-        message:
-          "You have reached your upload limit. Upgrade your plan to upload more tracks.",
+        message: "You have reached your upload limit. Upgrade your plan to upload more tracks.",
       });
     }
 
     // --- validate the file ---
-    if (!file || !file.buffer) {
+    if (!file?.buffer) {
       throw new BadRequestException("Audio file is required.");
     }
     if (file.size > MAX_AUDIO_SIZE_BYTES) {
@@ -362,9 +338,7 @@ export class TracksService {
       );
     }
     if (!isValidAudioFile(file.buffer)) {
-      throw new BadRequestException(
-        "Invalid audio file. Only MP3 and WAV files are accepted.",
-      );
+      throw new BadRequestException("Invalid audio file. Only MP3 and WAV files are accepted.");
     }
 
     // --- resolve genre (optional) ---
@@ -374,9 +348,7 @@ export class TracksService {
     }
 
     // --- upload audio to storage ---
-    const mimeType = AUDIO_MIME_TYPES.has(file.mimetype)
-      ? file.mimetype
-      : "audio/mpeg";
+    const mimeType = AUDIO_MIME_TYPES.has(file.mimetype) ? file.mimetype : "audio/mpeg";
     const ext = mimeType.includes("wav") ? "wav" : "mp3";
     const storageKey = `tracks/${randomUUID()}.${ext}`;
     try {
@@ -386,23 +358,18 @@ export class TracksService {
         `Audio upload to storage failed: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
-      throw new BadRequestException(
-        "Failed to upload audio file. Please try again.",
-      );
+      throw new BadRequestException("Failed to upload audio file. Please try again.");
     }
 
     // --- upload cover art if provided ---
     let coverArtUrl: string | null = null;
-    if (coverArtFile && coverArtFile.buffer) {
-      const coverResult = await this.storageService.upload(
-        coverArtFile.buffer,
-        {
-          userId,
-          type: "cover",
-          mimeType: coverArtFile.mimetype,
-          originalName: coverArtFile.originalname,
-        },
-      );
+    if (coverArtFile?.buffer) {
+      const coverResult = await this.storageService.upload(coverArtFile.buffer, {
+        userId,
+        type: "cover",
+        mimeType: coverArtFile.mimetype,
+        originalName: coverArtFile.originalname,
+      });
       coverArtUrl = coverResult.url;
     }
 
@@ -452,9 +419,7 @@ export class TracksService {
     this.transcodingService
       .processTrack(track.id, storageKey)
       .catch((err) =>
-        this.logger.error(
-          `Background processing for track ${track.id} failed: ${err}`,
-        ),
+        this.logger.error(`Background processing for track ${track.id} failed: ${err}`),
       );
 
     return this.formatTrackResponse(track, null);
@@ -475,10 +440,7 @@ export class TracksService {
     }
 
     // Private tracks: only the owner can see them (unless via secret token)
-    if (
-      track.visibility === TrackVisibility.PRIVATE &&
-      track.uploader.id !== requesterId
-    ) {
+    if (track.visibility === TrackVisibility.PRIVATE && track.uploader.id !== requesterId) {
       throw new NotFoundException("Track not found.");
     }
 
@@ -499,8 +461,8 @@ export class TracksService {
 
     return {
       ...base,
-      liked: !!likeRecord,
-      reposted: !!repostRecord,
+      liked: Boolean(likeRecord),
+      reposted: Boolean(repostRecord),
     };
   }
 
@@ -516,10 +478,7 @@ export class TracksService {
     if (!track) {
       throw new NotFoundException("Track not found.");
     }
-    if (
-      track.visibility === TrackVisibility.PRIVATE &&
-      track.uploaderId !== requesterId
-    ) {
+    if (track.visibility === TrackVisibility.PRIVATE && track.uploaderId !== requesterId) {
       throw new NotFoundException("Track not found.");
     }
     return { trackId: track.id, status: track.status };
@@ -543,13 +502,11 @@ export class TracksService {
       select: { status: true },
     });
     if (fullTrack?.status === TrackStatus.PROCESSING) {
-      throw new ConflictException(
-        "Cannot edit track while it is still processing.",
-      );
+      throw new ConflictException("Cannot edit track while it is still processing.");
     }
 
     // Resolve genre if changing
-    let genreId: number | null | undefined = undefined;
+    let genreId: number | null | undefined;
     if (dto.genre !== undefined) {
       if (dto.genre === null || dto.genre === "") {
         genreId = null;
@@ -558,8 +515,8 @@ export class TracksService {
       }
     }
 
-    let coverArtUrl: string | undefined = undefined;
-    if (coverArtFile && coverArtFile.buffer) {
+    let coverArtUrl: string | undefined;
+    if (coverArtFile?.buffer) {
       const coverResult = await this.storageService.upload(coverArtFile.buffer, {
         userId,
         type: "cover",
@@ -580,9 +537,7 @@ export class TracksService {
         data.releaseDate = dto.releaseDate ? new Date(dto.releaseDate) : null;
       }
       if (genreId !== undefined) {
-        data.primaryGenre = genreId
-          ? { connect: { id: genreId } }
-          : { disconnect: true };
+        data.primaryGenre = genreId ? { connect: { id: genreId } } : { disconnect: true };
       }
       if (coverArtUrl !== undefined) {
         data.coverArtUrl = coverArtUrl;
@@ -623,9 +578,7 @@ export class TracksService {
 
     // Owner or admin can delete
     if (track.uploaderId !== userId && userRole !== "ADMIN") {
-      throw new ForbiddenException(
-        "You do not have permission to delete this track.",
-      );
+      throw new ForbiddenException("You do not have permission to delete this track.");
     }
 
     await this.prisma.track.update({
@@ -635,9 +588,7 @@ export class TracksService {
 
     // Schedule file cleanup in background (fire and forget)
     this.cleanupTrackFiles(trackId).catch((err) =>
-      this.logger.warn(
-        `Failed to cleanup files for track ${trackId}: ${err.message}`,
-      ),
+      this.logger.warn(`Failed to cleanup files for track ${trackId}: ${err.message}`),
     );
   }
 
@@ -645,11 +596,7 @@ export class TracksService {
   // CHANGE VISIBILITY
   // ──────────────────────────────────────────────────────────────────────────
 
-  async changeVisibility(
-    trackId: string,
-    userId: string,
-    visibility: TrackVisibility,
-  ) {
+  async changeVisibility(trackId: string, userId: string, visibility: TrackVisibility) {
     const track = await this.findOwnedTrack(trackId, userId);
 
     const data: Prisma.TrackUpdateInput = { visibility };
@@ -776,15 +723,13 @@ export class TracksService {
       throw new ConflictException("Track is not in PROCESSING state.");
     }
 
-    const newStatus =
-      dto.status === "FINISHED" ? TrackStatus.FINISHED : TrackStatus.FAILED;
+    const newStatus = dto.status === "FINISHED" ? TrackStatus.FINISHED : TrackStatus.FAILED;
 
     await this.prisma.$transaction(async (tx) => {
       const trackUpdateData: any = { status: newStatus };
       if (newStatus === TrackStatus.FINISHED) {
         if (dto.waveformData) trackUpdateData.waveformData = dto.waveformData;
-        if (dto.durationMs)
-          trackUpdateData.durationMs = Math.round(dto.durationMs);
+        if (dto.durationMs) trackUpdateData.durationMs = Math.round(dto.durationMs);
       }
 
       await tx.track.update({
@@ -795,10 +740,7 @@ export class TracksService {
       // Store generated file references if FINISHED
       if (newStatus === TrackStatus.FINISHED && dto.fileUrls) {
         for (const [format, url] of Object.entries(dto.fileUrls)) {
-          const fileRole =
-            format.toLowerCase() === "mp3"
-              ? FileRole.STREAM
-              : FileRole.ORIGINAL;
+          const fileRole = format.toLowerCase() === "mp3" ? FileRole.STREAM : FileRole.ORIGINAL;
           await tx.trackFile.create({
             data: {
               trackId: dto.trackId,
@@ -852,19 +794,13 @@ export class TracksService {
       throw new NotFoundException("Track not found.");
     }
     if (track.uploaderId !== userId) {
-      throw new ForbiddenException(
-        "You do not have permission to modify this track.",
-      );
+      throw new ForbiddenException("You do not have permission to modify this track.");
     }
     return track;
   }
 
   /** Create or find tags, then link them to the track */
-  private async upsertTags(
-    tx: Prisma.TransactionClient,
-    trackId: string,
-    tagNames: string[],
-  ) {
+  private async upsertTags(tx: Prisma.TransactionClient, trackId: string, tagNames: string[]) {
     for (const name of tagNames) {
       const slug = slugify(name);
       if (!slug) continue;
@@ -946,10 +882,7 @@ export class TracksService {
           const fullPath = path.join(this.localUploadDir, file.storageKey);
           const resolvedUploadDir = path.resolve(this.localUploadDir);
           const resolvedFilePath = path.resolve(fullPath);
-          if (
-            resolvedFilePath.startsWith(resolvedUploadDir) &&
-            fs.existsSync(resolvedFilePath)
-          ) {
+          if (resolvedFilePath.startsWith(resolvedUploadDir) && fs.existsSync(resolvedFilePath)) {
             fs.unlinkSync(resolvedFilePath);
           }
         }

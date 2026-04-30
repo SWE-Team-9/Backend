@@ -1,19 +1,5 @@
-import {
-  BadRequestException,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Query,
-} from "@nestjs/common";
-import {
-  ApiCookieAuth,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { BadRequestException, Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { SocialService } from "./social.service";
 import { UserIdParamDto } from "./dto/user-id-param.dto";
 import { PaginationQueryDto } from "./dto/pagination-query.dto";
@@ -48,10 +34,7 @@ export class SocialController {
     },
   })
   @Post("follow/:userId")
-  followUser(
-    @CurrentUser("userId") followerId: string,
-    @Param() params: UserIdParamDto,
-  ) {
+  followUser(@CurrentUser("userId") followerId: string, @Param() params: UserIdParamDto) {
     if (!followerId) {
       throw new BadRequestException({
         statusCode: 400,
@@ -85,10 +68,7 @@ export class SocialController {
     },
   })
   @Delete("follow/:userId")
-  unfollowUser(
-    @CurrentUser("userId") followerId: string,
-    @Param() params: UserIdParamDto,
-  ) {
+  unfollowUser(@CurrentUser("userId") followerId: string, @Param() params: UserIdParamDto) {
     if (!followerId) {
       throw new BadRequestException({
         statusCode: 400,
@@ -125,10 +105,7 @@ export class SocialController {
     },
   })
   @Get(":userId/followers")
-  getFollowers(
-    @Param() params: UserIdParamDto,
-    @Query() query: PaginationQueryDto,
-  ) {
+  getFollowers(@Param() params: UserIdParamDto, @Query() query: PaginationQueryDto) {
     return this.socialService.getFollowers(params.userId, query);
   }
 
@@ -157,17 +134,13 @@ export class SocialController {
     },
   })
   @Get(":userId/following")
-  getFollowing(
-    @Param() params: UserIdParamDto,
-    @Query() query: PaginationQueryDto,
-  ) {
+  getFollowing(@Param() params: UserIdParamDto, @Query() query: PaginationQueryDto) {
     return this.socialService.getFollowing(params.userId, query);
   }
 
   @ApiOperation({
     summary: "Suggested users",
-    description:
-      "Returns suggested users that the authenticated user may want to follow.",
+    description: "Returns suggested users that the authenticated user may want to follow.",
   })
   @ApiResponse({
     status: 200,
@@ -187,10 +160,7 @@ export class SocialController {
     },
   })
   @Get("suggestions")
-  getSuggestions(
-    @CurrentUser("userId") userId: string,
-    @Query() query: SuggestionsQueryDto,
-  ) {
+  getSuggestions(@CurrentUser("userId") userId: string, @Query() query: SuggestionsQueryDto) {
     if (!userId) {
       throw new BadRequestException({
         statusCode: 400,
@@ -204,8 +174,7 @@ export class SocialController {
 
   @ApiOperation({
     summary: "Block user",
-    description:
-      "Blocks a specific user and prevents direct social interaction.",
+    description: "Blocks a specific user and prevents direct social interaction.",
   })
   @ApiParam({
     name: "userId",
@@ -223,10 +192,7 @@ export class SocialController {
     },
   })
   @Post("block/:userId")
-  blockUser(
-    @CurrentUser("userId") blockerId: string,
-    @Param() params: UserIdParamDto,
-  ) {
+  blockUser(@CurrentUser("userId") blockerId: string, @Param() params: UserIdParamDto) {
     if (!blockerId) {
       throw new BadRequestException({
         statusCode: 400,
@@ -258,10 +224,7 @@ export class SocialController {
     },
   })
   @Delete("block/:userId")
-  unblockUser(
-    @CurrentUser("userId") blockerId: string,
-    @Param() params: UserIdParamDto,
-  ) {
+  unblockUser(@CurrentUser("userId") blockerId: string, @Param() params: UserIdParamDto) {
     if (!blockerId) {
       throw new BadRequestException({
         statusCode: 400,
@@ -298,10 +261,7 @@ export class SocialController {
     },
   })
   @Get("blocked-users")
-  getBlockedUsers(
-    @CurrentUser("userId") userId: string,
-    @Query() query: PaginationQueryDto,
-  ) {
+  getBlockedUsers(@CurrentUser("userId") userId: string, @Query() query: PaginationQueryDto) {
     if (!userId) {
       throw new BadRequestException({
         statusCode: 400,

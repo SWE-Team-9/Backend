@@ -90,11 +90,19 @@ describe("Moderation workflow e2e", () => {
 
     prisma = moduleFixture.get<PrismaService>(PrismaService);
 
-    await prisma.report.deleteMany({ where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } } });
-    await prisma.moderationReport.deleteMany({ where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } } });
+    await prisma.report.deleteMany({
+      where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } },
+    });
+    await prisma.moderationReport.deleteMany({
+      where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } },
+    });
     await prisma.track.deleteMany({ where: { id: WORKFLOW_TRACK_ID } });
-    await prisma.userProfile.deleteMany({ where: { userId: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } } });
+    await prisma.userProfile.deleteMany({
+      where: { userId: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } },
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } },
+    });
 
     await prisma.user.createMany({
       data: [
@@ -176,11 +184,19 @@ describe("Moderation workflow e2e", () => {
   }, 120_000);
 
   afterAll(async () => {
-    await prisma.report.deleteMany({ where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } } });
-    await prisma.moderationReport.deleteMany({ where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } } });
+    await prisma.report.deleteMany({
+      where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } },
+    });
+    await prisma.moderationReport.deleteMany({
+      where: { reporterId: { in: [REPORTER_ID, TRACK_OWNER_ID] } },
+    });
     await prisma.track.deleteMany({ where: { id: WORKFLOW_TRACK_ID } });
-    await prisma.userProfile.deleteMany({ where: { userId: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } } });
+    await prisma.userProfile.deleteMany({
+      where: { userId: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } },
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: [ADMIN_ID, REPORTER_ID, TRACK_OWNER_ID] } },
+    });
     await prisma.$disconnect();
     await app.close();
   });
@@ -207,9 +223,7 @@ describe("Moderation workflow e2e", () => {
       .set("x-test-role", "ADMIN")
       .expect(200);
 
-    const createdReport = listResponse.body.items.find(
-      (item: any) => item.id === workflowReportId,
-    );
+    const createdReport = listResponse.body.items.find((item: any) => item.id === workflowReportId);
     expect(createdReport).toBeDefined();
     expect(createdReport.status).toBe(ReportStatus.PENDING);
 
@@ -240,9 +254,7 @@ describe("Moderation workflow e2e", () => {
       .set("x-test-role", "ADMIN")
       .expect(200);
 
-    expect(statsResponse.body.moderation.reports_resolved_this_week).toBeGreaterThanOrEqual(
-      1,
-    );
+    expect(statsResponse.body.moderation.reports_resolved_this_week).toBeGreaterThanOrEqual(1);
 
     const appealResponse = await request(app.getHttpServer())
       .post("/reports/appeal")

@@ -100,9 +100,7 @@ describe("UsersController", () => {
   // GET /profiles/me
   describe("GET /profiles/me", () => {
     it("returns 200 and the full profile", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/profiles/me")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/profiles/me").expect(200);
 
       expect(res.body).toHaveProperty("handle", "janedoe");
       expect(svc.getMyProfile).toHaveBeenCalled();
@@ -121,30 +119,21 @@ describe("UsersController", () => {
     });
 
     it("returns 400 for a handle with invalid characters", async () => {
-      await request(app.getHttpServer())
-        .get("/profiles/check-handle?handle=UPPERCASE")
-        .expect(400);
+      await request(app.getHttpServer()).get("/profiles/check-handle?handle=UPPERCASE").expect(400);
     });
 
     it("returns 400 when the handle query param is missing", async () => {
-      await request(app.getHttpServer())
-        .get("/profiles/check-handle")
-        .expect(400);
+      await request(app.getHttpServer()).get("/profiles/check-handle").expect(400);
     });
   });
 
   // GET /profiles/:handle
   describe("GET /profiles/:handle", () => {
     it("returns 200 and the public profile", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/profiles/janedoe")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/profiles/janedoe").expect(200);
 
       expect(res.body).toHaveProperty("handle", "janedoe");
-      expect(svc.getProfileByHandle).toHaveBeenCalledWith(
-        "janedoe",
-        expect.anything(),
-      );
+      expect(svc.getProfileByHandle).toHaveBeenCalledWith("janedoe", expect.anything());
     });
 
     it("returns 404 when the service throws NotFoundException", async () => {
@@ -218,10 +207,7 @@ describe("UsersController", () => {
         .send(payload)
         .expect(200);
 
-      expect(svc.updateExternalLinks).toHaveBeenCalledWith(
-        expect.anything(),
-        payload,
-      );
+      expect(svc.updateExternalLinks).toHaveBeenCalledWith(expect.anything(), payload);
     });
 
     it("returns 400 for a link with an invalid platform", async () => {
@@ -239,10 +225,7 @@ describe("UsersController", () => {
         url: `https://instagram.com/user${i}`,
       }));
 
-      await request(app.getHttpServer())
-        .put("/profiles/me/links")
-        .send({ links })
-        .expect(400);
+      await request(app.getHttpServer()).put("/profiles/me/links").send({ links }).expect(400);
     });
   });
 

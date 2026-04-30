@@ -50,8 +50,7 @@ export class UsersController {
   // GET /profiles/me
   @ApiOperation({
     summary: "Get my profile",
-    description:
-      "Returns the full profile of the authenticated user. No privacy gating.",
+    description: "Returns the full profile of the authenticated user. No privacy gating.",
   })
   @ApiResponse({ status: 200, description: "Full profile object." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -68,8 +67,7 @@ export class UsersController {
   })
   @ApiQuery({
     name: "handle",
-    description:
-      "The handle to check (3-30 chars, lowercase letters, numbers, underscores).",
+    description: "The handle to check (3-30 chars, lowercase letters, numbers, underscores).",
     example: "yahia_dev",
   })
   @ApiResponse({ status: 200, description: "{ available: boolean }" })
@@ -151,10 +149,7 @@ Rate Limited: Default (100 req/min).`,
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Patch("me")
-  updateProfile(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: UpdateProfileDto,
-  ) {
+  updateProfile(@CurrentUser("userId") userId: string, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(userId, dto);
   }
 
@@ -169,10 +164,7 @@ Rate Limited: Default (100 req/min).`,
   @ApiResponse({ status: 400, description: "Validation or SSRF error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Put("me/links")
-  updateLinks(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: UpdateExternalLinksDto,
-  ) {
+  updateLinks(@CurrentUser("userId") userId: string, @Body() dto: UpdateExternalLinksDto) {
     return this.usersService.updateExternalLinks(userId, dto);
   }
 

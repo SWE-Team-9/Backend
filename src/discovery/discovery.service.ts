@@ -68,10 +68,7 @@ export class DiscoveryService {
               user: {
                 deletedAt: null,
               },
-              OR: [
-                { handle: { search: normalized } },
-                { displayName: { search: normalized } },
-              ],
+              OR: [{ handle: { search: normalized } }, { displayName: { search: normalized } }],
             },
             select: {
               userId: true,
@@ -89,10 +86,7 @@ export class DiscoveryService {
               user: {
                 deletedAt: null,
               },
-              OR: [
-                { handle: { search: normalized } },
-                { displayName: { search: normalized } },
-              ],
+              OR: [{ handle: { search: normalized } }, { displayName: { search: normalized } }],
             },
           }),
         ])
@@ -138,8 +132,7 @@ export class DiscoveryService {
 
     const [users, usersTotalCount] = usersData;
     const tracksTotalCount = tracks.length > 0 ? Number(tracks[0].total_count) : 0;
-    const playlistsTotalCount =
-      playlists.length > 0 ? Number(playlists[0].total_count) : 0;
+    const playlistsTotalCount = playlists.length > 0 ? Number(playlists[0].total_count) : 0;
 
     // Transform raw query results to match expected API response shape
     const transformedTracks = tracks.map((t) => ({
@@ -215,9 +208,7 @@ export class DiscoveryService {
       LIMIT ${limit}
     `;
 
-    const uploaderIds = Array.from(
-      new Set(rawRows.map((row) => row.uploader_id)),
-    );
+    const uploaderIds = Array.from(new Set(rawRows.map((row) => row.uploader_id)));
 
     const uploaderProfiles = uploaderIds.length
       ? await this.prisma.userProfile.findMany({
@@ -230,9 +221,7 @@ export class DiscoveryService {
         })
       : [];
 
-    const profileMap = new Map(
-      uploaderProfiles.map((profile) => [profile.userId, profile]),
-    );
+    const profileMap = new Map(uploaderProfiles.map((profile) => [profile.userId, profile]));
 
     // Fetch user likes if userId provided
     const userLikeMap = new Map<string, boolean>();

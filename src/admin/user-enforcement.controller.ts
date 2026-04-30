@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
 import {
   ApiBody,
   ApiCookieAuth,
@@ -23,10 +15,10 @@ import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { UserEnforcementService } from "./user-enforcement.service";
 import {
-  WarnUserDto,
-  SuspendUserDto,
   BanUserDto,
   RestoreUserDto,
+  SuspendUserDto,
+  WarnUserDto,
 } from "./dto/user-enforcement.dto";
 
 @ApiTags("Admin - User Enforcement")
@@ -36,9 +28,7 @@ import {
 @Roles("ADMIN")
 @ThrottlePolicy(30, 60_000)
 export class UserEnforcementController {
-  constructor(
-    private readonly userEnforcementService: UserEnforcementService,
-  ) {}
+  constructor(private readonly userEnforcementService: UserEnforcementService) {}
 
   // POST /api/v1/admin/users/:userId/warn
   @ApiOperation({
@@ -101,8 +91,7 @@ export class UserEnforcementController {
   })
   @ApiResponse({
     status: 401,
-    description:
-      "Not authenticated — missing or expired `access_token` cookie. Re-login required.",
+    description: "Not authenticated — missing or expired `access_token` cookie. Re-login required.",
   })
   @ApiResponse({
     status: 403,
@@ -208,10 +197,7 @@ export class UserEnforcementController {
     schema: {
       example: {
         statusCode: 400,
-        message: [
-          "durationDays must be an integer number",
-          "durationDays must not be less than 1",
-        ],
+        message: ["durationDays must be an integer number", "durationDays must not be less than 1"],
         error: "Bad Request",
       },
     },
@@ -289,7 +275,8 @@ export class UserEnforcementController {
   })
   @ApiBody({ type: BanUserDto })
   @ApiCreatedResponse({
-    description: "User banned. Returns the moderation action and the number of tracks that were hidden.",
+    description:
+      "User banned. Returns the moderation action and the number of tracks that were hidden.",
     schema: {
       example: {
         action_id: "d5e6f7a8-c9d0-1e2f-a3b4-c5d6e7f8a9b0",
@@ -309,8 +296,7 @@ export class UserEnforcementController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Validation error — `reason` missing or shorter than 10 characters.",
+    description: "Validation error — `reason` missing or shorter than 10 characters.",
   })
   @ApiResponse({
     status: 401,
@@ -405,8 +391,7 @@ export class UserEnforcementController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Validation error — `reason` missing or shorter than 10 characters.",
+    description: "Validation error — `reason` missing or shorter than 10 characters.",
   })
   @ApiResponse({
     status: 401,
@@ -414,8 +399,7 @@ export class UserEnforcementController {
   })
   @ApiResponse({
     status: 403,
-    description:
-      "Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`.",
+    description: "Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`.",
   })
   @ApiResponse({
     status: 404,

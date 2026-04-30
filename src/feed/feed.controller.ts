@@ -1,10 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { FeedQueryDto } from "./dto/feed-query.dto";
@@ -27,11 +22,6 @@ export class FeedController {
     description: "Validation error for query params.",
   })
   getFeed(@CurrentUser("userId") userId: string, @Query() query: FeedQueryDto) {
-    return this.feedService.getFeed(
-      userId,
-      query.limit,
-      query.offset,
-      query.page,
-    );
+    return this.feedService.getFeed(userId, query.limit, query.offset, query.page);
   }
 }

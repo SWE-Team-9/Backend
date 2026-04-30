@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { NotificationEntityType, NotificationEventType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsQueryDto } from "./dto/notifications-query.dto";
@@ -124,8 +120,7 @@ export class NotificationsService {
         actorHandle: n.actor?.profile?.handle ?? null,
         actorAvatarUrl: n.actor?.profile?.avatarUrl ?? null,
         entityType: n.entityType.toLowerCase(),
-        entityId:
-          n.trackId ?? n.playlistId ?? n.commentId ?? n.messageId ?? null,
+        entityId: n.trackId ?? n.playlistId ?? n.commentId ?? n.messageId ?? null,
         isRead: n.readAt !== null,
         createdAt: n.createdAt,
       })),
@@ -162,9 +157,7 @@ export class NotificationsService {
       case "SUBSCRIPTION":
         return "Your subscription was updated";
       default:
-        return (
-          (meta?.["batchMessage"] as string) ?? "You have a new notification"
-        );
+        return (meta?.["batchMessage"] as string) ?? "You have a new notification";
     }
   }
 
@@ -263,9 +256,7 @@ export class NotificationsService {
       select: { likes: true, comments: true, follows: true, reposts: true },
     });
 
-    return (
-      prefs ?? { likes: true, comments: true, follows: true, reposts: true }
-    );
+    return prefs ?? { likes: true, comments: true, follows: true, reposts: true };
   }
 
   async updatePreferences(userId: string, dto: NotificationPreferencesDto) {
@@ -324,7 +315,7 @@ export class NotificationsService {
       select: { id: true, userId: true },
     });
 
-    if (!device || device.userId !== userId) {
+    if (device?.userId !== userId) {
       throw new NotFoundException({
         code: "DEVICE_NOT_FOUND",
         message: "Device not found.",

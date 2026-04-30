@@ -13,12 +13,7 @@ import { UserTracksController } from "./user-tracks.controller";
 @Module({
   imports: [PrismaModule, SubscriptionsModule],
   controllers: [InteractionsController, TracksController, UserTracksController],
-  providers: [
-    InteractionsService,
-    InteractionsGateway,
-    TracksService,
-    TranscodingService,
-  ],
+  providers: [InteractionsService, InteractionsGateway, TracksService, TranscodingService],
   exports: [InteractionsService, TracksService],
 })
 export class TracksModule {}

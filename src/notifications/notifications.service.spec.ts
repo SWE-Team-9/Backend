@@ -27,10 +27,7 @@ describe("NotificationsService", () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        NotificationsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [NotificationsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
@@ -41,7 +38,7 @@ describe("NotificationsService", () => {
   it("getNotifications: passes type filter to prisma as eventType", async () => {
     mockPrisma.notification.findMany.mockResolvedValueOnce([]);
     mockPrisma.notification.count.mockResolvedValueOnce(0);
-    await service.getNotifications("user-1", { type: "LIKE" as any });
+    await service.getNotifications("user-1", { type: "LIKE" });
     expect(mockPrisma.notification.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ eventType: "LIKE" }),
@@ -67,9 +64,7 @@ describe("NotificationsService", () => {
       id: "notif-1",
       recipientId: "other-user",
     });
-    await expect(service.markAsRead("user-1", "notif-1")).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(service.markAsRead("user-1", "notif-1")).rejects.toThrow(ForbiddenException);
   });
 
   // 4. markAllRead - calls updateMany with readAt:null filter + emits WS

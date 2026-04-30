@@ -29,10 +29,7 @@ export class PlayerService {
     private readonly config: ConfigService,
     private readonly storageService: StorageService,
   ) {
-    this.storageProvider = this.config.get<"local" | "s3">(
-      "storage.provider",
-      "local",
-    );
+    this.storageProvider = this.config.get<"local" | "s3">("storage.provider", "local");
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
@@ -54,10 +51,7 @@ export class PlayerService {
    */
   private async buildStreamUrl(storageKey: string): Promise<string> {
     if (this.storageService.isS3) {
-      return this.storageService.getPresignedUrl(
-        storageKey,
-        STREAM_URL_TTL_SECONDS,
-      );
+      return this.storageService.getPresignedUrl(storageKey, STREAM_URL_TTL_SECONDS);
     }
     return this.buildFileUrl(storageKey);
   }
@@ -91,10 +85,7 @@ export class PlayerService {
       });
     }
 
-    if (
-      track.visibility === TrackVisibility.PRIVATE &&
-      track.uploaderId !== userId
-    ) {
+    if (track.visibility === TrackVisibility.PRIVATE && track.uploaderId !== userId) {
       throw new ForbiddenException({
         code: "TRACK_ACCESS_DENIED",
         message: "This track is private.",
@@ -121,9 +112,7 @@ export class PlayerService {
       // For S3, expiresAt reflects the presigned URL TTL (real server-side expiry).
       // For local storage, the /uploads/tracks auth middleware re-validates the
       // access token on every request so there is no fixed expiry to advertise.
-      expiresAt: new Date(
-        Date.now() + STREAM_URL_TTL_SECONDS * 1000,
-      ).toISOString(),
+      expiresAt: new Date(Date.now() + STREAM_URL_TTL_SECONDS * 1000).toISOString(),
     };
   }
 
@@ -270,9 +259,7 @@ export class PlayerService {
       where: { userId, trackId: { in: trackIds } },
       select: { trackId: true, positionSeconds: true },
     });
-    const progressMap = new Map(
-      progressRecords.map((p) => [p.trackId, p.positionSeconds]),
-    );
+    const progressMap = new Map(progressRecords.map((p) => [p.trackId, p.positionSeconds]));
 
     return {
       page,
@@ -344,9 +331,7 @@ export class PlayerService {
           positionSeconds: progress?.positionSeconds ?? 0,
           durationSeconds:
             progress?.durationSeconds ??
-            (event.track.durationMs
-              ? Math.round(event.track.durationMs / 1000)
-              : 0),
+            (event.track.durationMs ? Math.round(event.track.durationMs / 1000) : 0),
           isCompleted: progress?.isCompleted ?? false,
         };
       }),
@@ -495,9 +480,7 @@ export class PlayerService {
     // For S3, use a public CDN/S3 URL (not presigned) since these are meant for all users.
     return {
       trackId,
-      previewUrl: previewFile
-        ? this.buildFileUrl(previewFile.storageKey)
-        : null,
+      previewUrl: previewFile ? this.buildFileUrl(previewFile.storageKey) : null,
       previewDurationSeconds: 30,
       accessState: "PREVIEW",
     };
@@ -554,9 +537,7 @@ export class PlayerService {
       trackId: track.id,
       title: track.title,
       artist:
-        track.uploader.profile?.displayName ??
-        track.uploader.profile?.handle ??
-        "Unknown Artist",
+        track.uploader.profile?.displayName ?? track.uploader.profile?.handle ?? "Unknown Artist",
       artistId: track.uploader.id,
       artistHandle: track.uploader.profile?.handle ?? null,
       artistAvatarUrl: track.uploader.profile?.avatarUrl ?? null,
@@ -573,9 +554,7 @@ export class PlayerService {
     switch (dto.contextType) {
       case "TRACK": {
         if (!dto.startTrackId) {
-          throw new BadRequestException(
-            "startTrackId is required for TRACK context",
-          );
+          throw new BadRequestException("startTrackId is required for TRACK context");
         }
         await this.findTrackOrFail(dto.startTrackId);
         trackIds = [dto.startTrackId];
@@ -584,9 +563,7 @@ export class PlayerService {
 
       case "PLAYLIST": {
         if (!dto.contextId) {
-          throw new BadRequestException(
-            "contextId (playlistId) is required for PLAYLIST context",
-          );
+          throw new BadRequestException("contextId (playlistId) is required for PLAYLIST context");
         }
         const playlist = await this.prisma.playlist.findFirst({
           where: { id: dto.contextId, deletedAt: null },
@@ -616,9 +593,7 @@ export class PlayerService {
 
       case "ARTIST": {
         if (!dto.contextId) {
-          throw new BadRequestException(
-            "contextId (artistUserId) is required for ARTIST context",
-          );
+          throw new BadRequestException("contextId (artistUserId) is required for ARTIST context");
         }
         const tracks = await this.prisma.track.findMany({
           where: {
@@ -637,9 +612,7 @@ export class PlayerService {
 
       case "CONTEXT_IDS": {
         if (!dto.trackIds?.length) {
-          throw new BadRequestException(
-            "trackIds is required for CONTEXT_IDS context",
-          );
+          throw new BadRequestException("trackIds is required for CONTEXT_IDS context");
         }
         trackIds = dto.trackIds;
         break;
@@ -647,9 +620,7 @@ export class PlayerService {
     }
 
     if (!trackIds.length) {
-      throw new BadRequestException(
-        "No playable tracks found for the given context",
-      );
+      throw new BadRequestException("No playable tracks found for the given context");
     }
 
     // Server-side shuffle
@@ -704,25 +675,17 @@ export class PlayerService {
       where: { userId },
     });
 
-    if (!session || !session.queueTrackIds.length) {
+    if (!session?.queueTrackIds.length) {
       throw new NotFoundException({
         code: "NO_QUEUE",
         message: "No queue loaded. Call POST /player/queue/load first.",
       });
     }
 
-    const {
-      queueTrackIds,
-      currentQueueIndex,
-      realTracksSinceLastAd,
-      repeatMode,
-    } = session;
+    const { queueTrackIds, currentQueueIndex, realTracksSinceLastAd, repeatMode } = session;
 
     // Inject ad every AD_EVERY_N_TRACKS real tracks
-    if (
-      realTracksSinceLastAd > 0 &&
-      realTracksSinceLastAd % this.AD_EVERY_N_TRACKS === 0
-    ) {
+    if (realTracksSinceLastAd > 0 && realTracksSinceLastAd % this.AD_EVERY_N_TRACKS === 0) {
       await this.prisma.playerSession.update({
         where: { userId },
         data: { realTracksSinceLastAd: 0 },
@@ -791,7 +754,7 @@ export class PlayerService {
       where: { userId },
     });
 
-    if (!session || !session.queueTrackIds.length) {
+    if (!session?.queueTrackIds.length) {
       throw new NotFoundException({
         code: "NO_QUEUE",
         message: "No queue loaded. Call POST /player/queue/load first.",
@@ -836,7 +799,7 @@ export class PlayerService {
       where: { userId },
     });
 
-    if (!session || !session.queueTrackIds.length) {
+    if (!session?.queueTrackIds.length) {
       return {
         queue: [],
         currentIndex: 0,
@@ -877,10 +840,7 @@ export class PlayerService {
         return {
           trackId: t.id,
           title: t.title,
-          artist:
-            t.uploader.profile?.displayName ??
-            t.uploader.profile?.handle ??
-            "Unknown Artist",
+          artist: t.uploader.profile?.displayName ?? t.uploader.profile?.handle ?? "Unknown Artist",
           artistId: t.uploader.id,
           artistHandle: t.uploader.profile?.handle ?? null,
           artistAvatarUrl: t.uploader.profile?.avatarUrl ?? null,
@@ -896,8 +856,7 @@ export class PlayerService {
       currentIndex: session.currentQueueIndex,
       queueLength: session.queueTrackIds.length,
       tracksUntilAd:
-        this.AD_EVERY_N_TRACKS -
-        (session.realTracksSinceLastAd % this.AD_EVERY_N_TRACKS),
+        this.AD_EVERY_N_TRACKS - (session.realTracksSinceLastAd % this.AD_EVERY_N_TRACKS),
       shuffle: session.shuffle,
       repeatMode: session.repeatMode,
     };
@@ -909,7 +868,7 @@ export class PlayerService {
       where: { userId },
     });
 
-    if (!session || !session.queueTrackIds.length) {
+    if (!session?.queueTrackIds.length) {
       throw new NotFoundException({
         code: "NO_QUEUE",
         message: "No queue loaded. Call POST /player/queue/load first.",

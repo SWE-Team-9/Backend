@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, HttpCode, Param, ParseUUIDPipe, Patch, UseGuards } from "@nestjs/common";
 import {
   ApiBody,
   ApiCookieAuth,
@@ -23,9 +15,9 @@ import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { ContentModerationService } from "./content-moderation.service";
 import {
-  ModerateTrackDto,
   ModerateCommentDto,
   ModeratePlaylistDto,
+  ModerateTrackDto,
 } from "./dto/content-moderation.dto";
 
 @ApiTags("Admin - Content Moderation")
@@ -35,9 +27,7 @@ import {
 @Roles("ADMIN", "MODERATOR")
 @ThrottlePolicy(30, 60_000)
 export class ContentModerationController {
-  constructor(
-    private readonly contentModerationService: ContentModerationService,
-  ) {}
+  constructor(private readonly contentModerationService: ContentModerationService) {}
 
   // PATCH /api/v1/admin/tracks/:id/moderation
   @ApiOperation({
@@ -168,11 +158,7 @@ export class ContentModerationController {
     @Param("id", ParseUUIDPipe) commentId: string,
     @Body() dto: ModerateCommentDto,
   ) {
-    return this.contentModerationService.moderateComment(
-      adminId,
-      commentId,
-      dto,
-    );
+    return this.contentModerationService.moderateComment(adminId, commentId, dto);
   }
 
   // PATCH /api/v1/admin/playlists/:id/moderation
@@ -238,10 +224,6 @@ export class ContentModerationController {
     @Param("id", ParseUUIDPipe) playlistId: string,
     @Body() dto: ModeratePlaylistDto,
   ) {
-    return this.contentModerationService.moderatePlaylist(
-      adminId,
-      playlistId,
-      dto,
-    );
+    return this.contentModerationService.moderatePlaylist(adminId, playlistId, dto);
   }
 }

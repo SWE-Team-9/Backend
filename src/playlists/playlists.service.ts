@@ -17,10 +17,10 @@ import {
   AddTrackToPlaylistDto,
   AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
+  GetPlaylistDetailsResponseDto,
   GetPlaylistEditResponseDto,
   GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
-  GetPlaylistDetailsResponseDto,
   GetRecentPlaylistsResponseDto,
   PlaylistPaginationQueryDto,
   PlaylistTracksQueryDto,
@@ -46,17 +46,11 @@ export class PlaylistsService {
   ) {}
 
   async create(userId: string, dto: CreatePlaylistDto) {
-    const visibility = dto.visibility;
+    const { visibility } = dto;
     const secretToken =
-      visibility === PlaylistVisibility.SECRET
-        ? randomBytes(24).toString("hex")
-        : null;
+      visibility === PlaylistVisibility.SECRET ? randomBytes(24).toString("hex") : null;
 
-    const uniqueTrackIds = this.validateTrackIdArray(
-      dto.trackIds,
-      "trackIds",
-      true,
-    );
+    const uniqueTrackIds = this.validateTrackIdArray(dto.trackIds, "trackIds", true);
 
     const tracks = await this.prisma.track.findMany({
       where: {
@@ -69,10 +63,7 @@ export class PlaylistsService {
     if (tracks.length !== uniqueTrackIds.length) {
       const foundIds = new Set(tracks.map((track) => track.id));
       const missingIds = uniqueTrackIds.filter((id) => !foundIds.has(id));
-      throw this.notFound(
-        "TRACK_NOT_FOUND",
-        `Track not found: ${missingIds.join(", ")}`,
-      );
+      throw this.notFound("TRACK_NOT_FOUND", `Track not found: ${missingIds.join(", ")}`);
     }
 
     let playlist: {
@@ -126,10 +117,7 @@ export class PlaylistsService {
     }
 
     if (!playlist) {
-      throw this.conflict(
-        "PLAYLIST_CREATE_FAILED",
-        "Unable to create playlist. Please retry.",
-      );
+      throw this.conflict("PLAYLIST_CREATE_FAILED", "Unable to create playlist. Please retry.");
     }
 
     this.logAudit("playlist.create", userId, playlist.id, {
@@ -198,9 +186,7 @@ export class PlaylistsService {
       .slice(0, 80);
   }
 
-  private async generateUniqueSecretToken(
-    excludePlaylistId?: string,
-  ): Promise<string> {
+  private async generateUniqueSecretToken(excludePlaylistId?: string): Promise<string> {
     for (let i = 0; i < 5; i += 1) {
       const candidate = randomUUID();
       const existing = await this.prisma.playlist.findFirst({
@@ -276,13 +262,9 @@ export class PlaylistsService {
     requesterUserId?: string,
     tracksQuery: PlaylistTracksQueryDto = {},
   ): Promise<GetPlaylistDetailsResponseDto> {
-    const shouldPaginate =
-      tracksQuery.limit !== undefined || tracksQuery.offset !== undefined;
+    const shouldPaginate = tracksQuery.limit !== undefined || tracksQuery.offset !== undefined;
     const tracksLimit = shouldPaginate
-      ? Math.min(
-          tracksQuery.limit ?? this.defaultTrackLimit,
-          this.maxTrackLimit,
-        )
+      ? Math.min(tracksQuery.limit ?? this.defaultTrackLimit, this.maxTrackLimit)
       : undefined;
     const tracksOffset = shouldPaginate ? (tracksQuery.offset ?? 0) : undefined;
 
@@ -355,10 +337,7 @@ export class PlaylistsService {
     return this.findOne(playlistId, requesterUserId, tracksQuery);
   }
 
-  async getEditDetails(
-    userId: string,
-    playlistId: string,
-  ): Promise<GetPlaylistEditResponseDto> {
+  async getEditDetails(userId: string, playlistId: string): Promise<GetPlaylistEditResponseDto> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         id: playlistId,
@@ -385,10 +364,7 @@ export class PlaylistsService {
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden(
-        "PLAYLIST_OWNER_REQUIRED",
-        "You can only edit your own playlists.",
-      );
+      throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only edit your own playlists.");
     }
 
     return {
@@ -399,9 +375,7 @@ export class PlaylistsService {
       slug: playlist.slug,
       coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
       type: playlist.type,
-      releaseDate: playlist.releaseDate
-        ? new Date(playlist.releaseDate as Date).toISOString()
-        : null,
+      releaseDate: playlist.releaseDate ? new Date(playlist.releaseDate).toISOString() : null,
       genreId: playlist.genreId,
       tags: playlist.tags ?? [],
     };
@@ -427,10 +401,7 @@ export class PlaylistsService {
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden(
-        "PLAYLIST_OWNER_REQUIRED",
-        "You can only update your own playlists.",
-      );
+      throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only update your own playlists.");
     }
 
     const data: Record<string, unknown> = {};
@@ -449,18 +420,13 @@ export class PlaylistsService {
 
     if (dto.visibility !== undefined) {
       const normalizedVisibility =
-        dto.visibility === "PRIVATE"
-          ? PlaylistVisibility.SECRET
-          : dto.visibility;
+        dto.visibility === "PRIVATE" ? PlaylistVisibility.SECRET : dto.visibility;
 
       data.visibility = normalizedVisibility;
 
       if (normalizedVisibility === PlaylistVisibility.PUBLIC) {
         data.secretToken = null;
-      } else if (
-        playlist.visibility !== PlaylistVisibility.SECRET ||
-        !playlist.secretToken
-      ) {
+      } else if (playlist.visibility !== PlaylistVisibility.SECRET || !playlist.secretToken) {
         data.secretToken = await this.generateUniqueSecretToken(playlist.id);
       }
     }
@@ -491,9 +457,7 @@ export class PlaylistsService {
     }
 
     if (dto.tags !== undefined) {
-      data.tags = Array.from(
-        new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean)),
-      );
+      data.tags = Array.from(new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean)));
     }
 
     if (Object.keys(data).length === 0) {
@@ -576,10 +540,7 @@ export class PlaylistsService {
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden(
-        "PLAYLIST_OWNER_REQUIRED",
-        "You can only edit your own playlists.",
-      );
+      throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only edit your own playlists.");
     }
 
     this.validateCoverUpload(file);
@@ -629,10 +590,7 @@ export class PlaylistsService {
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden(
-        "PLAYLIST_OWNER_REQUIRED",
-        "You can only delete your own playlists.",
-      );
+      throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only delete your own playlists.");
     }
 
     await this.prisma.playlist.update({
@@ -643,10 +601,7 @@ export class PlaylistsService {
     this.logAudit("playlist.delete", userId, playlist.id);
   }
 
-  async getRecentPlaylists(
-    userId: string,
-    limit = 10,
-  ): Promise<GetRecentPlaylistsResponseDto> {
+  async getRecentPlaylists(userId: string, limit = 10): Promise<GetRecentPlaylistsResponseDto> {
     const take = Math.min(Math.max(limit ?? 10, 1), 50);
 
     const recentPlaylists = await this.prisma.playEvent.groupBy({
@@ -701,16 +656,12 @@ export class PlaylistsService {
       },
     });
 
-    const playlistMap = new Map(
-      playlists.map((playlist) => [playlist.id, playlist]),
-    );
+    const playlistMap = new Map(playlists.map((playlist) => [playlist.id, playlist]));
 
     return {
       playlists: playlistIds
         .map((playlistId) => playlistMap.get(playlistId))
-        .filter((playlist): playlist is NonNullable<typeof playlist> =>
-          Boolean(playlist),
-        )
+        .filter((playlist): playlist is NonNullable<typeof playlist> => Boolean(playlist))
         .map((playlist) => ({
           playlistId: playlist.id,
           title: playlist.title,
@@ -723,10 +674,7 @@ export class PlaylistsService {
     };
   }
 
-  async likePlaylist(
-    userId: string,
-    playlistId: string,
-  ): Promise<{ message: string }> {
+  async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlistIdResult = await this.prisma.$transaction(async (tx) => {
       const playlist = await tx.playlist.findFirst({
         where: {
@@ -755,10 +703,7 @@ export class PlaylistsService {
       });
 
       if (existingLike) {
-        throw this.conflict(
-          "PLAYLIST_ALREADY_LIKED",
-          "Playlist already liked.",
-        );
+        throw this.conflict("PLAYLIST_ALREADY_LIKED", "Playlist already liked.");
       }
 
       try {
@@ -769,14 +714,8 @@ export class PlaylistsService {
           },
         });
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2002"
-        ) {
-          throw this.conflict(
-            "PLAYLIST_ALREADY_LIKED",
-            "Playlist already liked.",
-          );
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw this.conflict("PLAYLIST_ALREADY_LIKED", "Playlist already liked.");
         }
 
         throw error;
@@ -793,11 +732,8 @@ export class PlaylistsService {
   }
 
   private validateCoverUpload(file: Express.Multer.File): void {
-    if (!file || !file.buffer) {
-      throw this.badRequest(
-        "PLAYLIST_COVER_REQUIRED",
-        "Cover image file is required.",
-      );
+    if (!file?.buffer) {
+      throw this.badRequest("PLAYLIST_COVER_REQUIRED", "Cover image file is required.");
     }
 
     if (!file.mimetype?.startsWith("image/")) {
@@ -815,10 +751,7 @@ export class PlaylistsService {
     }
   }
 
-  async unlikePlaylist(
-    userId: string,
-    playlistId: string,
-  ): Promise<{ message: string }> {
+  async unlikePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         id: playlistId,
@@ -869,10 +802,7 @@ export class PlaylistsService {
       }
 
       if (playlist.ownerId !== userId) {
-        throw this.forbidden(
-          "PLAYLIST_OWNER_REQUIRED",
-          "You can only modify your own playlists.",
-        );
+        throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only modify your own playlists.");
       }
 
       const track = await tx.track.findFirst({
@@ -960,10 +890,7 @@ export class PlaylistsService {
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden(
-        "PLAYLIST_OWNER_REQUIRED",
-        "You can only modify your own playlists.",
-      );
+      throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only modify your own playlists.");
     }
 
     const playlistTrack = await this.prisma.playlistTrack.findUnique({
@@ -979,10 +906,7 @@ export class PlaylistsService {
     });
 
     if (!playlistTrack) {
-      throw this.notFound(
-        "PLAYLIST_TRACK_NOT_FOUND",
-        "Track is not in this playlist.",
-      );
+      throw this.notFound("PLAYLIST_TRACK_NOT_FOUND", "Track is not in this playlist.");
     }
 
     await this.prisma.$transaction([
@@ -1016,16 +940,8 @@ export class PlaylistsService {
     };
   }
 
-  async reorderTracks(
-    userId: string,
-    playlistId: string,
-    dto: ReorderPlaylistTracksDto,
-  ) {
-    const orderedTrackIds = this.validateTrackIdArray(
-      dto.orderedTrackIds,
-      "orderedTrackIds",
-      true,
-    );
+  async reorderTracks(userId: string, playlistId: string, dto: ReorderPlaylistTracksDto) {
+    const orderedTrackIds = this.validateTrackIdArray(dto.orderedTrackIds, "orderedTrackIds", true);
 
     const playlist = await this.prisma.playlist.findFirst({
       where: { id: playlistId, deletedAt: null },
@@ -1037,10 +953,7 @@ export class PlaylistsService {
     }
 
     if (playlist.ownerId !== userId) {
-      throw this.forbidden(
-        "PLAYLIST_OWNER_REQUIRED",
-        "You can only reorder your own playlists.",
-      );
+      throw this.forbidden("PLAYLIST_OWNER_REQUIRED", "You can only reorder your own playlists.");
     }
 
     const existing = await this.prisma.playlistTrack.findMany({
@@ -1145,9 +1058,7 @@ export class PlaylistsService {
     };
   }
 
-  async resolveSecret(
-    secretToken: string,
-  ): Promise<ResolveSecretPlaylistResponseDto> {
+  async resolveSecret(secretToken: string): Promise<ResolveSecretPlaylistResponseDto> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         secretToken,
@@ -1161,10 +1072,7 @@ export class PlaylistsService {
     });
 
     if (!playlist) {
-      throw this.notFound(
-        "PLAYLIST_SECRET_NOT_FOUND",
-        "Secret playlist not found.",
-      );
+      throw this.notFound("PLAYLIST_SECRET_NOT_FOUND", "Secret playlist not found.");
     }
 
     return {
@@ -1205,14 +1113,9 @@ export class PlaylistsService {
     }
 
     const embedBaseUrl = this.resolveEmbedBaseUrl();
-    const embedUrl = new URL(
-      `${embedBaseUrl.replace(/\/+$/, "")}/${playlist.id}`,
-    );
+    const embedUrl = new URL(`${embedBaseUrl.replace(/\/+$/, "")}/${playlist.id}`);
 
-    if (
-      playlist.visibility === PlaylistVisibility.SECRET &&
-      playlist.secretToken
-    ) {
+    if (playlist.visibility === PlaylistVisibility.SECRET && playlist.secretToken) {
       embedUrl.searchParams.set("token", playlist.secretToken);
     }
 
@@ -1252,17 +1155,11 @@ export class PlaylistsService {
     requireNonEmpty: boolean,
   ): string[] {
     if (!Array.isArray(trackIds)) {
-      throw this.badRequest(
-        "INVALID_TRACK_IDS",
-        `${fieldName} must be an array of track IDs.`,
-      );
+      throw this.badRequest("INVALID_TRACK_IDS", `${fieldName} must be an array of track IDs.`);
     }
 
     if (requireNonEmpty && trackIds.length === 0) {
-      throw this.badRequest(
-        "EMPTY_TRACK_IDS",
-        "Playlist must start with at least one track.",
-      );
+      throw this.badRequest("EMPTY_TRACK_IDS", "Playlist must start with at least one track.");
     }
 
     if (trackIds.length > this.maxPlaylistTracks) {

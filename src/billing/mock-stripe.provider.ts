@@ -113,9 +113,7 @@ export class MockStripeBillingProvider implements IBillingProvider {
     // TODO(RealStripe): stripe.customers.create({ email, name, metadata: { userId } })
     const customerId = mockId("cus");
     this.customers.set(params.userId, customerId);
-    this.logger.debug(
-      `[MOCK] Created customer ${customerId} for user ${params.userId}`,
-    );
+    this.logger.debug(`[MOCK] Created customer ${customerId} for user ${params.userId}`);
     return customerId;
   }
 
@@ -232,17 +230,13 @@ export class MockStripeBillingProvider implements IBillingProvider {
     );
   }
 
-  async resumeSubscription(params: {
-    providerSubscriptionId: string;
-  }): Promise<void> {
+  async resumeSubscription(params: { providerSubscriptionId: string }): Promise<void> {
     // TODO(RealStripe): stripe.subscriptions.update(id, { cancel_at_period_end: false })
     const sub = this.subscriptions.get(params.providerSubscriptionId);
     if (sub) {
       sub.cancelAtPeriodEnd = false;
     }
-    this.logger.debug(
-      `[MOCK] Resumed subscription ${params.providerSubscriptionId}`,
-    );
+    this.logger.debug(`[MOCK] Resumed subscription ${params.providerSubscriptionId}`);
   }
 
   async changePlan(params: {
@@ -272,9 +266,7 @@ export class MockStripeBillingProvider implements IBillingProvider {
     };
   }
 
-  async retrieveSubscription(
-    providerSubscriptionId: string,
-  ): Promise<ProviderSubscriptionResult> {
+  async retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionResult> {
     // TODO(RealStripe): stripe.subscriptions.retrieve(id, { expand: ['latest_invoice'] })
     const sub = this.subscriptions.get(providerSubscriptionId);
     const now = new Date();

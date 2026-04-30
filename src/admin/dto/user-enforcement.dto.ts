@@ -118,8 +118,7 @@ export class RestoreUserDto {
   reason!: string;
 
   @ApiPropertyOptional({
-    description:
-      "If true, restore all admin-hidden tracks and playlists belonging to the user.",
+    description: "If true, restore all admin-hidden tracks and playlists belonging to the user.",
     default: false,
   })
   @IsOptional()

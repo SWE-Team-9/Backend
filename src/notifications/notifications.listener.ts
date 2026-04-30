@@ -64,8 +64,7 @@ export class NotificationsListener {
 
     const key = `like:${event.ownerId}:${event.trackId}`;
     this.debounceNotification(key, this.DEBOUNCE_MS, async (count: number) => {
-      const message =
-        count > 1 ? `${count} new likes on your track` : undefined;
+      const message = count > 1 ? `${count} new likes on your track` : undefined;
 
       await this.notificationsService.createNotification({
         recipientId: event.ownerId,
@@ -136,41 +135,37 @@ export class NotificationsListener {
   async handleReportCreated(event: ReportCreatedEvent): Promise<void> {
     const key = `report:${event.targetType}:${event.reportId}`;
 
-    this.debounceNotification(
-      key,
-      this.REPORT_DEBOUNCE_MS,
-      async (count: number) => {
-        // Notify all ADMIN + MODERATOR users
-        const admins = await this.prisma.user.findMany({
-          where: {
-            systemRole: { in: ["ADMIN", "MODERATOR"] },
-            deletedAt: null,
-          },
-          select: { id: true },
-        });
+    this.debounceNotification(key, this.REPORT_DEBOUNCE_MS, async (count: number) => {
+      // Notify all ADMIN + MODERATOR users
+      const admins = await this.prisma.user.findMany({
+        where: {
+          systemRole: { in: ["ADMIN", "MODERATOR"] },
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
 
-        const message =
-          count >= this.BATCH_THRESHOLD
-            ? `${count} new reports for ${event.targetType.toLowerCase()} '${event.targetTitle ?? "content"}'`
-            : `New report: ${event.category} on ${event.targetType.toLowerCase()} '${event.targetTitle ?? "content"}'`;
+      const message =
+        count >= this.BATCH_THRESHOLD
+          ? `${count} new reports for ${event.targetType.toLowerCase()} '${event.targetTitle ?? "content"}'`
+          : `New report: ${event.category} on ${event.targetType.toLowerCase()} '${event.targetTitle ?? "content"}'`;
 
-        await Promise.all(
-          admins.map((admin) =>
-            this.notificationsService.createNotification({
-              recipientId: admin.id,
-              actorId: event.reporterId,
-              entityType: "USER",
-              eventType: "REPORT_RESOLVED",
-              metadata: {
-                batchMessage: message,
-                count,
-                reportId: event.reportId,
-              },
-            }),
-          ),
-        );
-      },
-    );
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationsService.createNotification({
+            recipientId: admin.id,
+            actorId: event.reporterId,
+            entityType: "USER",
+            eventType: "REPORT_RESOLVED",
+            metadata: {
+              batchMessage: message,
+              count,
+              reportId: event.reportId,
+            },
+          }),
+        ),
+      );
+    });
   }
 
   // ─── Debounce helper ─────────────────────────────────────────────────────────
@@ -209,8 +204,6 @@ export class NotificationsListener {
       where: { userId },
       select: { likes: true, comments: true, follows: true, reposts: true },
     });
-    return (
-      prefs ?? { likes: true, comments: true, follows: true, reposts: true }
-    );
+    return prefs ?? { likes: true, comments: true, follows: true, reposts: true };
   }
 }

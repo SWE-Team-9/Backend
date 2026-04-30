@@ -1,0 +1,13 @@
+node_modules
+dist
+coverage
+build
+.eslintrc.js
+jest.config.js
+nest-cli.json
+tsconfig.build.json
+tsconfig.json
+migrations
+prisma
+uploads
+.git

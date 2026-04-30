@@ -36,26 +36,26 @@ import {
   AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
   DeletePlaylistParamsDto,
+  GetMyPlaylistsResponseDto,
+  GetPlaylistDetailsParamsDto,
+  GetPlaylistDetailsResponseDto,
   GetPlaylistEditResponseDto,
   GetPlaylistEmbedCodeParamsDto,
   GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
-  GetMyPlaylistsResponseDto,
-  GetPlaylistDetailsResponseDto,
-  GetPlaylistDetailsParamsDto,
   GetRecentPlaylistsResponseDto,
-  PlaylistTracksQueryDto,
+  LikePlaylistResponseDto,
   PlaylistPaginationQueryDto,
+  PlaylistTracksQueryDto,
   RemoveTrackFromPlaylistParamsDto,
   RemoveTrackFromPlaylistResponseDto,
   ReorderPlaylistTracksDto,
   ResolveSecretPlaylistParamsDto,
   ResolveSecretPlaylistResponseDto,
+  UnlikePlaylistResponseDto,
   UpdatePlaylistDto,
   UpdatePlaylistResponseDto,
   UploadPlaylistCoverResponseDto,
-  LikePlaylistResponseDto,
-  UnlikePlaylistResponseDto,
 } from "./dto";
 
 @Controller("playlists")
@@ -93,10 +93,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ThrottlePolicy(15, 60_000)
-  create(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: CreatePlaylistDto,
-  ) {
+  create(@CurrentUser("userId") userId: string, @Body() dto: CreatePlaylistDto) {
     return this.playlistsService.create(userId, dto);
   }
 
@@ -105,8 +102,8 @@ export class PlaylistsController {
     summary: "Get my playlists",
     description: "Returns playlists created by the authenticated user.",
   })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
   @ApiResponse({
     status: 200,
     description: "Playlists fetched successfully.",
@@ -145,8 +142,7 @@ export class PlaylistsController {
   )
   @ApiOperation({
     summary: "Resolve secret playlist access",
-    description:
-      "Allows access to a private/secret playlist via an unguessable tokenized link.",
+    description: "Allows access to a private/secret playlist via an unguessable tokenized link.",
   })
   @ApiParam({
     name: "secretToken",
@@ -174,8 +170,7 @@ export class PlaylistsController {
   @Get("recent")
   @ApiOperation({
     summary: "Get recently played playlists",
-    description:
-      "Returns the most recently played playlists for the authenticated user.",
+    description: "Returns the most recently played playlists for the authenticated user.",
   })
   @ApiQuery({ name: "limit", required: false, example: 10 })
   @ApiResponse({
@@ -186,12 +181,12 @@ export class PlaylistsController {
       example: {
         playlists: [
           {
-            playlistId: 'pl_101',
-            title: 'Late Night Drive',
-            coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            playlistId: "pl_101",
+            title: "Late Night Drive",
+            coverImageUrl: "https://cdn.example.com/playlists/pl_101.jpg",
             owner: {
-              id: 'usr_1',
-              display_name: 'Ahmed Hassan',
+              id: "usr_1",
+              display_name: "Ahmed Hassan",
             },
           },
         ],
@@ -211,8 +206,7 @@ export class PlaylistsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: "Like playlist",
-    description:
-      "Adds the playlist to the authenticated user's liked playlists.",
+    description: "Adds the playlist to the authenticated user's liked playlists.",
   })
   @ApiParam({
     name: "playlistId",
@@ -237,8 +231,7 @@ export class PlaylistsController {
   @Delete(":playlistId/like")
   @ApiOperation({
     summary: "Unlike playlist",
-    description:
-      "Removes the playlist from the authenticated user's liked playlists.",
+    description: "Removes the playlist from the authenticated user's liked playlists.",
   })
   @ApiParam({
     name: "playlistId",
@@ -270,8 +263,7 @@ export class PlaylistsController {
   )
   @ApiOperation({
     summary: "Get playlist embed code",
-    description:
-      "Returns a simple iframe embed code for externally sharing a playlist.",
+    description: "Returns a simple iframe embed code for externally sharing a playlist.",
   })
   @ApiParam({
     name: "playlistId",
@@ -285,8 +277,7 @@ export class PlaylistsController {
     schema: {
       example: {
         playlistId: "pl_101",
-        embedCode:
-          '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+        embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
       },
     },
   })
@@ -315,8 +306,7 @@ export class PlaylistsController {
   )
   @ApiOperation({
     summary: "Get playlist edit data",
-    description:
-      "Returns owner-only editable playlist metadata for the edit screen.",
+    description: "Returns owner-only editable playlist metadata for the edit screen.",
   })
   @ApiParam({
     name: "playlistId",
@@ -329,16 +319,16 @@ export class PlaylistsController {
     type: GetPlaylistEditResponseDto,
     schema: {
       example: {
-        playlistId: 'pl_101',
-        title: 'Late Night Drive',
-        description: 'My favorite chill tracks',
-        visibility: 'PUBLIC',
-        slug: 'late-night-drive',
-        coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
-        type: 'PLAYLIST',
-        releaseDate: '2026-03-01',
+        playlistId: "pl_101",
+        title: "Late Night Drive",
+        description: "My favorite chill tracks",
+        visibility: "PUBLIC",
+        slug: "late-night-drive",
+        coverImageUrl: "https://cdn.example.com/playlists/pl_101.jpg",
+        type: "PLAYLIST",
+        releaseDate: "2026-03-01",
         genreId: 12,
-        tags: ['chill', 'night-drive'],
+        tags: ["chill", "night-drive"],
       },
     },
   })
@@ -367,20 +357,14 @@ export class PlaylistsController {
           return;
         }
 
-        cb(
-          new BadRequestException(
-            "Only image uploads are allowed for playlist covers.",
-          ) as unknown as Error,
-          false,
-        );
+        cb(new BadRequestException("Only image uploads are allowed for playlist covers."), false);
       },
     }),
   )
   @ApiConsumes("multipart/form-data")
   @ApiOperation({
     summary: "Upload playlist cover image",
-    description:
-      "Uploads a new playlist cover image to shared storage and saves the public URL.",
+    description: "Uploads a new playlist cover image to shared storage and saves the public URL.",
   })
   @ApiParam({
     name: "playlistId",
@@ -406,8 +390,8 @@ export class PlaylistsController {
     type: UploadPlaylistCoverResponseDto,
     schema: {
       example: {
-        message: 'Playlist cover uploaded successfully',
-        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+        message: "Playlist cover uploaded successfully",
+        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
       },
     },
   })
@@ -517,11 +501,7 @@ export class PlaylistsController {
     @CurrentUser("userId") userId: string,
     @Param() params: RemoveTrackFromPlaylistParamsDto,
   ) {
-    return this.playlistsService.removeTrack(
-      userId,
-      params.playlistId,
-      params.trackId,
-    );
+    return this.playlistsService.removeTrack(userId, params.playlistId, params.trackId);
   }
 
   @Patch(":playlistId/reorder")
@@ -641,8 +621,7 @@ export class PlaylistsController {
   )
   @ApiOperation({
     summary: "Update playlist",
-    description:
-      "Updates playlist title, description, or visibility. Owner only.",
+    description: "Updates playlist title, description, or visibility. Owner only.",
   })
   @ApiParam({
     name: "playlistId",
@@ -730,10 +709,7 @@ export class PlaylistsController {
   })
   @ApiResponse({ status: 404, description: "Playlist not found." })
   @ThrottlePolicy(20, 60_000)
-  remove(
-    @CurrentUser("userId") userId: string,
-    @Param() params: DeletePlaylistParamsDto,
-  ) {
+  remove(@CurrentUser("userId") userId: string, @Param() params: DeletePlaylistParamsDto) {
     this.playlistsService.remove(userId, params.playlistId);
   }
 }

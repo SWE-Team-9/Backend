@@ -72,8 +72,7 @@ export class SubscriptionsController {
 
   // ─── GET /subscriptions/offline/:trackId ──────────────────────────────────
   @ApiOperation({
-    summary:
-      "[STEP 1] Check offline entitlement & get track metadata (PRO / GO+ only)",
+    summary: "[STEP 1] Check offline entitlement & get track metadata (PRO / GO+ only)",
     description:
       "**Offline Listening — Step 1 of 2**\n\n" +
       "Call this first to:\n" +
@@ -105,10 +104,8 @@ export class SubscriptionsController {
         artist: "DJ Nova",
         handle: "djnova",
         durationMs: 214000,
-        coverArtUrl:
-          "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/covers/abc.jpg",
-        downloadUrl:
-          "(signed S3 URL — do not use directly; call /stream instead)",
+        coverArtUrl: "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/covers/abc.jpg",
+        downloadUrl: "(signed S3 URL — do not use directly; call /stream instead)",
         expiresAt: "2026-04-28T14:00:00.000Z",
         expiresInSeconds: 900,
         planCode: "PRO",
@@ -147,8 +144,7 @@ export class SubscriptionsController {
 
   // ─── GET /subscriptions/offline/:trackId/stream ───────────────────────────
   @ApiOperation({
-    summary:
-      "[STEP 2] Download audio bytes for offline caching (PRO / GO+ only)",
+    summary: "[STEP 2] Download audio bytes for offline caching (PRO / GO+ only)",
     description:
       "**Offline Listening — Step 2 of 2**\n\n" +
       "Downloads the raw audio bytes for a track and returns them as `audio/mpeg`. " +
@@ -258,13 +254,11 @@ export class SubscriptionsController {
             trialEligible: false,
             amountPaidCents: 999,
             currentPeriodEnd: "2026-05-28T00:00:00.000Z",
-            checkoutUrl:
-              "https://mock-checkout.example.com/pay?session=cs_mock_...",
+            checkoutUrl: "https://mock-checkout.example.com/pay?session=cs_mock_...",
           },
         },
         stripe: {
-          summary:
-            "Real Stripe response (frontend must redirect to checkoutUrl)",
+          summary: "Real Stripe response (frontend must redirect to checkoutUrl)",
           value: {
             checkoutSessionId: "cs_test_a1B2c3D4",
             checkoutUrl: "https://checkout.stripe.com/pay/cs_test_a1B2c3D4",
@@ -283,8 +277,7 @@ export class SubscriptionsController {
             effectiveAt: "2026-05-28T00:00:00.000Z",
             currentPlan: "GO_PLUS",
             newPlan: "PRO",
-            message:
-              "Your plan will downgrade from GO+ to Artist Pro on 2026-05-28.",
+            message: "Your plan will downgrade from GO+ to Artist Pro on 2026-05-28.",
           },
         },
       },
@@ -292,8 +285,7 @@ export class SubscriptionsController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Invalid plan code, or `SUBSCRIPTION_ALREADY_ACTIVE` (already on that plan).",
+    description: "Invalid plan code, or `SUBSCRIPTION_ALREADY_ACTIVE` (already on that plan).",
   })
   @ApiResponse({
     status: 403,
@@ -303,18 +295,14 @@ export class SubscriptionsController {
   @Post("checkout")
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  async checkout(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: CheckoutDto,
-  ) {
+  async checkout(@CurrentUser("userId") userId: string, @Body() dto: CheckoutDto) {
     return this.subscriptionsService.checkout(userId, dto);
   }
 
   // ─── POST /subscriptions/subscribe (backward-compat alias) ────────────────
   @ApiOperation({
     summary: "Subscribe to PRO or GO_PLUS (legacy alias for /checkout)",
-    description:
-      "Kept for backward compatibility. Delegates to the checkout flow.",
+    description: "Kept for backward compatibility. Delegates to the checkout flow.",
   })
   @ApiBody({ type: SubscribeDto })
   @ApiResponse({ status: 200, description: "Subscription activated." })
@@ -322,10 +310,7 @@ export class SubscriptionsController {
   @Post("subscribe")
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  async subscribe(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: SubscribeDto,
-  ) {
+  async subscribe(@CurrentUser("userId") userId: string, @Body() dto: SubscribeDto) {
     return this.subscriptionsService.subscribe(userId, dto);
   }
 
@@ -400,8 +385,7 @@ export class SubscriptionsController {
   // ─── POST /subscriptions/resume ───────────────────────────────────────────
   @ApiOperation({
     summary: "Resume a subscription that is scheduled to cancel",
-    description:
-      "Lifts the cancel_at_period_end flag. Requires an active subscription.",
+    description: "Lifts the cancel_at_period_end flag. Requires an active subscription.",
   })
   @ApiResponse({ status: 200, description: "Subscription resumed." })
   @ApiResponse({ status: 404, description: "No active subscription found." })
@@ -419,8 +403,7 @@ export class SubscriptionsController {
   // ─── POST /subscriptions/change-plan ──────────────────────────────────────
   @ApiOperation({
     summary: "Change the active subscription plan",
-    description:
-      "Switches between PRO and GO+. To downgrade to FREE, cancel instead.",
+    description: "Switches between PRO and GO+. To downgrade to FREE, cancel instead.",
   })
   @ApiBody({ type: ChangePlanDto })
   @ApiResponse({ status: 200, description: "Plan changed." })
@@ -431,10 +414,7 @@ export class SubscriptionsController {
   @Post("change-plan")
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  async changePlan(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: ChangePlanDto,
-  ) {
+  async changePlan(@CurrentUser("userId") userId: string, @Body() dto: ChangePlanDto) {
     return this.subscriptionsService.changePlan(userId, dto);
   }
 
@@ -500,15 +480,8 @@ export class SubscriptionsController {
   @Public()
   @Post("webhook")
   @HttpCode(HttpStatus.OK)
-  async stripeWebhook(
-    @Req() req: Request,
-    @Headers("stripe-signature") signature: string,
-  ) {
-    const rawBody: Buffer =
-      (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body));
-    return this.subscriptionsService.handleStripeWebhook(
-      rawBody,
-      signature ?? "",
-    );
+  async stripeWebhook(@Req() req: Request, @Headers("stripe-signature") signature: string) {
+    const rawBody: Buffer = (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body));
+    return this.subscriptionsService.handleStripeWebhook(rawBody, signature ?? "");
   }
 }

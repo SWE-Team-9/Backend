@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsOptional,
-  MaxLength,
-  IsIn,
-} from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from "class-validator";
 
 /**
  * OAuth2 Authorization Request DTO (RFC 6749)

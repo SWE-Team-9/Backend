@@ -27,11 +27,7 @@ import { PageSettingsController } from "./controllers/page-settings.controller";
     SocialModule,
     TracksModule,
   ],
-  controllers: [
-    AppBootstrapController,
-    PageProfileController,
-    PageSettingsController,
-  ],
+  controllers: [AppBootstrapController, PageProfileController, PageSettingsController],
   providers: [BffService],
 })
 export class BffModule {}
