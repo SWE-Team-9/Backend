@@ -516,14 +516,36 @@ export class TracksController {
       "Updates one or more metadata fields for a track. Only the track owner can update. " +
       "All fields are optional - only provided fields are changed. " +
       "Changing the title automatically regenerates the slug. " +
-      "Tags are replaced entirely (not merged) when provided.",
+      "Tags are replaced entirely (not merged) when provided. " +
+      "An optional cover art image can also be uploaded in the same request.",
   })
   @ApiParam({
     name: "trackId",
     description: "Track UUID",
     example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   })
-  @ApiBody({ type: UpdateTrackDto })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", maxLength: 100, example: "New Title" },
+        genre: { type: "string", example: "Pop" },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          example: ["summer", "hit"],
+        },
+        releaseDate: { type: "string", format: "date", example: "2026-03-01" },
+        description: { type: "string", maxLength: 5000 },
+        coverArt: {
+          type: "string",
+          format: "binary",
+          description: "Optional cover art image (JPEG, PNG, or WebP)",
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: "Updated track details returned.",
@@ -579,12 +601,27 @@ export class TracksController {
     },
   })
   @Put(":trackId")
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+  @UseInterceptors(
+    FileFieldsInterceptor([{ name: "coverArt", maxCount: 1 }], UPLOAD_OPTIONS),
+  )
   async updateTrack(
     @Param("trackId", ParseUUIDPipe) trackId: string,
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateTrackDto,
+    @UploadedFiles()
+    files: {
+      coverArt?: Express.Multer.File[];
+    },
   ) {
-    return this.tracksService.updateTrack(trackId, userId, dto);
+    const coverArt = files?.coverArt?.[0];
+    return this.tracksService.updateTrack(trackId, userId, dto, coverArt);
   }
 
   // ─── Endpoint 5: DELETE /tracks/:trackId - Soft-delete track ──────────
