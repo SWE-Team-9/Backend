@@ -77,6 +77,17 @@ describe("DiscoveryService", () => {
         },
       ];
 
+      const mockUsersRaw = [
+        {
+          user_id: "user-1",
+          handle: "testuser",
+          display_name: "Test User",
+          avatar_url: "https://example.com/avatar.jpg",
+          bio: "A test user",
+          total_count: BigInt(1),
+        },
+      ];
+
       const mockPlaylists = [
         {
           id: "playlist-1",
@@ -92,9 +103,8 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce(mockUsersRaw)
         .mockResolvedValueOnce(mockPlaylists);
-      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockUsers as any);
-      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(1);
 
       const result = await service.search(query);
 
@@ -134,9 +144,8 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(0);
 
       const result = await service.search("nonexistent");
 
@@ -158,14 +167,47 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(0);
 
       await service.search("  multiple   words  ");
-
-      // Verify $queryRaw was called for tsvector search
+      // Verify $queryRaw was called for tsvector/search
       expect((prisma.$queryRaw as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("should match partial user input (e.g. 'mo' -> 'Mohammed')", async () => {
+      const partial = "mo";
+
+      const mockTracks: any[] = [];
+      const mockPlaylists: any[] = [];
+      const mockUsersRaw = [
+        {
+          user_id: "user-xyz",
+          handle: "mohammed",
+          display_name: "Mohammed",
+          avatar_url: null,
+          bio: null,
+          total_count: BigInt(1),
+        },
+      ];
+
+      jest
+        .spyOn(prisma, "$queryRaw" as any)
+        .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce(mockUsersRaw)
+        .mockResolvedValueOnce(mockPlaylists);
+
+      const result = await service.search(partial);
+
+      expect(result.data.users).toEqual([
+        {
+          userId: "user-xyz",
+          handle: "mohammed",
+          displayName: "Mohammed",
+          avatarUrl: null,
+          bio: null,
+        },
+      ]);
     });
   });
 
