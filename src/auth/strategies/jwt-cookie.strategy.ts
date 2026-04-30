@@ -58,7 +58,7 @@ export class JwtCookieStrategy extends PassportStrategy(
         select: {
           revokedAt: true,
           expiresAt: true,
-          user: { select: { accountStatus: true } },
+          user: { select: { accountStatus: true, systemRole: true } },
         },
       });
 
@@ -76,7 +76,7 @@ export class JwtCookieStrategy extends PassportStrategy(
 
       return {
         userId: payload.sub,
-        role: payload.role,
+        role: session.user.systemRole,
         accountStatus: session.user.accountStatus,
       };
     }
@@ -87,7 +87,7 @@ export class JwtCookieStrategy extends PassportStrategy(
     // at most, so the revocation gap is bounded.
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { accountStatus: true },
+      select: { accountStatus: true, systemRole: true },
     });
 
     // Bug fix: deleted users must be rejected (previously defaulted to "ACTIVE").
@@ -95,7 +95,7 @@ export class JwtCookieStrategy extends PassportStrategy(
 
     return {
       userId: payload.sub,
-      role: payload.role,
+      role: user.systemRole,
       accountStatus: user.accountStatus,
     };
   }
