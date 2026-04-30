@@ -254,7 +254,7 @@ export class AdminUsersController {
   // GET /api/v1/admin/stats/overview
   @ApiOperation({
     summary: "Get platform overview stats",
-    description: `Returns high-level platform analytics for the admin dashboard. Admin only.
+    description: `Returns high-level platform analytics for the admin/moderator dashboard. ADMIN and MODERATOR roles allowed.
 
 **Key metrics returned:**
 - **Total Users** with artist/listener breakdown and artist-to-listener ratio
@@ -310,11 +310,15 @@ Results are cached for 5 minutes.`,
     },
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({
+    status: 403,
+    description: "Forbidden — ADMIN or MODERATOR role required.",
+  })
   @ApiResponse({
     status: 429,
     description: "Rate limit exceeded — max 30 requests per 60 seconds.",
   })
+  @Roles("ADMIN", "MODERATOR")
   @Get("stats/overview")
   getOverviewStats() {
     return this.adminUsersService.getOverviewStats();
