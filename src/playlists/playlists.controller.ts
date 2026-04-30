@@ -33,6 +33,7 @@ import { PlaylistsService } from "./playlists.service";
 import { PlaylistRecentQueryDto } from "./dto/playlist-recent-query.dto";
 import {
   AddTrackToPlaylistDto,
+  AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
   DeletePlaylistParamsDto,
   GetPlaylistEditResponseDto,
@@ -46,12 +47,15 @@ import {
   PlaylistTracksQueryDto,
   PlaylistPaginationQueryDto,
   RemoveTrackFromPlaylistParamsDto,
+  RemoveTrackFromPlaylistResponseDto,
   ReorderPlaylistTracksDto,
   ResolveSecretPlaylistParamsDto,
   ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
   UpdatePlaylistResponseDto,
   UploadPlaylistCoverResponseDto,
+  LikePlaylistResponseDto,
+  UnlikePlaylistResponseDto,
 } from "./dto";
 
 @Controller("playlists")
@@ -218,11 +222,7 @@ export class PlaylistsController {
   @ApiResponse({
     status: 201,
     description: "Playlist liked successfully.",
-    schema: {
-      example: {
-        message: "Playlist liked successfully",
-      },
-    },
+    type: LikePlaylistResponseDto,
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Playlist not found." })
@@ -248,11 +248,7 @@ export class PlaylistsController {
   @ApiResponse({
     status: 200,
     description: "Playlist unliked successfully.",
-    schema: {
-      example: {
-        message: "Playlist unliked successfully",
-      },
-    },
+    type: UnlikePlaylistResponseDto,
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Playlist not found." })
@@ -454,22 +450,11 @@ export class PlaylistsController {
   })
   @ApiBody({
     type: AddTrackToPlaylistDto,
-    schema: {
-      example: {
-        trackId: "trk_123",
-      },
-    },
   })
   @ApiResponse({
     status: 201,
     description: "Track added to playlist successfully.",
-    schema: {
-      example: {
-        message: "Track added to playlist successfully",
-        playlistId: "pl_101",
-        trackId: "trk_123",
-      },
-    },
+    type: AddTrackToPlaylistResponseDto,
   })
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -516,11 +501,7 @@ export class PlaylistsController {
   @ApiResponse({
     status: 200,
     description: "Track removed from playlist successfully.",
-    schema: {
-      example: {
-        message: "Track removed from playlist successfully",
-      },
-    },
+    type: RemoveTrackFromPlaylistResponseDto,
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({
