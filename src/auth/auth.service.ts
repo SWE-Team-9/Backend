@@ -895,9 +895,10 @@ export class AuthService {
       include: {
         profile: true,
         subscriptions: {
-          where: { status: "ACTIVE" },
+          where: { status: { in: ["ACTIVE", "TRIALING"] } },
+          orderBy: { createdAt: "desc" },
           select: {
-            plan: { select: { name: true, tier: true } },
+            plan: { select: { name: true, tier: true, code: true } },
           },
           take: 1,
         },
@@ -923,7 +924,7 @@ export class AuthService {
       account_type: user.profile?.accountType ?? "LISTENER",
       system_role: user.systemRole,
       is_verified: user.isVerified,
-      subscription_tier: activeSub?.plan?.name ?? "FREE",
+      subscription_tier: activeSub?.plan?.code ?? "FREE",
       created_at: user.createdAt,
     };
   }
