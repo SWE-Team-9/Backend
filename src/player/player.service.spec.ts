@@ -7,6 +7,7 @@ import { ConfigService } from "@nestjs/config";
 import { TrackStatus } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../common/storage/storage.service";
 import { PlayerService } from "./player.service";
 
 describe("PlayerService", () => {
@@ -24,6 +25,9 @@ describe("PlayerService", () => {
       upsert: jest.fn(),
       findUnique: jest.fn(),
       findMany: jest.fn(),
+    },
+    playlist: {
+      findFirst: jest.fn(),
     },
     playEvent: {
       create: jest.fn(),
@@ -61,14 +65,29 @@ describe("PlayerService", () => {
     }),
   } as unknown as ConfigService;
 
+  /** StorageService mock — S3 mode (isS3 = true), presigned URL returned. */
+  const storageMockS3 = {
+    isS3: true,
+    getPresignedUrl: jest
+      .fn()
+      .mockResolvedValue("https://s3.example.com/presigned?token=abc"),
+  } as unknown as StorageService;
+
+  /** StorageService mock — local mode (isS3 = false). */
+  const storageMockLocal = {
+    isS3: false,
+    getPresignedUrl: jest.fn(),
+  } as unknown as StorageService;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PlayerService(prismaMock, configMock);
+    // Default: S3 storage mode
+    service = new PlayerService(prismaMock, configMock, storageMockS3);
   });
 
   // ── getPlaybackSource ─────────────────────────────────────────────────
   describe("getPlaybackSource", () => {
-    it("should return stream URL for a playable track", async () => {
+    it("should return a presigned S3 stream URL for a playable track", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
         finishedTrack,
       );
@@ -79,11 +98,52 @@ describe("PlayerService", () => {
       const result = await service.getPlaybackSource("user-uuid", "track-uuid");
 
       expect(result.trackId).toBe("track-uuid");
+      // S3 mode → presigned URL from StorageService
       expect(result.streamUrl).toBe(
-        "https://test-bucket.s3.eu-north-1.amazonaws.com/audio/trk_123.mp3",
+        "https://s3.example.com/presigned?token=abc",
+      );
+      expect(storageMockS3.getPresignedUrl).toHaveBeenCalledWith(
+        "audio/trk_123.mp3",
+        3600,
       );
       expect(result.accessState).toBe("PLAYABLE");
       expect(result.expiresAt).toBeDefined();
+    });
+
+    it("should return a local file URL for a playable track in local storage mode", async () => {
+      // Use a local-mode config so buildFileUrl returns the local URL
+      const localConfigMock = {
+        get: jest.fn((key: string, fallback?: any) => {
+          const map: Record<string, any> = {
+            "storage.provider": "local",
+            "storage.localUploadUrl": "http://localhost:3000/uploads",
+            "storage.s3Bucket": "test-bucket",
+            "storage.s3Region": "eu-north-1",
+            "storage.cdnUrl": "",
+          };
+          return map[key] ?? fallback;
+        }),
+      } as unknown as ConfigService;
+
+      // Rebuild service with local storage mock and local config
+      const localService = new PlayerService(prismaMock, localConfigMock, storageMockLocal);
+
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
+      (prismaMock.trackFile.findFirst as jest.Mock).mockResolvedValue({
+        storageKey: "audio/trk_123.mp3",
+      });
+
+      const result = await localService.getPlaybackSource("user-uuid", "track-uuid");
+
+      expect(result.trackId).toBe("track-uuid");
+      // Local mode → direct URL (protected by the auth middleware in main.ts)
+      expect(result.streamUrl).toBe(
+        "http://localhost:3000/uploads/audio/trk_123.mp3",
+      );
+      expect(storageMockLocal.getPresignedUrl).not.toHaveBeenCalled();
+      expect(result.accessState).toBe("PLAYABLE");
     });
 
     it("should throw ConflictException when track is processing", async () => {
@@ -262,6 +322,29 @@ describe("PlayerService", () => {
         message: "Play event recorded successfully",
         trackId: "track-uuid",
         playCount: 4821,
+      });
+    });
+
+    it("should record playlist context when provided", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
+      (prismaMock.playlist.findFirst as jest.Mock).mockResolvedValue({
+        id: "pl-1",
+      });
+      (prismaMock.playEvent.create as jest.Mock).mockResolvedValue({});
+      (prismaMock.playEvent.count as jest.Mock).mockResolvedValue(1);
+
+      await service.markPlayed("user-uuid", "track-uuid", "pl-1");
+
+      expect(prismaMock.playEvent.create).toHaveBeenCalledWith({
+        data: {
+          userId: "user-uuid",
+          trackId: "track-uuid",
+          playlistId: "pl-1",
+          source: "TRACK",
+          deviceType: "WEB",
+        },
       });
     });
 
@@ -521,7 +604,7 @@ describe("PlayerService", () => {
 
   // ── getTrackPreview ───────────────────────────────────────────────────
   describe("getTrackPreview", () => {
-    it("should return preview URL", async () => {
+    it("should return a proper URL (not raw storage key) for S3 preview file", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
         finishedTrack,
       );
@@ -533,10 +616,51 @@ describe("PlayerService", () => {
 
       expect(result).toEqual({
         trackId: "track-uuid",
-        previewUrl: "previews/trk_555.mp3",
+        // buildFileUrl() for S3 (no CDN) → https://<bucket>.s3.<region>.amazonaws.com/<key>
+        previewUrl:
+          "https://test-bucket.s3.eu-north-1.amazonaws.com/previews/trk_555.mp3",
         previewDurationSeconds: 30,
         accessState: "PREVIEW",
       });
+      // Preview clips are @Public(), so StorageService.getPresignedUrl is NOT called —
+      // the preview URL is a plain public URL (or CDN URL when configured).
+      expect(storageMockS3.getPresignedUrl).not.toHaveBeenCalled();
+    });
+
+    it("should return a local URL (not raw storage key) in local storage mode", async () => {
+      const localConfigMock = {
+        get: jest.fn((key: string, fallback?: any) => {
+          const map: Record<string, any> = {
+            "storage.provider": "local",
+            "storage.localUploadUrl": "http://localhost:3000/uploads",
+            "storage.s3Bucket": "",
+            "storage.s3Region": "us-east-1",
+            "storage.cdnUrl": "",
+          };
+          return map[key] ?? fallback;
+        }),
+      } as unknown as ConfigService;
+
+      const localService = new PlayerService(
+        prismaMock,
+        localConfigMock,
+        storageMockLocal,
+      );
+
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
+        finishedTrack,
+      );
+      (prismaMock.trackFile.findFirst as jest.Mock).mockResolvedValue({
+        storageKey: "previews/trk_555.mp3",
+      });
+
+      const result = await localService.getTrackPreview("track-uuid");
+
+      // buildFileUrl for local mode → localUploadUrl/storageKey
+      expect(result.previewUrl).toBe(
+        "http://localhost:3000/uploads/previews/trk_555.mp3",
+      );
+      expect(storageMockLocal.getPresignedUrl).not.toHaveBeenCalled();
     });
 
     it("should return null previewUrl when no preview file", async () => {
@@ -558,4 +682,3 @@ describe("PlayerService", () => {
       );
     });
   });
-});

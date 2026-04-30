@@ -31,6 +31,29 @@ function buildServiceMock() {
       visibility: "PRIVATE",
       message: "Access granted via secret token",
     }),
+    getRecentPlaylists: jest.fn().mockResolvedValue({ playlists: [] }),
+    getEditDetails: jest.fn().mockResolvedValue({
+      playlistId: "pl_101",
+      title: "Late Night Drive",
+      description: "chill tracks",
+      visibility: "PUBLIC",
+      slug: "late-night-drive",
+      coverImageUrl: null,
+      type: "PLAYLIST",
+      releaseDate: null,
+      genreId: null,
+      tags: [],
+    }),
+    uploadCover: jest.fn().mockResolvedValue({
+      message: "Playlist cover uploaded successfully",
+      coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+    }),
+    likePlaylist: jest.fn().mockResolvedValue({
+      message: "Playlist liked successfully",
+    }),
+    unlikePlaylist: jest.fn().mockResolvedValue({
+      message: "Playlist unliked successfully",
+    }),
     getEmbedCode: jest.fn().mockResolvedValue({
       playlistId: "pl_101",
       embedCode:
@@ -169,13 +192,72 @@ describe("PlaylistsController", () => {
     });
   });
 
+  describe("GET /playlists/recent", () => {
+    it("returns recently played playlists", async () => {
+      await request(app.getHttpServer())
+        .get("/playlists/recent?limit=5")
+        .expect(200);
+
+      expect(service.getRecentPlaylists).toHaveBeenCalledWith("usr_1", 5);
+    });
+  });
+
+  describe("GET /playlists/:playlistId/edit", () => {
+    it("returns owner edit payload", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/playlists/pl_101/edit")
+        .expect(200);
+
+      expect(service.getEditDetails).toHaveBeenCalledWith("usr_1", "pl_101");
+      expect(res.body).toHaveProperty("slug", "late-night-drive");
+    });
+  });
+
+  describe("POST /playlists/:playlistId/cover", () => {
+    it("uploads playlist cover image", async () => {
+      const res = await request(app.getHttpServer())
+        .post("/playlists/pl_101/cover")
+        .attach("file", Buffer.from([0xff, 0xd8, 0xff]), {
+          filename: "cover.jpg",
+          contentType: "image/jpeg",
+        })
+        .expect(200);
+
+      expect(service.uploadCover).toHaveBeenCalled();
+      expect(res.body).toHaveProperty(
+        "message",
+        "Playlist cover uploaded successfully",
+      );
+    });
+  });
+
+  describe("POST /playlists/:playlistId/like", () => {
+    it("likes playlist", async () => {
+      await request(app.getHttpServer())
+        .post("/playlists/pl_101/like")
+        .expect(201);
+
+      expect(service.likePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
+    });
+  });
+
+  describe("DELETE /playlists/:playlistId/like", () => {
+    it("unlikes playlist", async () => {
+      await request(app.getHttpServer())
+        .delete("/playlists/pl_101/like")
+        .expect(200);
+
+      expect(service.unlikePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
+    });
+  });
+
   describe("GET /playlists/:playlistId/embed", () => {
     it("returns embed code", async () => {
       await request(app.getHttpServer())
         .get("/playlists/pl_101/embed")
         .expect(200);
 
-      expect(service.getEmbedCode).toHaveBeenCalledWith("usr_1", "pl_101");
+      expect(service.getEmbedCode).toHaveBeenCalledWith("usr_1", "pl_101", {});
     });
   });
 
@@ -240,7 +322,7 @@ describe("PlaylistsController", () => {
   describe("GET /playlists/:playlistId", () => {
     it("returns playlist details", async () => {
       await request(app.getHttpServer()).get("/playlists/pl_101").expect(200);
-      expect(service.getDetails).toHaveBeenCalledWith("pl_101", "usr_1");
+      expect(service.getDetails).toHaveBeenCalledWith("pl_101", "usr_1", {});
     });
   });
 

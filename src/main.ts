@@ -1,11 +1,15 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { SocketIoAdapter } from "./common/adapters/socket-io.adapter";
+import { ConfigService } from "@nestjs/config";
+import * as jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import * as path from "path";
 import { AppModule } from "./app.module";
 import { GlobalHttpExceptionFilter } from "./common/filters/global-http-exception.filter";
+import { PrismaService } from "./prisma/prisma.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -145,11 +149,111 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // ── Local static file serving ────────────────────────────────────────────────
-  // Serves uploaded images from /uploads directory when using local storage.
+  // Serves uploaded images and audio from /uploads when using local storage.
   // Placed before CORS so paths remain /uploads/... (not wrapped in global prefix).
+  //
+  // SECURITY: Audio track files are private content — they must only be served
+  // to authenticated users. Public image assets (avatars, cover art) can remain
+  // unauthenticated since they are intended to be publicly visible.
   if (process.env.STORAGE_PROVIDER !== "s3") {
     const uploadDir = path.resolve(process.env.LOCAL_UPLOAD_DIR ?? "./uploads");
-    app.use("/uploads", require("express").static(uploadDir));
+
+    // Retrieve config values from the NestJS DI container so we reuse the same
+    // JWT settings as the strategy (avoids duplicating env variable names).
+    const configService = app.get(ConfigService);
+    const prismaService = app.get(PrismaService);
+    const jwtSecret =
+      configService.get<string>("security.jwtSecret") ??
+      process.env.JWT_SECRET ??
+      "";
+    const jwtIssuer =
+      configService.get<string>("security.jwtIssuer") ?? "spotly-api";
+    const jwtAudience =
+      configService.get<string>("security.jwtAudience") ?? "spotly-client";
+
+    // Public image assets — avatars and cover art are not sensitive.
+    app.use(
+      "/uploads/avatar",
+      require("express").static(path.join(uploadDir, "avatar")),
+    );
+    app.use(
+      "/uploads/cover",
+      require("express").static(path.join(uploadDir, "cover")),
+    );
+
+    // Public preview clips — short 30-second clips intentionally accessible to all
+    // users (free-tier preview). No auth required; these are not full tracks.
+    app.use(
+      "/uploads/previews",
+      require("express").static(path.join(uploadDir, "previews")),
+    );
+
+    // Protected audio assets — require a valid, non-revoked JWT.
+    // Note: cookieParser() is registered above so req.cookies is available here.
+    app.use("/uploads/tracks", async (req: any, res: any, next: any) => {
+      // Extract token from httpOnly cookie (browser) or Authorization header
+      // (non-browser clients such as mobile apps).
+      const token: string | undefined =
+        req.cookies?.access_token ??
+        req.headers?.authorization?.replace(/^Bearer\s+/i, "");
+
+      if (!token) {
+        return res.status(401).json({
+          statusCode: 401,
+          code: "NOT_AUTHENTICATED",
+          message: "Authentication is required to stream audio.",
+        });
+      }
+
+      let payload: any;
+      try {
+        payload = jwt.verify(token, jwtSecret, {
+          issuer: jwtIssuer,
+          audience: jwtAudience,
+        });
+      } catch {
+        return res.status(401).json({
+          statusCode: 401,
+          code: "NOT_AUTHENTICATED",
+          message: "Invalid or expired token.",
+        });
+      }
+
+      // If the token carries a session ID (jti), verify the session is still
+      // active in the database. This enforces immediate revocation after logout.
+      if (payload?.jti) {
+        try {
+          const session = await prismaService.userSession.findUnique({
+            where: { id: payload.jti },
+            select: { revokedAt: true, expiresAt: true },
+          });
+          if (
+            !session ||
+            session.revokedAt !== null ||
+            session.expiresAt < new Date()
+          ) {
+            return res.status(401).json({
+              statusCode: 401,
+              code: "SESSION_REVOKED",
+              message: "Session has been revoked. Please log in again.",
+            });
+          }
+        } catch {
+          // Treat DB errors conservatively — deny access rather than fail open.
+          return res.status(503).json({
+            statusCode: 503,
+            code: "SERVICE_UNAVAILABLE",
+            message: "Unable to verify session. Please try again.",
+          });
+        }
+      }
+
+      next();
+    });
+    app.use(
+      "/uploads/tracks",
+      require("express").static(path.join(uploadDir, "tracks")),
+    );
   }
 
   // ── CORS ─────────────────────────────────────────────────────────────────────
@@ -244,6 +348,11 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api/docs", app, document);
   }
+
+  // Use a single shared socket.io Server for all gateways so multiple
+  // @WebSocketGateway decorators don't each spin up their own Server on the
+  // same HTTP port (which causes upgrade-event conflicts and silent failures).
+  app.useWebSocketAdapter(new SocketIoAdapter(app));
 
   await app.listen(port);
 

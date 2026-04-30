@@ -333,11 +333,8 @@ export class AuthService {
       });
     }
 
-    // Create tokens and session
-    const accessToken = this.tokenService.signAccessToken(
-      user.id,
-      user.systemRole,
-    );
+    // Create refresh token + session FIRST so sessionId can be embedded in the access token (jti).
+    // This enables server-side access token revocation: the JWT validate() checks the session status.
     const { raw: refreshToken, hash: refreshTokenHash } =
       this.tokenService.createRefreshToken();
 
@@ -348,6 +345,13 @@ export class AuthService {
       userAgent,
       rememberMe: dto.remember_me,
     });
+
+    // Sign the access token with jti = sessionId so the strategy can revoke it immediately on logout.
+    const accessToken = this.tokenService.signAccessToken(
+      user.id,
+      user.systemRole,
+      sessionId,
+    );
 
     // Update last login time
     await this.prisma.user.update({
@@ -466,20 +470,23 @@ export class AuthService {
       }
     }
 
-    // Create tokens and session
-    const accessToken = this.tokenService.signAccessToken(
-      user.id,
-      user.systemRole ?? "USER",
-    );
+    // Create refresh token + session FIRST so sessionId can be embedded in the access token.
     const { raw: refreshToken, hash: refreshTokenHash } =
       this.tokenService.createRefreshToken();
 
-    await this.sessionService.createSession({
+    const googleSessionId = await this.sessionService.createSession({
       userId: user.id,
       refreshTokenHash,
       ipAddress: ip,
       userAgent,
     });
+
+    // Sign access token with jti = sessionId for server-side revocation support.
+    const accessToken = this.tokenService.signAccessToken(
+      user.id,
+      user.systemRole ?? "USER",
+      googleSessionId,
+    );
 
     // Update last login time
     await this.prisma.user.update({
@@ -542,10 +549,11 @@ export class AuthService {
       newHash,
     );
 
-    // Sign a new access token
+    // Sign a new access token embedding the new session ID as jti.
     const accessToken = this.tokenService.signAccessToken(
       session.user.id,
       session.user.systemRole,
+      newSessionId,
     );
 
     return {

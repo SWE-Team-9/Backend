@@ -201,6 +201,46 @@ describe("ReportsService", () => {
     });
   });
 
+  // ─── createAppeal ────────────────────────────────────────────────────────────
+
+  describe("createAppeal", () => {
+    it("throws NotFoundException when report does not exist", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.createAppeal("missing-report", "user-1", {
+          reportId: "missing-report",
+          message: "I disagree with this report.",
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("creates an appeal when report exists", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1" });
+      const createdAppeal = {
+        id: "appeal-1",
+        reportId: "r1",
+        userId: "user-1",
+        message: "I disagree with this report.",
+      };
+      mockPrisma.appeal.create.mockResolvedValueOnce(createdAppeal);
+
+      const result = await service.createAppeal("r1", "user-1", {
+        reportId: "r1",
+        message: "I disagree with this report.",
+      });
+
+      expect(mockPrisma.appeal.create).toHaveBeenCalledWith({
+        data: {
+          reportId: "r1",
+          userId: "user-1",
+          message: "I disagree with this report.",
+        },
+      });
+      expect(result).toEqual(createdAppeal);
+    });
+  });
+
   // ─── getReportById ────────────────────────────────────────────────────────────
 
   describe("getReportById", () => {
@@ -253,6 +293,24 @@ describe("ReportsService", () => {
           status: ReportStatus.RESOLVED,
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it("throws INVALID_TRANSITION when attempting to move a RESOLVED report to another state", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.RESOLVED,
+      });
+
+      await expect(
+        service.updateReport("r1", "admin-1", {
+          status: ReportStatus.UNDER_REVIEW,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: "INVALID_TRANSITION",
+        },
+      });
+      expect(mockPrisma.report.update).not.toHaveBeenCalled();
     });
 
     it("sets resolvedAt and resolvedBy when status is RESOLVED", async () => {
@@ -320,6 +378,24 @@ describe("ReportsService", () => {
   // ─── bulkUpdateReports ────────────────────────────────────────────────────────
 
   describe("bulkUpdateReports", () => {
+    it("throws INVALID_TRANSITION when any selected report is already RESOLVED", async () => {
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        { id: "r2" },
+      ]);
+
+      await expect(
+        service.bulkUpdateReports("admin-1", {
+          reportIds: ["r1", "r2", "r3"],
+          status: ReportStatus.UNDER_REVIEW,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: "INVALID_TRANSITION",
+        },
+      });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it("updates multiple reports in a transaction", async () => {
       mockPrisma.$transaction.mockResolvedValueOnce([
         { count: 3 },

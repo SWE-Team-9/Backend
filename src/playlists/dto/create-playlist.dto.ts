@@ -1,5 +1,6 @@
 import { Transform } from "class-transformer";
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsNotEmpty,
@@ -56,6 +57,7 @@ export class CreatePlaylistDto {
     type: [String],
   })
   @IsArray()
+  @ArrayMaxSize(5000)
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
   trackIds!: string[];

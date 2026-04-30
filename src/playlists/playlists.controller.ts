@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,29 +10,40 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
 
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
 import { PlaylistsService } from "./playlists.service";
+import { PlaylistRecentQueryDto } from "./dto/playlist-recent-query.dto";
 import {
   AddTrackToPlaylistDto,
   CreatePlaylistDto,
   DeletePlaylistParamsDto,
+  GetPlaylistEditResponseDto,
   GetPlaylistEmbedCodeParamsDto,
+  GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
   GetMyPlaylistsResponseDto,
   GetPlaylistDetailsResponseDto,
   GetPlaylistDetailsParamsDto,
+  GetRecentPlaylistsResponseDto,
+  PlaylistTracksQueryDto,
   PlaylistPaginationQueryDto,
   RemoveTrackFromPlaylistParamsDto,
   ReorderPlaylistTracksDto,
@@ -39,6 +51,7 @@ import {
   ResolveSecretPlaylistResponseDto,
   UpdatePlaylistDto,
   UpdatePlaylistResponseDto,
+  UploadPlaylistCoverResponseDto,
 } from "./dto";
 
 @Controller("playlists")
@@ -75,6 +88,7 @@ export class PlaylistsController {
   })
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ThrottlePolicy(15, 60_000)
   create(
     @CurrentUser("userId") userId: string,
     @Body() dto: CreatePlaylistDto,
@@ -87,6 +101,8 @@ export class PlaylistsController {
     summary: "Get my playlists",
     description: "Returns playlists created by the authenticated user.",
   })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({
     status: 200,
     description: "Playlists fetched successfully.",
@@ -151,6 +167,103 @@ export class PlaylistsController {
     return this.playlistsService.resolveSecret(params.secretToken);
   }
 
+  @Get("recent")
+  @ApiOperation({
+    summary: "Get recently played playlists",
+    description:
+      "Returns the most recently played playlists for the authenticated user.",
+  })
+  @ApiQuery({ name: "limit", required: false, example: 10 })
+  @ApiResponse({
+    status: 200,
+    description: "Recently played playlists fetched successfully.",
+    type: GetRecentPlaylistsResponseDto,
+    schema: {
+      example: {
+        playlists: [
+          {
+            playlistId: 'pl_101',
+            title: 'Late Night Drive',
+            coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            owner: {
+              id: 'usr_1',
+              display_name: 'Ahmed Hassan',
+            },
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ThrottlePolicy(60, 60_000)
+  getRecentPlaylists(
+    @CurrentUser("userId") userId: string,
+    @Query() query: PlaylistRecentQueryDto,
+  ) {
+    return this.playlistsService.getRecentPlaylists(userId, query.limit);
+  }
+
+  @Post(":playlistId/like")
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: "Like playlist",
+    description:
+      "Adds the playlist to the authenticated user's liked playlists.",
+  })
+  @ApiParam({
+    name: "playlistId",
+    description: "Playlist identifier",
+    example: "pl_101",
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Playlist liked successfully.",
+    schema: {
+      example: {
+        message: "Playlist liked successfully",
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(60, 60_000)
+  likePlaylist(
+    @CurrentUser("userId") userId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
+  ) {
+    return this.playlistsService.likePlaylist(userId, params.playlistId);
+  }
+
+  @Delete(":playlistId/like")
+  @ApiOperation({
+    summary: "Unlike playlist",
+    description:
+      "Removes the playlist from the authenticated user's liked playlists.",
+  })
+  @ApiParam({
+    name: "playlistId",
+    description: "Playlist identifier",
+    example: "pl_101",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Playlist unliked successfully.",
+    schema: {
+      example: {
+        message: "Playlist unliked successfully",
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(60, 60_000)
+  unlikePlaylist(
+    @CurrentUser("userId") userId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
+  ) {
+    return this.playlistsService.unlikePlaylist(userId, params.playlistId);
+  }
+
   @Get(":playlistId/embed")
   @UsePipes(
     new ValidationPipe({
@@ -187,11 +300,139 @@ export class PlaylistsController {
     description: "Only playlist owner can access embed code.",
   })
   @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(30, 60_000)
   getEmbedCode(
     @CurrentUser("userId") userId: string,
     @Param() params: GetPlaylistEmbedCodeParamsDto,
+    @Query() query: GetPlaylistEmbedCodeQueryDto,
   ) {
-    return this.playlistsService.getEmbedCode(userId, params.playlistId);
+    return this.playlistsService.getEmbedCode(userId, params.playlistId, query);
+  }
+
+  @Get(":playlistId/edit")
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  @ApiOperation({
+    summary: "Get playlist edit data",
+    description:
+      "Returns owner-only editable playlist metadata for the edit screen.",
+  })
+  @ApiParam({
+    name: "playlistId",
+    description: "Playlist identifier",
+    example: "pl_101",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Editable playlist metadata fetched successfully.",
+    type: GetPlaylistEditResponseDto,
+    schema: {
+      example: {
+        playlistId: 'pl_101',
+        title: 'Late Night Drive',
+        description: 'My favorite chill tracks',
+        visibility: 'PUBLIC',
+        slug: 'late-night-drive',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+        type: 'PLAYLIST',
+        releaseDate: '2026-03-01',
+        genreId: 12,
+        tags: ['chill', 'night-drive'],
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({
+    status: 403,
+    description: "Only playlist owner can access edit mode.",
+  })
+  @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(30, 60_000)
+  getEditDetails(
+    @CurrentUser("userId") userId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
+  ) {
+    return this.playlistsService.getEditDetails(userId, params.playlistId);
+  }
+
+  @Post(":playlistId/cover")
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (file.mimetype?.startsWith("image/")) {
+          cb(null, true);
+          return;
+        }
+
+        cb(
+          new BadRequestException(
+            "Only image uploads are allowed for playlist covers.",
+          ) as unknown as Error,
+          false,
+        );
+      },
+    }),
+  )
+  @ApiConsumes("multipart/form-data")
+  @ApiOperation({
+    summary: "Upload playlist cover image",
+    description:
+      "Uploads a new playlist cover image to shared storage and saves the public URL.",
+  })
+  @ApiParam({
+    name: "playlistId",
+    description: "Playlist identifier",
+    example: "pl_101",
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["file"],
+      properties: {
+        file: {
+          type: "string",
+          format: "binary",
+          description: "Image file (max 5 MB)",
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Playlist cover uploaded successfully.",
+    type: UploadPlaylistCoverResponseDto,
+    schema: {
+      example: {
+        message: 'Playlist cover uploaded successfully',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101/cover.jpg',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid image file or file too large.",
+  })
+  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({
+    status: 403,
+    description: "Only playlist owner can upload a cover image.",
+  })
+  @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(20, 60_000)
+  uploadCover(
+    @CurrentUser("userId") userId: string,
+    @Param() params: GetPlaylistDetailsParamsDto,
+    @UploadedFile()
+    file: Express.Multer.File,
+  ) {
+    return this.playlistsService.uploadCover(userId, params.playlistId, file);
   }
 
   @Post(":playlistId/tracks")
@@ -241,6 +482,7 @@ export class PlaylistsController {
     status: 409,
     description: "Track already exists in playlist.",
   })
+  @ThrottlePolicy(60, 60_000)
   addTrack(
     @CurrentUser("userId") userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
@@ -289,6 +531,7 @@ export class PlaylistsController {
     status: 404,
     description: "Playlist not found or track is not in playlist.",
   })
+  @ThrottlePolicy(60, 60_000)
   removeTrack(
     @CurrentUser("userId") userId: string,
     @Param() params: RemoveTrackFromPlaylistParamsDto,
@@ -347,6 +590,7 @@ export class PlaylistsController {
     status: 404,
     description: "Playlist not found or some track IDs are invalid.",
   })
+  @ThrottlePolicy(40, 60_000)
   reorderTracks(
     @CurrentUser("userId") userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
@@ -401,8 +645,9 @@ export class PlaylistsController {
   getDetails(
     @CurrentUser("userId") userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
+    @Query() query: PlaylistTracksQueryDto,
   ) {
-    return this.playlistsService.getDetails(params.playlistId, userId);
+    return this.playlistsService.getDetails(params.playlistId, userId, query);
   }
 
   @Patch(":playlistId")
@@ -469,6 +714,7 @@ export class PlaylistsController {
     description: "Only playlist owner can update this playlist.",
   })
   @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(30, 60_000)
   update(
     @CurrentUser("userId") userId: string,
     @Param() params: GetPlaylistDetailsParamsDto,
@@ -502,6 +748,7 @@ export class PlaylistsController {
     description: "Only playlist owner can delete this playlist.",
   })
   @ApiResponse({ status: 404, description: "Playlist not found." })
+  @ThrottlePolicy(20, 60_000)
   remove(
     @CurrentUser("userId") userId: string,
     @Param() params: DeletePlaylistParamsDto,
