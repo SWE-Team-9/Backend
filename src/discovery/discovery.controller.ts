@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { DiscoveryService } from "./discovery.service";
+import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ResolveQueryDto } from "./dto/resolve-query.dto";
 import { SearchQueryDto } from "./dto/search-query.dto";
 import { TrendingQueryDto } from "./dto/trending-query.dto";
@@ -43,8 +44,11 @@ export class DiscoveryController {
     status: 400,
     description: "Validation error for query params.",
   })
-  trending(@Query() query: TrendingQueryDto) {
-    return this.discoveryService.trending(query.limit, query.windowDays);
+  trending(
+    @Query() query: TrendingQueryDto,
+    @CurrentUser("userId") userId?: string,
+  ) {
+    return this.discoveryService.trending(query.limit, query.windowDays, userId);
   }
 
   @Get("resolve")
