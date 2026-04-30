@@ -66,9 +66,7 @@ function buildTrackRow(overrides: any = {}) {
 function buildPrismaMock() {
   const $transaction = jest
     .fn()
-    .mockImplementation((fn: any) =>
-      typeof fn === "function" ? fn(prismaMock) : Promise.all(fn),
-    );
+    .mockImplementation((fn: any) => (typeof fn === "function" ? fn(prismaMock) : Promise.all(fn)));
 
   const prismaMock: any = {
     $transaction,
@@ -123,9 +121,7 @@ function buildConfigMock() {
   };
 
   return {
-    get: jest.fn(
-      (key: string, defaultValue?: any) => configMap[key] ?? defaultValue,
-    ),
+    get: jest.fn((key: string, defaultValue?: any) => configMap[key] ?? defaultValue),
   };
 }
 
@@ -158,9 +154,7 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
 
     // Mock fs to avoid actual file writes
     jest.spyOn(require("fs").promises, "mkdir").mockResolvedValue(undefined);
-    jest
-      .spyOn(require("fs").promises, "writeFile")
-      .mockResolvedValue(undefined);
+    jest.spyOn(require("fs").promises, "writeFile").mockResolvedValue(undefined);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [TracksController, UserTracksController],
@@ -274,9 +268,7 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
   // ─── 2. Get Track Status -> poll loop ─────────────────────────────────
   describe("GET /tracks/:trackId/status", () => {
     it("should return track status", async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/tracks/${TRACK_ID}/status`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/tracks/${TRACK_ID}/status`).expect(200);
 
       expect(res.body).toHaveProperty("trackId", TRACK_ID);
       expect(res.body).toHaveProperty("status");
@@ -286,13 +278,9 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
   // ─── 3. Get Track Details ─────────────────────────────────────────────
   describe("GET /tracks/:trackId", () => {
     it("should return full track details", async () => {
-      prisma.track.findFirst.mockResolvedValue(
-        buildTrackRow({ status: TrackStatus.FINISHED }),
-      );
+      prisma.track.findFirst.mockResolvedValue(buildTrackRow({ status: TrackStatus.FINISHED }));
 
-      const res = await request(app.getHttpServer())
-        .get(`/tracks/${TRACK_ID}`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/tracks/${TRACK_ID}`).expect(200);
 
       expect(res.body).toHaveProperty("trackId", TRACK_ID);
       expect(res.body).toHaveProperty("title", "Test Track");
@@ -381,9 +369,7 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
       prisma.track.update.mockResolvedValue({});
       prisma.trackFile.findMany.mockResolvedValue([]);
 
-      await request(app.getHttpServer())
-        .delete(`/tracks/${TRACK_ID}`)
-        .expect(204);
+      await request(app.getHttpServer()).delete(`/tracks/${TRACK_ID}`).expect(204);
     });
   });
 
@@ -420,9 +406,7 @@ describe("Tracks E2E (upload + CRUD flow)", () => {
     it("should 404 for invalid secret token", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
 
-      await request(app.getHttpServer())
-        .get("/tracks/secret/badtoken")
-        .expect(404);
+      await request(app.getHttpServer()).get("/tracks/secret/badtoken").expect(404);
     });
   });
 });

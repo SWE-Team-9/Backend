@@ -24,12 +24,7 @@ export class DiscoveryController {
     description: "Validation error for query params.",
   })
   search(@Query() query: SearchQueryDto) {
-    return this.discoveryService.search(
-      query.q,
-      query.type,
-      query.page,
-      query.limit,
-    );
+    return this.discoveryService.search(query.q, query.type, query.page, query.limit);
   }
 
   @Get("trending")
@@ -44,10 +39,7 @@ export class DiscoveryController {
     status: 400,
     description: "Validation error for query params.",
   })
-  trending(
-    @Query() query: TrendingQueryDto,
-    @CurrentUser("userId") userId?: string,
-  ) {
+  trending(@Query() query: TrendingQueryDto, @CurrentUser("userId") userId?: string) {
     return this.discoveryService.trending(query.limit, query.windowDays, userId);
   }
 

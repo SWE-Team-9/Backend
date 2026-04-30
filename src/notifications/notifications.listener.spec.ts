@@ -1,8 +1,8 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   NotificationsListener,
-  TrackLikedEvent,
   ReportCreatedEvent,
+  TrackLikedEvent,
 } from "./notifications.listener";
 import { NotificationsService } from "./notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -68,10 +68,7 @@ describe("NotificationsListener", () => {
 
   // 2. handleReportCreated - notifies ADMIN and MODERATOR users after debounce
   it("handleReportCreated: notifies all ADMIN and MODERATOR users after timer fires", async () => {
-    mockPrisma.user.findMany.mockResolvedValue([
-      { id: "admin-1" },
-      { id: "mod-1" },
-    ]);
+    mockPrisma.user.findMany.mockResolvedValue([{ id: "admin-1" }, { id: "mod-1" }]);
     mockNotificationsService.createNotification.mockResolvedValue(undefined);
 
     const event: ReportCreatedEvent = {
@@ -87,9 +84,7 @@ describe("NotificationsListener", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(mockPrisma.user.findMany).toHaveBeenCalled();
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(
-      2,
-    );
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(2);
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ recipientId: "admin-1" }),
     );
@@ -127,9 +122,7 @@ describe("NotificationsListener", () => {
     // Wait for the final 1ms debounce to expire and async handler to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(1);
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         recipientId: "owner-2",

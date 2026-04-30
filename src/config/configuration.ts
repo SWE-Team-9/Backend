@@ -20,10 +20,8 @@ export default () => ({
     recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
     recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,
     // Per-platform Enterprise site keys
-    recaptchaEnterpriseAndroidSiteKey:
-      process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
-    recaptchaEnterpriseWebSiteKey:
-      process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
+    recaptchaEnterpriseAndroidSiteKey: process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
+    recaptchaEnterpriseWebSiteKey: process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
     authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? "false") === "true",
   },
   database: {
@@ -45,8 +43,7 @@ export default () => ({
   storage: {
     provider: (process.env.STORAGE_PROVIDER ?? "local") as "local" | "s3",
     localUploadDir: process.env.LOCAL_UPLOAD_DIR ?? "./uploads",
-    localUploadUrl:
-      process.env.LOCAL_UPLOAD_URL ?? "http://localhost:3000/uploads",
+    localUploadUrl: process.env.LOCAL_UPLOAD_URL ?? "http://localhost:3000/uploads",
     s3Bucket: process.env.AWS_S3_BUCKET ?? "",
     s3Region: process.env.AWS_REGION ?? "us-east-1",
     awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",

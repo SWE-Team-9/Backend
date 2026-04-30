@@ -16,8 +16,7 @@ import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
  */
 export class PaymentMethodPortalDto {
   @ApiPropertyOptional({
-    description:
-      "URL to redirect the user to after they finish in the billing portal.",
+    description: "URL to redirect the user to after they finish in the billing portal.",
     maxLength: 500,
     example: "https://app.example.com/settings/billing",
   })

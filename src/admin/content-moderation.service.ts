@@ -1,15 +1,11 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ModerationActionType, ModerationState } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import {
-  ModerateTrackDto,
   ModerateCommentDto,
   ModeratePlaylistDto,
+  ModerateTrackDto,
 } from "./dto/content-moderation.dto";
 
 function stateToActionType(state: ModerationState): ModerationActionType {
@@ -27,9 +23,7 @@ function commentActionType(isHidden: boolean): ModerationActionType {
   return isHidden ? "HIDE_COMMENT" : "RESTORE_CONTENT";
 }
 
-function playlistStateToActionType(
-  state: ModerationState,
-): ModerationActionType {
+function playlistStateToActionType(state: ModerationState): ModerationActionType {
   switch (state) {
     case "HIDDEN":
       return "HIDE_PLAYLIST";
@@ -119,11 +113,7 @@ export class ContentModerationService {
 
   // ─── Moderate comment ────────────────────────────────────────────────────────
 
-  async moderateComment(
-    adminId: string,
-    commentId: string,
-    dto: ModerateCommentDto,
-  ) {
+  async moderateComment(adminId: string, commentId: string, dto: ModerateCommentDto) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       select: { id: true, userId: true, trackId: true, moderationState: true },
@@ -188,11 +178,7 @@ export class ContentModerationService {
 
   // ─── Moderate playlist ───────────────────────────────────────────────────────
 
-  async moderatePlaylist(
-    adminId: string,
-    playlistId: string,
-    dto: ModeratePlaylistDto,
-  ) {
+  async moderatePlaylist(adminId: string, playlistId: string, dto: ModeratePlaylistDto) {
     const playlist = await this.prisma.playlist.findUnique({
       where: { id: playlistId },
       select: { id: true, title: true, ownerId: true, moderationState: true },

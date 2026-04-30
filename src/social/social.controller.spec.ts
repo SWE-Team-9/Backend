@@ -104,16 +104,11 @@ describe("SocialController", () => {
         .expect(201);
 
       expect(res.body).toHaveProperty("isFollowing", true);
-      expect(svc.followUser).toHaveBeenCalledWith(
-        "usr_requester",
-        TARGET_USER_ID,
-      );
+      expect(svc.followUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
     });
 
     it("returns 400 for invalid userId format", async () => {
-      await request(app.getHttpServer())
-        .post("/social/follow/not-valid")
-        .expect(400);
+      await request(app.getHttpServer()).post("/social/follow/not-valid").expect(400);
       expect(svc.followUser).not.toHaveBeenCalled();
     });
   });
@@ -125,10 +120,7 @@ describe("SocialController", () => {
         .expect(200);
 
       expect(res.body).toHaveProperty("isFollowing", false);
-      expect(svc.unfollowUser).toHaveBeenCalledWith(
-        "usr_requester",
-        TARGET_USER_ID,
-      );
+      expect(svc.unfollowUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
     });
   });
 
@@ -180,9 +172,7 @@ describe("SocialController", () => {
     });
 
     it("returns 400 when limit exceeds maximum", async () => {
-      await request(app.getHttpServer())
-        .get("/social/suggestions?limit=999")
-        .expect(400);
+      await request(app.getHttpServer()).get("/social/suggestions?limit=999").expect(400);
       expect(svc.getSuggestions).not.toHaveBeenCalled();
     });
   });
@@ -194,10 +184,7 @@ describe("SocialController", () => {
         .expect(201);
 
       expect(res.body).toHaveProperty("blockedUserId", TARGET_USER_ID);
-      expect(svc.blockUser).toHaveBeenCalledWith(
-        "usr_requester",
-        TARGET_USER_ID,
-      );
+      expect(svc.blockUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
     });
   });
 
@@ -208,10 +195,7 @@ describe("SocialController", () => {
         .expect(200);
 
       expect(res.body).toHaveProperty("blockedUserId", TARGET_USER_ID);
-      expect(svc.unblockUser).toHaveBeenCalledWith(
-        "usr_requester",
-        TARGET_USER_ID,
-      );
+      expect(svc.unblockUser).toHaveBeenCalledWith("usr_requester", TARGET_USER_ID);
     });
   });
 
@@ -229,9 +213,7 @@ describe("SocialController", () => {
     });
 
     it("returns 400 for invalid limit", async () => {
-      await request(app.getHttpServer())
-        .get("/social/blocked-users?page=1&limit=0")
-        .expect(400);
+      await request(app.getHttpServer()).get("/social/blocked-users?page=1&limit=0").expect(400);
       expect(svc.getBlockedUsers).not.toHaveBeenCalled();
     });
   });

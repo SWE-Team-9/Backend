@@ -1,8 +1,10 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -10,10 +12,8 @@ import {
   Length,
   Matches,
   MaxLength,
-  ValidateNested,
-  ArrayMaxSize,
-  IsInt,
   Min,
+  ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { AccountType } from "@prisma/client";
@@ -97,8 +97,7 @@ export class UpdateProfileDto {
     example: "Yahia Dev",
     maxLength: 50,
     minLength: 2,
-    description:
-      "Display name shown throughout the UI. Does not change the handle.",
+    description: "Display name shown throughout the UI. Does not change the handle.",
   })
   @IsOptional()
   @IsString()
@@ -136,8 +135,7 @@ export class UpdateProfileDto {
    */
   @ApiPropertyOptional({
     example: false,
-    description:
-      "When true, non-followers see only handle, name, avatar, and account type.",
+    description: "When true, non-followers see only handle, name, avatar, and account type.",
   })
   @IsOptional()
   @IsBoolean()
@@ -153,7 +151,7 @@ export class UpdateProfileDto {
   @IsArray()
   @ArrayMaxSize(5)
   @IsString({ each: true })
-  @IsIn(ALLOWED_GENRES as unknown as string[], { each: true })
+  @IsIn(ALLOWED_GENRES, { each: true })
   favorite_genres?: string[];
 
   /**
@@ -179,8 +177,7 @@ export class UpdateProfileDto {
 export class CheckHandleQueryDto {
   @ApiProperty({
     example: "yahia_dev",
-    description:
-      "Handle to check (3-30 chars, lowercase letters, numbers, underscores, hyphens).",
+    description: "Handle to check (3-30 chars, lowercase letters, numbers, underscores, hyphens).",
   })
   @IsString()
   @IsNotEmpty()
@@ -234,8 +231,7 @@ export class ExternalLinkItemDto {
 export class UpdateExternalLinksDto {
   @ApiProperty({
     type: [ExternalLinkItemDto],
-    description:
-      "Complete desired link list. Send [] to clear all. Max 10 links.",
+    description: "Complete desired link list. Send [] to clear all. Max 10 links.",
   })
   @IsArray()
   @ArrayMaxSize(10)
@@ -252,8 +248,7 @@ export class UploadImageParamsDto {
   @ApiProperty({
     enum: ["avatar", "cover"],
     example: "avatar",
-    description:
-      "avatar = profile picture (max 5 MB), cover = banner image (max 15 MB).",
+    description: "avatar = profile picture (max 5 MB), cover = banner image (max 15 MB).",
   })
   @IsString()
   @IsEnum(["avatar", "cover"], {

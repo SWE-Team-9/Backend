@@ -163,30 +163,17 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
     const prismaService = app.get(PrismaService);
     const jwtSecret =
-      configService.get<string>("security.jwtSecret") ??
-      process.env.JWT_SECRET ??
-      "";
-    const jwtIssuer =
-      configService.get<string>("security.jwtIssuer") ?? "spotly-api";
-    const jwtAudience =
-      configService.get<string>("security.jwtAudience") ?? "spotly-client";
+      configService.get<string>("security.jwtSecret") ?? process.env.JWT_SECRET ?? "";
+    const jwtIssuer = configService.get<string>("security.jwtIssuer") ?? "spotly-api";
+    const jwtAudience = configService.get<string>("security.jwtAudience") ?? "spotly-client";
 
     // Public image assets — avatars and cover art are not sensitive.
-    app.use(
-      "/uploads/avatar",
-      require("express").static(path.join(uploadDir, "avatar")),
-    );
-    app.use(
-      "/uploads/cover",
-      require("express").static(path.join(uploadDir, "cover")),
-    );
+    app.use("/uploads/avatar", require("express").static(path.join(uploadDir, "avatar")));
+    app.use("/uploads/cover", require("express").static(path.join(uploadDir, "cover")));
 
     // Public preview clips — short 30-second clips intentionally accessible to all
     // users (free-tier preview). No auth required; these are not full tracks.
-    app.use(
-      "/uploads/previews",
-      require("express").static(path.join(uploadDir, "previews")),
-    );
+    app.use("/uploads/previews", require("express").static(path.join(uploadDir, "previews")));
 
     // Protected audio assets — require a valid, non-revoked JWT.
     // Note: cookieParser() is registered above so req.cookies is available here.
@@ -194,8 +181,7 @@ async function bootstrap() {
       // Extract token from httpOnly cookie (browser) or Authorization header
       // (non-browser clients such as mobile apps).
       const token: string | undefined =
-        req.cookies?.access_token ??
-        req.headers?.authorization?.replace(/^Bearer\s+/i, "");
+        req.cookies?.access_token ?? req.headers?.authorization?.replace(/^Bearer\s+/i, "");
 
       if (!token) {
         return res.status(401).json({
@@ -227,11 +213,7 @@ async function bootstrap() {
             where: { id: payload.jti },
             select: { revokedAt: true, expiresAt: true },
           });
-          if (
-            !session ||
-            session.revokedAt !== null ||
-            session.expiresAt < new Date()
-          ) {
+          if (session?.revokedAt !== null || session.expiresAt < new Date()) {
             return res.status(401).json({
               statusCode: 401,
               code: "SESSION_REVOKED",
@@ -250,10 +232,7 @@ async function bootstrap() {
 
       next();
     });
-    app.use(
-      "/uploads/tracks",
-      require("express").static(path.join(uploadDir, "tracks")),
-    );
+    app.use("/uploads/tracks", require("express").static(path.join(uploadDir, "tracks")));
   }
 
   // ── CORS ─────────────────────────────────────────────────────────────────────
@@ -278,8 +257,7 @@ async function bootstrap() {
     "http://localhost:8080",
   ];
 
-  const rawOrigins =
-    process.env.ALLOWED_ORIGINS ?? process.env.CLIENT_URL ?? "";
+  const rawOrigins = process.env.ALLOWED_ORIGINS ?? process.env.CLIENT_URL ?? "";
   const envOrigins = rawOrigins
     .split(",")
     .map((o) => o.trim())
@@ -330,8 +308,7 @@ async function bootstrap() {
   // You can override this by setting SWAGGER_ENABLED=true in .env
   // (useful for team/staging servers where NODE_ENV=production but you
   // still need the docs - e.g. for Postman import or cross-team integration).
-  const swaggerEnabled =
-    process.env.SWAGGER_ENABLED === "true" || !isProduction;
+  const swaggerEnabled = process.env.SWAGGER_ENABLED === "true" || !isProduction;
 
   if (swaggerEnabled) {
     const config = new DocumentBuilder()

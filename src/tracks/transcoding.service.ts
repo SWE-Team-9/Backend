@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
-import { TrackStatus, FileRole, FileStatus } from "@prisma/client";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { FileRole, FileStatus, TrackStatus } from "@prisma/client";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import ffmpeg from "fluent-ffmpeg";
 import * as path from "path";
 import * as fs from "fs";
@@ -25,14 +25,8 @@ export class TranscodingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.storageProvider = this.config.get<"local" | "s3">(
-      "storage.provider",
-      "local",
-    );
-    this.localUploadDir = this.config.get<string>(
-      "storage.localUploadDir",
-      "./uploads",
-    );
+    this.storageProvider = this.config.get<"local" | "s3">("storage.provider", "local");
+    this.localUploadDir = this.config.get<string>("storage.localUploadDir", "./uploads");
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
 
@@ -41,10 +35,7 @@ export class TranscodingService {
         region: this.s3Region,
         credentials: {
           accessKeyId: this.config.get<string>("storage.awsAccessKeyId", ""),
-          secretAccessKey: this.config.get<string>(
-            "storage.awsSecretAccessKey",
-            "",
-          ),
+          secretAccessKey: this.config.get<string>("storage.awsSecretAccessKey", ""),
         },
       });
     } else {
@@ -66,10 +57,7 @@ export class TranscodingService {
    *
    * On any error the track is marked FAILED.
    */
-  async processTrack(
-    trackId: string,
-    originalStorageKey: string,
-  ): Promise<void> {
+  async processTrack(trackId: string, originalStorageKey: string): Promise<void> {
     const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "iqa3-"));
     const inputPath = path.join(tmpDir, "input");
     const outputPath = path.join(tmpDir, "output.mp3");
@@ -128,16 +116,10 @@ export class TranscodingService {
           where: { id: trackId },
           data: { status: TrackStatus.FAILED },
         })
-        .catch((dbErr) =>
-          this.logger.error(
-            `Failed to mark track ${trackId} as FAILED: ${dbErr}`,
-          ),
-        );
+        .catch((dbErr) => this.logger.error(`Failed to mark track ${trackId} as FAILED: ${dbErr}`));
     } finally {
       // Cleanup temp directory
-      await fs.promises
-        .rm(tmpDir, { recursive: true, force: true })
-        .catch(() => {});
+      await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
@@ -235,10 +217,7 @@ export class TranscodingService {
   // ──────────────────────────────────────────────────────────────────────────
 
   /** Download from S3 or local storage into a temp file */
-  private async downloadToTemp(
-    storageKey: string,
-    destPath: string,
-  ): Promise<void> {
+  private async downloadToTemp(storageKey: string, destPath: string): Promise<void> {
     if (this.storageProvider === "s3") {
       const { GetObjectCommand } = await import("@aws-sdk/client-s3");
       const response = await this.s3Client!.send(
@@ -258,11 +237,7 @@ export class TranscodingService {
   }
 
   /** Upload buffer back to S3 or local storage */
-  private async uploadBuffer(
-    buffer: Buffer,
-    storageKey: string,
-    mimeType: string,
-  ): Promise<void> {
+  private async uploadBuffer(buffer: Buffer, storageKey: string, mimeType: string): Promise<void> {
     if (this.storageProvider === "s3") {
       await this.s3Client!.send(
         new PutObjectCommand({

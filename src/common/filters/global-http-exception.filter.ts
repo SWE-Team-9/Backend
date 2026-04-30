@@ -25,9 +25,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const isHttpException = exception instanceof HttpException;
-    const status = isHttpException
-      ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
+    const status = isHttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     // Log unexpected (non-HTTP) errors so they appear in server logs
     if (!isHttpException) {
@@ -69,10 +67,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
         : (exceptionResponse.message ?? "An unexpected error occurred.");
 
       return {
-        error:
-          exceptionResponse.code ??
-          exceptionResponse.error ??
-          this.defaultErrorCode(status),
+        error: exceptionResponse.code ?? exceptionResponse.error ?? this.defaultErrorCode(status),
         message,
       };
     }

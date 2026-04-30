@@ -11,12 +11,7 @@ const REQUIRED_ENV_KEYS = [
 // Optional keys that, when present, must pass a format check.
 const BOOLEAN_KEYS = ["AUTH_COOKIE_SECURE"] as const;
 const NUMBER_KEYS = ["PORT", "MAIL_PORT"] as const;
-const URL_KEYS = [
-  "CLIENT_URL",
-  "API_URL",
-  "GOOGLE_CALLBACK_URL",
-  "CDN_URL",
-] as const;
+const URL_KEYS = ["CLIENT_URL", "API_URL", "GOOGLE_CALLBACK_URL", "CDN_URL"] as const;
 
 function isValidUrl(value: string): boolean {
   try {
@@ -32,7 +27,7 @@ export function validateEnvironment(config: Env): Env {
 
   // ── Required keys ──────────────────────────────────────────────────────────
   for (const key of REQUIRED_ENV_KEYS) {
-    if (!config[key] || config[key]!.trim() === "") {
+    if (!config[key] || config[key].trim() === "") {
       errors.push(`${key} is required but was not set.`);
     }
   }
@@ -86,9 +81,7 @@ export function validateEnvironment(config: Env): Env {
     !dbUrl.includes("sslmode=require") &&
     !dbUrl.includes("ssl=true")
   ) {
-    errors.push(
-      `DATABASE_URL must include sslmode=require (or ssl=true) in production.`,
-    );
+    errors.push(`DATABASE_URL must include sslmode=require (or ssl=true) in production.`);
   }
 
   // ── NODE_ENV ───────────────────────────────────────────────────────────────
@@ -104,25 +97,15 @@ export function validateEnvironment(config: Env): Env {
 
   // ── STORAGE_PROVIDER ───────────────────────────────────────────────────────
   const storageProvider = config["STORAGE_PROVIDER"];
-  if (
-    storageProvider !== undefined &&
-    !["local", "s3"].includes(storageProvider)
-  ) {
-    errors.push(
-      `STORAGE_PROVIDER must be "local" or "s3" (got "${storageProvider}").`,
-    );
+  if (storageProvider !== undefined && !["local", "s3"].includes(storageProvider)) {
+    errors.push(`STORAGE_PROVIDER must be "local" or "s3" (got "${storageProvider}").`);
   }
 
   // ── S3 - require bucket credentials when provider is s3 ───────────────────
   if (storageProvider === "s3") {
-    const s3Keys = [
-      "AWS_S3_BUCKET",
-      "AWS_REGION",
-      "AWS_ACCESS_KEY_ID",
-      "AWS_SECRET_ACCESS_KEY",
-    ];
+    const s3Keys = ["AWS_S3_BUCKET", "AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
     for (const key of s3Keys) {
-      if (!config[key] || config[key]!.trim() === "") {
+      if (!config[key] || config[key].trim() === "") {
         errors.push(`${key} is required when STORAGE_PROVIDER=s3.`);
       }
     }
@@ -135,7 +118,7 @@ export function validateEnvironment(config: Env): Env {
   if (nodeEnvForStripe === "production") {
     const stripeKeys = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
     for (const key of stripeKeys) {
-      if (!config[key] || config[key]!.trim() === "") {
+      if (!config[key] || config[key].trim() === "") {
         errors.push(`${key} is required in production.`);
       }
     }
@@ -143,9 +126,7 @@ export function validateEnvironment(config: Env): Env {
 
   // ── Fail fast ──────────────────────────────────────────────────────────────
   if (errors.length > 0) {
-    throw new Error(
-      `Environment validation failed:\n  - ${errors.join("\n  - ")}`,
-    );
+    throw new Error(`Environment validation failed:\n  - ${errors.join("\n  - ")}`);
   }
 
   return config;

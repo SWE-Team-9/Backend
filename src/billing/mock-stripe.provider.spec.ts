@@ -85,9 +85,7 @@ describe("MockStripeBillingProvider", () => {
         trialDays: 0,
       });
 
-      expect(result.checkoutUrl).toMatch(
-        /^https:\/\/mock-checkout\.example\.com/,
-      );
+      expect(result.checkoutUrl).toMatch(/^https:\/\/mock-checkout\.example\.com/);
     });
 
     it("trialEligible=true and amountDueNowCents=0 when trialDays > 0", async () => {
@@ -141,8 +139,7 @@ describe("MockStripeBillingProvider", () => {
 
       expect(result.trialEndsAt).toBeDefined();
       const trialEnd = new Date(result.trialEndsAt!);
-      const daysFromNow =
-        (trialEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+      const daysFromNow = (trialEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
       expect(daysFromNow).toBeGreaterThan(6);
       expect(daysFromNow).toBeLessThan(8);
     });
@@ -322,25 +319,19 @@ describe("MockStripeBillingProvider", () => {
     it("throws WEBHOOK_INVALID_SIGNATURE on malformed JSON", () => {
       const raw = Buffer.from("NOT_VALID_JSON");
 
-      expect(() => provider.constructWebhookEvent(raw, "sig")).toThrow(
-        "WEBHOOK_INVALID_SIGNATURE",
-      );
+      expect(() => provider.constructWebhookEvent(raw, "sig")).toThrow("WEBHOOK_INVALID_SIGNATURE");
     });
 
     it("throws WEBHOOK_INVALID_SIGNATURE when id field is missing", () => {
       const raw = toBuffer({ type: "checkout.session.completed" }); // no id
 
-      expect(() => provider.constructWebhookEvent(raw, "sig")).toThrow(
-        "WEBHOOK_INVALID_SIGNATURE",
-      );
+      expect(() => provider.constructWebhookEvent(raw, "sig")).toThrow("WEBHOOK_INVALID_SIGNATURE");
     });
 
     it("throws WEBHOOK_INVALID_SIGNATURE when type field is missing", () => {
       const raw = toBuffer({ id: "evt_123" }); // no type
 
-      expect(() => provider.constructWebhookEvent(raw, "sig")).toThrow(
-        "WEBHOOK_INVALID_SIGNATURE",
-      );
+      expect(() => provider.constructWebhookEvent(raw, "sig")).toThrow("WEBHOOK_INVALID_SIGNATURE");
     });
 
     it("passes through arbitrary data object attached to the event", () => {

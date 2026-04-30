@@ -31,9 +31,7 @@ function buildPrismaProfile(overrides: Partial<any> = {}) {
 function buildPrismaMock() {
   const $transaction = jest
     .fn()
-    .mockImplementation((fn: any) =>
-      typeof fn === "function" ? fn(prismaMock) : Promise.all(fn),
-    );
+    .mockImplementation((fn: any) => (typeof fn === "function" ? fn(prismaMock) : Promise.all(fn)));
 
   const prismaMock: any = {
     $transaction,
@@ -123,10 +121,7 @@ describe("UsersService", () => {
       const profile = buildPrismaProfile({ visibility: "PRIVATE" });
       prisma.userProfile.findUnique.mockResolvedValue(profile);
 
-      const result = await service.getProfileByHandle(
-        "testuser",
-        "stranger-id",
-      );
+      const result = await service.getProfileByHandle("testuser", "stranger-id");
 
       expect(result).toEqual({
         handle: "testuser",
@@ -153,9 +148,7 @@ describe("UsersService", () => {
     it("throws NotFoundException when handle does not exist", async () => {
       prisma.userProfile.findUnique.mockResolvedValue(null);
 
-      await expect(service.getProfileByHandle("nobody")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getProfileByHandle("nobody")).rejects.toThrow(NotFoundException);
     });
 
     it("includes track_count for ARTIST profiles", async () => {
@@ -193,9 +186,7 @@ describe("UsersService", () => {
     it("throws NotFoundException when user has no profile", async () => {
       prisma.userProfile.findUnique.mockResolvedValue(null);
 
-      await expect(service.getMyProfile("no-profile")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getMyProfile("no-profile")).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -265,9 +256,7 @@ describe("UsersService", () => {
 
     it("throws BadRequestException for an invalid genre slug", async () => {
       // Only one of two slugs found in DB
-      prisma.genre.findMany.mockResolvedValue([
-        { id: 1, slug: "pop", name: "Pop" },
-      ]);
+      prisma.genre.findMany.mockResolvedValue([{ id: 1, slug: "pop", name: "Pop" }]);
 
       await expect(
         service.updateProfile("user-1", {
@@ -375,8 +364,7 @@ describe("UsersService", () => {
         ],
       });
 
-      const { data } = (prisma.userSocialLink.createMany as jest.Mock).mock
-        .calls[0][0];
+      const { data } = (prisma.userSocialLink.createMany as jest.Mock).mock.calls[0][0];
       expect(data[0].platform).toBe("INSTAGRAM");
       expect(data[1].platform).toBe("X");
     });
@@ -407,11 +395,7 @@ describe("UsersService", () => {
     });
 
     it("calls StorageService.upload and updates the profile avatar_url", async () => {
-      const result = await service.uploadProfileImage(
-        "user-1",
-        "avatar",
-        mockFile,
-      );
+      const result = await service.uploadProfileImage("user-1", "avatar", mockFile);
 
       expect(storage.upload).toHaveBeenCalledWith(mockFile.buffer, {
         userId: "user-1",
@@ -458,17 +442,15 @@ describe("UsersService", () => {
     it("throws NotFoundException when the user has no profile record", async () => {
       prisma.userProfile.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.uploadProfileImage("ghost", "avatar", mockFile),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.uploadProfileImage("ghost", "avatar", mockFile)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("does not throw if old image deletion fails (non-critical)", async () => {
       storage.delete.mockRejectedValue(new Error("S3 error"));
 
-      await expect(
-        service.uploadProfileImage("user-1", "avatar", mockFile),
-      ).resolves.not.toThrow();
+      await expect(service.uploadProfileImage("user-1", "avatar", mockFile)).resolves.not.toThrow();
     });
   });
 });

@@ -1,16 +1,7 @@
+import { Controller, Get, HttpCode, HttpStatus, Param, Query, Req, Res } from "@nestjs/common";
 import {
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  Query,
-  Req,
-  Res,
-} from "@nestjs/common";
-import {
-  ApiCookieAuth,
   ApiBearerAuth,
+  ApiCookieAuth,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -90,7 +81,13 @@ export class PageProfileController {
     description: "Profile page payload returned successfully.",
     schema: {
       example: {
-        viewer: { id: "uuid", handle: "bob", displayName: "Bob", avatarUrl: null, accountType: "LISTENER" },
+        viewer: {
+          id: "uuid",
+          handle: "bob",
+          displayName: "Bob",
+          avatarUrl: null,
+          accountType: "LISTENER",
+        },
         profile: {
           id: "uuid",
           handle: "alice",

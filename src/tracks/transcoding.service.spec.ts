@@ -2,7 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { TranscodingService } from "./transcoding.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { TrackStatus, FileRole, FileStatus } from "@prisma/client";
+import { FileRole, FileStatus, TrackStatus } from "@prisma/client";
 import * as fs from "fs";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,9 +38,7 @@ function getFFmpegMock() {
 function buildPrismaMock() {
   const $transaction = jest
     .fn()
-    .mockImplementation((fn: any) =>
-      typeof fn === "function" ? fn(prismaMock) : Promise.all(fn),
-    );
+    .mockImplementation((fn: any) => (typeof fn === "function" ? fn(prismaMock) : Promise.all(fn)));
 
   const prismaMock: any = {
     $transaction,
@@ -66,9 +64,7 @@ function buildConfigMock() {
   };
 
   return {
-    get: jest.fn(
-      (key: string, defaultValue?: any) => configMap[key] ?? defaultValue,
-    ),
+    get: jest.fn((key: string, defaultValue?: any) => configMap[key] ?? defaultValue),
   };
 }
 
@@ -105,9 +101,7 @@ describe("TranscodingService", () => {
       // Mock fs operations used by downloadToTemp (local provider)
       jest.spyOn(fs.promises, "mkdtemp").mockResolvedValue("/tmp/iqa3-mock");
       jest.spyOn(fs.promises, "copyFile").mockResolvedValue(undefined);
-      jest
-        .spyOn(fs.promises, "readFile")
-        .mockResolvedValue(Buffer.from("mock-mp3"));
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("mock-mp3"));
       jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);

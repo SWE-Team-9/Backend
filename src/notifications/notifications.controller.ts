@@ -11,13 +11,7 @@ import {
   Put,
   Query,
 } from "@nestjs/common";
-import {
-  ApiCookieAuth,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { NotificationsService } from "./notifications.service";
 import { NotificationsQueryDto } from "./dto/notifications-query.dto";
@@ -64,18 +58,14 @@ export class NotificationsController {
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Get()
-  getNotifications(
-    @CurrentUser("userId") userId: string,
-    @Query() query: NotificationsQueryDto,
-  ) {
+  getNotifications(@CurrentUser("userId") userId: string, @Query() query: NotificationsQueryDto) {
     return this.notificationsService.getNotifications(userId, query);
   }
 
   // GET /api/v1/notifications/unread-count
   @ApiOperation({
     summary: "Get unread notification count",
-    description:
-      "Returns the number of unread notifications for the authenticated user.",
+    description: "Returns the number of unread notifications for the authenticated user.",
   })
   @ApiResponse({
     status: 200,
@@ -91,8 +81,7 @@ export class NotificationsController {
   // GET /api/v1/notifications/preferences
   @ApiOperation({
     summary: "Get notification preferences",
-    description:
-      "Returns the authenticated user's notification preference settings.",
+    description: "Returns the authenticated user's notification preference settings.",
   })
   @ApiResponse({
     status: 200,
@@ -107,8 +96,7 @@ export class NotificationsController {
   // PUT /api/v1/notifications/preferences
   @ApiOperation({
     summary: "Update notification preferences",
-    description:
-      "Updates the authenticated user's notification preference settings.",
+    description: "Updates the authenticated user's notification preference settings.",
   })
   @ApiResponse({ status: 200, description: "Preferences updated." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
@@ -124,8 +112,7 @@ export class NotificationsController {
   // PATCH /api/v1/notifications/read-all
   @ApiOperation({
     summary: "Mark all notifications as read",
-    description:
-      "Marks every unread notification as read for the authenticated user.",
+    description: "Marks every unread notification as read for the authenticated user.",
   })
   @ApiResponse({
     status: 200,
@@ -164,8 +151,7 @@ export class NotificationsController {
   // DELETE /api/v1/notifications/:id
   @ApiOperation({
     summary: "Delete notification",
-    description:
-      "Permanently deletes a notification belonging to the authenticated user.",
+    description: "Permanently deletes a notification belonging to the authenticated user.",
   })
   @ApiParam({
     name: "id",
@@ -193,10 +179,7 @@ export class NotificationsController {
   @ApiResponse({ status: 201, description: "Device registered." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Post("push/register")
-  registerDevice(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: RegisterDeviceDto,
-  ) {
+  registerDevice(@CurrentUser("userId") userId: string, @Body() dto: RegisterDeviceDto) {
     return this.notificationsService.registerDevice(userId, dto);
   }
 

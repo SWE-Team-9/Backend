@@ -1,9 +1,9 @@
 import {
-  Injectable,
   BadRequestException,
-  UnauthorizedException,
-  Logger,
+  Injectable,
   InternalServerErrorException,
+  Logger,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
@@ -11,7 +11,7 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import axios from "axios";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthService } from "../auth/auth.service";
-import { AuthorizeDto, TokenDto, RevokeDto } from "./dto";
+import { AuthorizeDto, RevokeDto, TokenDto } from "./dto";
 import { CallbackDto } from "./dto/callback.dto";
 
 /**
@@ -112,15 +112,10 @@ export class OAuthService {
       this.config.get<string>("google.callbackUrl");
 
     if (!googleCallbackUrl) {
-      throw new InternalServerErrorException(
-        "GOOGLE_CALLBACK_URL is not configured.",
-      );
+      throw new InternalServerErrorException("GOOGLE_CALLBACK_URL is not configured.");
     }
 
-    return googleCallbackUrl.replace(
-      "/auth/google/callback",
-      "/oauth/google/callback",
-    );
+    return googleCallbackUrl.replace("/auth/google/callback", "/oauth/google/callback");
   }
 
   // ---------------------------------------------------------------------------
@@ -141,9 +136,7 @@ export class OAuthService {
       originalState: string;
     };
     try {
-      state = JSON.parse(
-        Buffer.from(encodedState, "base64url").toString("utf8"),
-      );
+      state = JSON.parse(Buffer.from(encodedState, "base64url").toString("utf8"));
     } catch {
       throw new BadRequestException("Invalid state parameter.");
     }
@@ -154,8 +147,7 @@ export class OAuthService {
 
     // Exchange Google's authorization code for tokens
     const googleClientId = this.config.get<string>("google.clientId") || "";
-    const googleClientSecret =
-      this.config.get<string>("google.clientSecret") || "";
+    const googleClientSecret = this.config.get<string>("google.clientSecret") || "";
     const backendCallbackUrl = this.getNativeOAuthCallbackUrl();
 
     const tokenParams = new URLSearchParams();
@@ -178,15 +170,11 @@ export class OAuthService {
       idToken = response.data?.id_token;
     } catch (err) {
       this.logger.error("Google token exchange failed", err);
-      throw new BadRequestException(
-        "Failed to exchange authorization code with Google.",
-      );
+      throw new BadRequestException("Failed to exchange authorization code with Google.");
     }
 
     if (!idToken) {
-      throw new BadRequestException(
-        "Google token response did not include id_token.",
-      );
+      throw new BadRequestException("Google token response did not include id_token.");
     }
 
     const payload = this.decodeIdTokenPayload(idToken);
@@ -196,9 +184,7 @@ export class OAuthService {
     const avatarUrl = payload.picture ? String(payload.picture) : null;
 
     if (!email || !googleId) {
-      throw new BadRequestException(
-        "Google id_token is missing required fields.",
-      );
+      throw new BadRequestException("Google id_token is missing required fields.");
     }
 
     // Create local session via the existing auth flow
@@ -255,9 +241,7 @@ export class OAuthService {
 
     if (!pending || pending.expiresAt < Date.now()) {
       this.pendingNativeCodes.delete(dto.code);
-      throw new BadRequestException(
-        "Authorization code is invalid or expired.",
-      );
+      throw new BadRequestException("Authorization code is invalid or expired.");
     }
 
     // Validate PKCE: SHA256(code_verifier) must match stored code_challenge
@@ -359,10 +343,7 @@ export class OAuthService {
    * Returns the client if valid; throws UnauthorizedException otherwise.
    * Uses timing-safe comparison to prevent secret enumeration attacks.
    */
-  async validateClientCredentials(
-    clientId: string,
-    clientSecret: string,
-  ): Promise<any> {
+  async validateClientCredentials(clientId: string, clientSecret: string): Promise<any> {
     const client = await this.getActiveClient(clientId);
 
     if (!clientSecret) {
@@ -386,7 +367,7 @@ export class OAuthService {
       where: { clientId },
     });
 
-    if (!client || !client.isActive) {
+    if (!client?.isActive) {
       throw new UnauthorizedException("Invalid client credentials");
     }
 
@@ -423,7 +404,7 @@ export class OAuthService {
       where: { clientId },
     });
 
-    if (!client || !client.isActive) {
+    if (!client?.isActive) {
       throw new BadRequestException("invalid_client");
     }
 
@@ -434,9 +415,7 @@ export class OAuthService {
 
     // Validate scopes are within allowed for this client
     const requestedScopes = scope.split(" ").filter((s: string) => s);
-    const validScopes = requestedScopes.every((s: string) =>
-      client.allowedScopes.includes(s),
-    );
+    const validScopes = requestedScopes.every((s: string) => client.allowedScopes.includes(s));
     if (!validScopes) {
       throw new BadRequestException("invalid_scope");
     }
@@ -445,9 +424,7 @@ export class OAuthService {
     const rawCode = this.generateRandomToken(32);
     const codeHash = this.hashToken(rawCode);
 
-    const expiresAt = new Date(
-      Date.now() + this.AUTHORIZATION_CODE_TTL_SECONDS * 1000,
-    );
+    const expiresAt = new Date(Date.now() + this.AUTHORIZATION_CODE_TTL_SECONDS * 1000);
 
     // Store in database
     try {
@@ -502,14 +479,7 @@ export class OAuthService {
     scope: string;
     user?: any;
   }> {
-    if (
-      !clientId ||
-      !clientId.trim() ||
-      !code ||
-      !code.trim() ||
-      !redirectUri ||
-      !redirectUri.trim()
-    ) {
+    if (!clientId?.trim() || !code?.trim() || !redirectUri?.trim()) {
       throw new BadRequestException("invalid_request");
     }
 
@@ -529,20 +499,15 @@ export class OAuthService {
         throw new BadRequestException("invalid_grant");
       }
 
-      if (!codeVerifier || !codeVerifier.trim()) {
+      if (!codeVerifier?.trim()) {
         throw new BadRequestException("invalid_request");
       }
 
-      const calculatedChallenge = createHash("sha256")
-        .update(codeVerifier)
-        .digest("base64url");
+      const calculatedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
       if (
         !pendingNativeCode.codeChallenge ||
-        !this.timingSafeCompare(
-          calculatedChallenge,
-          pendingNativeCode.codeChallenge,
-        )
+        !this.timingSafeCompare(calculatedChallenge, pendingNativeCode.codeChallenge)
       ) {
         this.pendingNativeCodes.delete(code);
         throw new BadRequestException("invalid_pkce");
@@ -562,8 +527,7 @@ export class OAuthService {
 
     // 1. Validate client authentication.
     // Public clients are allowed only when PKCE is present.
-    const isPublicPkceRequest =
-      !clientSecret && !!codeVerifier && !isNativeClient;
+    const isPublicPkceRequest = !clientSecret && Boolean(codeVerifier) && !isNativeClient;
     if (!clientSecret && !isPublicPkceRequest) {
       throw new UnauthorizedException("Invalid client credentials");
     }
@@ -607,13 +571,9 @@ export class OAuthService {
       }
 
       // Verify code_verifier: SHA256(code_verifier) should equal code_challenge
-      const calculatedChallenge = createHash("sha256")
-        .update(codeVerifier)
-        .digest("base64url");
+      const calculatedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
-      if (
-        !this.timingSafeCompare(calculatedChallenge, authCode.codeChallenge)
-      ) {
+      if (!this.timingSafeCompare(calculatedChallenge, authCode.codeChallenge)) {
         throw new BadRequestException("invalid_pkce");
       }
     }
@@ -630,12 +590,8 @@ export class OAuthService {
     const accessTokenHash = this.hashToken(accessToken);
     const refreshTokenHash = this.hashToken(refreshToken);
 
-    const accessTokenExpiresAt = new Date(
-      Date.now() + this.ACCESS_TOKEN_TTL_SECONDS * 1000,
-    );
-    const refreshTokenExpiresAt = new Date(
-      Date.now() + this.REFRESH_TOKEN_TTL_SECONDS * 1000,
-    );
+    const accessTokenExpiresAt = new Date(Date.now() + this.ACCESS_TOKEN_TTL_SECONDS * 1000);
+    const refreshTokenExpiresAt = new Date(Date.now() + this.REFRESH_TOKEN_TTL_SECONDS * 1000);
 
     try {
       await this.db.apiAccessToken.create({
@@ -712,10 +668,7 @@ export class OAuthService {
       throw new BadRequestException("invalid_grant"); // Token revoked
     }
 
-    if (
-      tokenRecord.refreshExpiresAt &&
-      tokenRecord.refreshExpiresAt < new Date()
-    ) {
+    if (tokenRecord.refreshExpiresAt && tokenRecord.refreshExpiresAt < new Date()) {
       throw new BadRequestException("invalid_grant"); // Refresh token expired
     }
 
@@ -731,12 +684,8 @@ export class OAuthService {
     const newAccessTokenHash = this.hashToken(newAccessToken);
     const newRefreshTokenHash = this.hashToken(newRefreshToken);
 
-    const accessTokenExpiresAt = new Date(
-      Date.now() + this.ACCESS_TOKEN_TTL_SECONDS * 1000,
-    );
-    const refreshTokenExpiresAt = new Date(
-      Date.now() + this.REFRESH_TOKEN_TTL_SECONDS * 1000,
-    );
+    const accessTokenExpiresAt = new Date(Date.now() + this.ACCESS_TOKEN_TTL_SECONDS * 1000);
+    const refreshTokenExpiresAt = new Date(Date.now() + this.REFRESH_TOKEN_TTL_SECONDS * 1000);
 
     try {
       await this.db.apiAccessToken.create({

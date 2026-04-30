@@ -1,4 +1,4 @@
-import { IsString, MaxLength, IsOptional, IsBoolean } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MaxLength } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class AttachPaymentMethodDto {

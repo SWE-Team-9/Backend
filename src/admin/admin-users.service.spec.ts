@@ -40,10 +40,7 @@ describe("AdminUsersService", () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AdminUsersService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [AdminUsersService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
 
     service = module.get<AdminUsersService>(AdminUsersService);
@@ -57,9 +54,7 @@ describe("AdminUsersService", () => {
   describe("getUserDetail", () => {
     it("throws NotFoundException when user does not exist", async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce(null);
-      await expect(service.getUserDetail("no-such-id")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getUserDetail("no-such-id")).rejects.toThrow(NotFoundException);
     });
 
     it("throws NotFoundException when user is DELETED", async () => {
@@ -69,9 +64,7 @@ describe("AdminUsersService", () => {
         subscriptions: [],
         _count: { tracks: 0, playlists: 0, followers: 0, following: 0 },
       });
-      await expect(service.getUserDetail("u1")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getUserDetail("u1")).rejects.toThrow(NotFoundException);
     });
 
     it("returns user detail with moderation history", async () => {
@@ -98,9 +91,7 @@ describe("AdminUsersService", () => {
       mockPrisma.moderationReport.aggregate
         .mockResolvedValueOnce({ _count: { id: 3 } })
         .mockResolvedValueOnce({ _count: { id: 0 } });
-      mockPrisma.moderationReport.count
-        .mockResolvedValueOnce(1)
-        .mockResolvedValueOnce(2);
+      mockPrisma.moderationReport.count.mockResolvedValueOnce(1).mockResolvedValueOnce(2);
 
       const result = await service.getUserDetail("u1");
 

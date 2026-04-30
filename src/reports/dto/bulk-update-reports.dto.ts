@@ -15,10 +15,7 @@ export class BulkUpdateReportsDto {
   @ApiProperty({
     type: [String],
     description: "Report IDs to update (max 50)",
-    example: [
-      "c56a4180-65aa-42ec-a945-5fd21dec0538",
-      "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-    ],
+    example: ["c56a4180-65aa-42ec-a945-5fd21dec0538", "7c9e6679-7425-40de-944b-e07fc1f90ae7"],
   })
   @IsArray()
   @IsNotEmpty()

@@ -10,13 +10,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { PaymentMethodsService } from "./payment-methods.service";
 import { AttachPaymentMethodDto } from "./dto/attach-payment-method.dto";
@@ -60,9 +54,7 @@ export class PaymentMethodsController {
     },
   })
   @ApiResponse({ status: 401, description: "Not authenticated" })
-  async createSetupIntent(
-    @CurrentUser() user: { id: string },
-  ): Promise<{ clientSecret: string }> {
+  async createSetupIntent(@CurrentUser() user: { id: string }): Promise<{ clientSecret: string }> {
     return this.service.createSetupIntent(user.id);
   }
 
@@ -162,9 +154,7 @@ export class PaymentMethodsController {
     },
   })
   @ApiResponse({ status: 401, description: "Not authenticated" })
-  async listPaymentMethods(
-    @CurrentUser() user: { id: string },
-  ): Promise<object[]> {
+  async listPaymentMethods(@CurrentUser() user: { id: string }): Promise<object[]> {
     return this.service.listPaymentMethods(user.id);
   }
 

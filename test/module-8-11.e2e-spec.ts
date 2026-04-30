@@ -114,11 +114,7 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
     reportsServiceMock = buildReportsServiceMock();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [
-        DiscoveryController,
-        ReportsController,
-        AdminReportsController,
-      ],
+      controllers: [DiscoveryController, ReportsController, AdminReportsController],
       providers: [
         { provide: DiscoveryService, useValue: discoveryServiceMock },
         { provide: ReportsService, useValue: reportsServiceMock },
@@ -207,9 +203,7 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
         .query({ url: "/john-doe/night-drive" })
         .expect(200);
 
-      expect(discoveryServiceMock.resolveResource).toHaveBeenCalledWith(
-        "/john-doe/night-drive",
-      );
+      expect(discoveryServiceMock.resolveResource).toHaveBeenCalledWith("/john-doe/night-drive");
       expect(res.body).toHaveProperty("matched", true);
       expect(res.body).toHaveProperty("resourceType");
       expect(res.body).toHaveProperty("id");
@@ -225,15 +219,9 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
         description: "Suspected spam upload",
       };
 
-      const res = await request(app.getHttpServer())
-        .post("/reports")
-        .send(body)
-        .expect(201);
+      const res = await request(app.getHttpServer()).post("/reports").send(body).expect(201);
 
-      expect(reportsServiceMock.createReport).toHaveBeenCalledWith(
-        USER_ID,
-        body,
-      );
+      expect(reportsServiceMock.createReport).toHaveBeenCalledWith(USER_ID, body);
       expect(res.body).toHaveProperty("id");
       expect(res.body).toHaveProperty("status");
     });
@@ -244,16 +232,9 @@ describe("Module 8+11 smoke e2e (Discovery + Reports)", () => {
         message: "Please review this report again.",
       };
 
-      const res = await request(app.getHttpServer())
-        .post("/reports/appeal")
-        .send(body)
-        .expect(201);
+      const res = await request(app.getHttpServer()).post("/reports/appeal").send(body).expect(201);
 
-      expect(reportsServiceMock.createAppeal).toHaveBeenCalledWith(
-        body.reportId,
-        USER_ID,
-        body,
-      );
+      expect(reportsServiceMock.createAppeal).toHaveBeenCalledWith(body.reportId, USER_ID, body);
       expect(res.body).toHaveProperty("id");
       expect(res.body).toHaveProperty("reportId", REPORT_ID);
     });

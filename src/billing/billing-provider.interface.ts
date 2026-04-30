@@ -138,9 +138,7 @@ export interface IBillingProvider {
    * Retrieve current subscription state from the provider.
    * For real Stripe: stripe.subscriptions.retrieve
    */
-  retrieveSubscription(
-    providerSubscriptionId: string,
-  ): Promise<ProviderSubscriptionResult>;
+  retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionResult>;
 
   /**
    * Verify and parse an inbound webhook payload.
@@ -152,11 +150,7 @@ export interface IBillingProvider {
    * Create or retrieve a provider customer ID for a user.
    * For real Stripe: stripe.customers.create / stripe.customers.retrieve
    */
-  getOrCreateCustomer(params: {
-    userId: string;
-    email: string;
-    name?: string;
-  }): Promise<string>;
+  getOrCreateCustomer(params: { userId: string; email: string; name?: string }): Promise<string>;
 }
 
 /** NestJS injection token for the billing provider */

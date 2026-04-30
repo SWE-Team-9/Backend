@@ -17,11 +17,7 @@ import { NotificationsListener } from "./notifications.listener";
     }),
   ],
   controllers: [NotificationsController],
-  providers: [
-    NotificationsService,
-    NotificationsGateway,
-    NotificationsListener,
-  ],
+  providers: [NotificationsService, NotificationsGateway, NotificationsListener],
   exports: [NotificationsService],
 })
 export class NotificationsModule implements OnModuleInit {

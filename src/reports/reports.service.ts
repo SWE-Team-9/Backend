@@ -4,12 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  Prisma,
-  ReportStatus,
-  ReportTargetType,
-  SystemRole,
-} from "@prisma/client";
+import { Prisma, ReportStatus, ReportTargetType, SystemRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { BulkUpdateReportsDto } from "./dto/bulk-update-reports.dto";
@@ -117,14 +112,9 @@ export class ReportsService {
         },
       },
     });
-    const [total, items] = await Promise.all([
-      this.prisma.report.count({ where }),
-      itemsQuery,
-    ]);
+    const [total, items] = await Promise.all([this.prisma.report.count({ where }), itemsQuery]);
 
-    const resolvedItems = await Promise.all(
-      items.map((item) => this.resolveReportTarget(item)),
-    );
+    const resolvedItems = await Promise.all(items.map((item) => this.resolveReportTarget(item)));
 
     return {
       items: resolvedItems,
@@ -330,8 +320,7 @@ export class ReportsService {
 
     const now = new Date();
     const shouldResolve =
-      dto.status === ReportStatus.RESOLVED ||
-      dto.status === ReportStatus.REJECTED;
+      dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
 
     const updatedReport = await this.prisma.report.update({
       where: { id: reportId },
@@ -384,8 +373,7 @@ export class ReportsService {
 
     const now = new Date();
     const shouldResolve =
-      dto.status === ReportStatus.RESOLVED ||
-      dto.status === ReportStatus.REJECTED;
+      dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
 
     const [reportResult, appealResult] = await this.prisma.$transaction([
       this.prisma.report.updateMany({
@@ -401,18 +389,14 @@ export class ReportsService {
             data: {
               resolutionNotes: dto.resolutionNotes,
               status: dto.status,
-              ...(shouldResolve
-                ? { resolvedAt: now, resolvedBy: adminId }
-                : {}),
+              ...(shouldResolve ? { resolvedAt: now, resolvedBy: adminId } : {}),
             },
           })
         : this.prisma.appeal.updateMany({
             where: { reportId: { in: dto.reportIds } },
             data: {
               status: dto.status,
-              ...(shouldResolve
-                ? { resolvedAt: now, resolvedBy: adminId }
-                : {}),
+              ...(shouldResolve ? { resolvedAt: now, resolvedBy: adminId } : {}),
             },
           }),
     ]);
@@ -471,10 +455,7 @@ export class ReportsService {
     }
   }
 
-  private async ensureTargetExists(
-    targetType: ReportTargetType,
-    targetId: string,
-  ): Promise<void> {
+  private async ensureTargetExists(targetType: ReportTargetType, targetId: string): Promise<void> {
     if (targetType === ReportTargetType.TRACK) {
       const track = await this.prisma.track.findUnique({
         where: { id: targetId },

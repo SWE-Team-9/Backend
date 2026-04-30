@@ -17,11 +17,7 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Reflector } from "@nestjs/core";
-import {
-  ConflictException,
-  ForbiddenException,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { ConflictException, ForbiddenException, UnauthorizedException } from "@nestjs/common";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require("supertest") as typeof import("supertest");
 
@@ -195,7 +191,7 @@ describe("Module 11 — User Enforcement E2E", () => {
       .send({ ...WARN_BODY, currentPassword: "WrongPassword1!" })
       .expect(401);
 
-    const body = res.body as any;
+    const { body } = res;
     const code = body?.message?.code ?? body?.code ?? body?.error;
     expect(code).toMatch(/INCORRECT_PASSWORD/i);
   });
@@ -214,16 +210,14 @@ describe("Module 11 — User Enforcement E2E", () => {
       .send(WARN_BODY)
       .expect(403);
 
-    const body = res.body as any;
+    const { body } = res;
     const code = body?.message?.code ?? body?.code ?? body?.error;
     expect(code).toMatch(/CANNOT_WARN_ADMIN/i);
   });
 
   // ─── Scenario 4: suspend — duration_days=3 → 201 + SUSPENDED ───────────────
   it("4. POST /admin/users/:id/suspend — duration_days=3 → 201, accountStatus=SUSPENDED", async () => {
-    const suspendedUntil = new Date(
-      Date.now() + 3 * 24 * 60 * 60 * 1000,
-    ).toISOString();
+    const suspendedUntil = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     enforcement.suspendUser.mockResolvedValueOnce({
       action_id: "act-002",
       action_type: "SUSPEND_USER",
@@ -330,7 +324,7 @@ describe("Module 11 — User Enforcement E2E", () => {
       .send(RESTORE_BODY)
       .expect(409);
 
-    const body = res.body as any;
+    const { body } = res;
     const code = body?.message?.code ?? body?.code ?? body?.error;
     expect(code).toMatch(/USER_ALREADY_ACTIVE/i);
   });
@@ -363,9 +357,7 @@ describe("Module 11 — JwtAuthGuard account status enforcement", () => {
 
     jest
       .spyOn(reflector, "getAllAndOverride")
-      .mockImplementation(
-        (key: unknown) => handlerMeta[key as string] ?? false,
-      );
+      .mockImplementation((key: unknown) => handlerMeta[key as string] ?? false);
 
     return ctx;
   }
@@ -379,15 +371,15 @@ describe("Module 11 — JwtAuthGuard account status enforcement", () => {
       accountStatus: "SUSPENDED",
     };
 
-    expect(() =>
-      guard.handleRequest(null, suspendedUser, undefined, ctx),
-    ).toThrow(ForbiddenException);
+    expect(() => guard.handleRequest(null, suspendedUser, undefined, ctx)).toThrow(
+      ForbiddenException,
+    );
 
     try {
       guard.handleRequest(null, suspendedUser, undefined, ctx);
     } catch (e: any) {
       expect(e.getStatus()).toBe(403);
-      const body = e.getResponse() as any;
+      const body = e.getResponse();
       expect(body.code).toBe("ACCOUNT_SUSPENDED");
     }
   });
@@ -401,14 +393,12 @@ describe("Module 11 — JwtAuthGuard account status enforcement", () => {
       accountStatus: "BANNED",
     };
 
-    expect(() => guard.handleRequest(null, bannedUser, undefined, ctx)).toThrow(
-      ForbiddenException,
-    );
+    expect(() => guard.handleRequest(null, bannedUser, undefined, ctx)).toThrow(ForbiddenException);
 
     try {
       guard.handleRequest(null, bannedUser, undefined, ctx);
     } catch (e: any) {
-      const body = e.getResponse() as any;
+      const body = e.getResponse();
       expect(body.code).toBe("ACCOUNT_BANNED");
     }
   });

@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  INestApplication,
-  ValidationPipe,
-} from "@nestjs/common";
+import { BadRequestException, INestApplication, ValidationPipe } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { Test, TestingModule } from "@nestjs/testing";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -56,8 +52,7 @@ function buildServiceMock() {
     }),
     getEmbedCode: jest.fn().mockResolvedValue({
       playlistId: "pl_101",
-      embedCode:
-        '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+      embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
     }),
     addTrack: jest.fn().mockResolvedValue({
       message: "Track added to playlist successfully",
@@ -78,9 +73,7 @@ function buildServiceMock() {
       owner: { id: "usr_1", display_name: "Ahmed Hassan" },
       tracks: [{ trackId: "trk_123", title: "Layali" }],
     }),
-    update: jest
-      .fn()
-      .mockResolvedValue({ message: "Playlist updated successfully" }),
+    update: jest.fn().mockResolvedValue({ message: "Playlist updated successfully" }),
     remove: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -135,10 +128,7 @@ describe("PlaylistsController", () => {
         trackIds: ["trk_123", "trk_456"],
       };
 
-      const res = await request(app.getHttpServer())
-        .post("/playlists")
-        .send(payload)
-        .expect(201);
+      const res = await request(app.getHttpServer()).post("/playlists").send(payload).expect(201);
 
       expect(res.body).toHaveProperty("playlistId", "pl_101");
       expect(service.create).toHaveBeenCalledWith("usr_1", payload);
@@ -165,9 +155,7 @@ describe("PlaylistsController", () => {
 
   describe("GET /playlists/me", () => {
     it("returns paginated playlists", async () => {
-      await request(app.getHttpServer())
-        .get("/playlists/me?page=2&limit=10")
-        .expect(200);
+      await request(app.getHttpServer()).get("/playlists/me?page=2&limit=10").expect(200);
 
       expect(service.getMyPlaylists).toHaveBeenCalledWith("usr_1", {
         page: 2,
@@ -176,17 +164,13 @@ describe("PlaylistsController", () => {
     });
 
     it("returns 400 for invalid pagination values", async () => {
-      await request(app.getHttpServer())
-        .get("/playlists/me?page=0&limit=500")
-        .expect(400);
+      await request(app.getHttpServer()).get("/playlists/me?page=0&limit=500").expect(400);
     });
   });
 
   describe("GET /playlists/secret/:secretToken", () => {
     it("resolves secret playlist", async () => {
-      await request(app.getHttpServer())
-        .get("/playlists/secret/sec_abc")
-        .expect(200);
+      await request(app.getHttpServer()).get("/playlists/secret/sec_abc").expect(200);
 
       expect(service.resolveSecret).toHaveBeenCalledWith("sec_abc");
     });
@@ -194,9 +178,7 @@ describe("PlaylistsController", () => {
 
   describe("GET /playlists/recent", () => {
     it("returns recently played playlists", async () => {
-      await request(app.getHttpServer())
-        .get("/playlists/recent?limit=5")
-        .expect(200);
+      await request(app.getHttpServer()).get("/playlists/recent?limit=5").expect(200);
 
       expect(service.getRecentPlaylists).toHaveBeenCalledWith("usr_1", 5);
     });
@@ -204,9 +186,7 @@ describe("PlaylistsController", () => {
 
   describe("GET /playlists/:playlistId/edit", () => {
     it("returns owner edit payload", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/playlists/pl_101/edit")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/playlists/pl_101/edit").expect(200);
 
       expect(service.getEditDetails).toHaveBeenCalledWith("usr_1", "pl_101");
       expect(res.body).toHaveProperty("slug", "late-night-drive");
@@ -224,18 +204,13 @@ describe("PlaylistsController", () => {
         .expect(200);
 
       expect(service.uploadCover).toHaveBeenCalled();
-      expect(res.body).toHaveProperty(
-        "message",
-        "Playlist cover uploaded successfully",
-      );
+      expect(res.body).toHaveProperty("message", "Playlist cover uploaded successfully");
     });
   });
 
   describe("POST /playlists/:playlistId/like", () => {
     it("likes playlist", async () => {
-      await request(app.getHttpServer())
-        .post("/playlists/pl_101/like")
-        .expect(201);
+      await request(app.getHttpServer()).post("/playlists/pl_101/like").expect(201);
 
       expect(service.likePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
     });
@@ -243,9 +218,7 @@ describe("PlaylistsController", () => {
 
   describe("DELETE /playlists/:playlistId/like", () => {
     it("unlikes playlist", async () => {
-      await request(app.getHttpServer())
-        .delete("/playlists/pl_101/like")
-        .expect(200);
+      await request(app.getHttpServer()).delete("/playlists/pl_101/like").expect(200);
 
       expect(service.unlikePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
     });
@@ -253,9 +226,7 @@ describe("PlaylistsController", () => {
 
   describe("GET /playlists/:playlistId/embed", () => {
     it("returns embed code", async () => {
-      await request(app.getHttpServer())
-        .get("/playlists/pl_101/embed")
-        .expect(200);
+      await request(app.getHttpServer()).get("/playlists/pl_101/embed").expect(200);
 
       expect(service.getEmbedCode).toHaveBeenCalledWith("usr_1", "pl_101", {});
     });
@@ -283,15 +254,9 @@ describe("PlaylistsController", () => {
 
   describe("DELETE /playlists/:playlistId/tracks/:trackId", () => {
     it("removes track from playlist", async () => {
-      await request(app.getHttpServer())
-        .delete("/playlists/pl_101/tracks/trk_123")
-        .expect(200);
+      await request(app.getHttpServer()).delete("/playlists/pl_101/tracks/trk_123").expect(200);
 
-      expect(service.removeTrack).toHaveBeenCalledWith(
-        "usr_1",
-        "pl_101",
-        "trk_123",
-      );
+      expect(service.removeTrack).toHaveBeenCalledWith("usr_1", "pl_101", "trk_123");
     });
   });
 
@@ -304,11 +269,7 @@ describe("PlaylistsController", () => {
         .send(payload)
         .expect(200);
 
-      expect(service.reorderTracks).toHaveBeenCalledWith(
-        "usr_1",
-        "pl_101",
-        payload,
-      );
+      expect(service.reorderTracks).toHaveBeenCalledWith("usr_1", "pl_101", payload);
     });
 
     it("returns 400 for invalid reorder body", async () => {
@@ -348,9 +309,7 @@ describe("PlaylistsController", () => {
 
   describe("DELETE /playlists/:playlistId", () => {
     it("returns 204 and delegates removal", async () => {
-      await request(app.getHttpServer())
-        .delete("/playlists/pl_101")
-        .expect(204);
+      await request(app.getHttpServer()).delete("/playlists/pl_101").expect(204);
       expect(service.remove).toHaveBeenCalledWith("usr_1", "pl_101");
     });
   });

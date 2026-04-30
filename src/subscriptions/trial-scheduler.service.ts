@@ -197,9 +197,7 @@ export class TrialSchedulerService {
           `[TRIAL AUTO-RENEW] Sub ${sub.id} converted to ACTIVE, amount=${sub.plan.priceCents}`,
         );
       } catch (err) {
-        this.logger.error(
-          `[TRIAL AUTO-RENEW] Failed to renew sub ${sub.id}: ${String(err)}`,
-        );
+        this.logger.error(`[TRIAL AUTO-RENEW] Failed to renew sub ${sub.id}: ${String(err)}`);
       }
     }
   }
@@ -276,13 +274,9 @@ export class TrialSchedulerService {
           },
         });
 
-        this.logger.log(
-          `[MONTHLY RENEWAL] Sub ${sub.id} renewed, amount=${sub.plan.priceCents}`,
-        );
+        this.logger.log(`[MONTHLY RENEWAL] Sub ${sub.id} renewed, amount=${sub.plan.priceCents}`);
       } catch (err) {
-        this.logger.error(
-          `[MONTHLY RENEWAL] Failed to renew sub ${sub.id}: ${String(err)}`,
-        );
+        this.logger.error(`[MONTHLY RENEWAL] Failed to renew sub ${sub.id}: ${String(err)}`);
       }
     }
   }
@@ -345,10 +339,7 @@ export class TrialSchedulerService {
 
         // Revoke offline downloads and enforce FREE plan track limit
         await this.subscriptionsService.revokeOfflineDownloads(sub.userId);
-        await this.subscriptionsService.applyPlanLimitToTracks(
-          sub.userId,
-          FREE_UPLOAD_LIMIT,
-        );
+        await this.subscriptionsService.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
 
         // Fire-and-forget
         this.mailService
@@ -358,18 +349,14 @@ export class TrialSchedulerService {
             planName: sub.plan.name,
           })
           .catch((err) =>
-            this.logger.error(
-              `[GRACE EXPIRED EMAIL] Failed for sub ${sub.id}: ${String(err)}`,
-            ),
+            this.logger.error(`[GRACE EXPIRED EMAIL] Failed for sub ${sub.id}: ${String(err)}`),
           );
 
         this.logger.log(
           `[GRACE EXPIRED] Sub ${sub.id} cancelled after ${GRACE_PERIOD_DAYS}d grace period`,
         );
       } catch (err) {
-        this.logger.error(
-          `[GRACE EXPIRED] Failed to cancel sub ${sub.id}: ${String(err)}`,
-        );
+        this.logger.error(`[GRACE EXPIRED] Failed to cancel sub ${sub.id}: ${String(err)}`);
       }
     }
   }

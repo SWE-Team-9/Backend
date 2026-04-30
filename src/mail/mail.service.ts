@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 type MailTransporter = {
@@ -119,10 +115,7 @@ export class MailService {
     });
   }
 
-  async sendPaymentFailedEmail(params: {
-    to: string;
-    displayName?: string;
-  }): Promise<void> {
+  async sendPaymentFailedEmail(params: { to: string; displayName?: string }): Promise<void> {
     await this.sendMail({
       to: params.to,
       subject: "Your IQA3 subscription payment failed",
@@ -454,9 +447,7 @@ export class MailService {
     expiryMonth: number;
     expiryYear: number;
   }): Promise<void> {
-    const brandDisplay =
-      params.brand.charAt(0).toUpperCase() +
-      params.brand.slice(1).toLowerCase();
+    const brandDisplay = params.brand.charAt(0).toUpperCase() + params.brand.slice(1).toLowerCase();
     const expiryDisplay = `${String(params.expiryMonth).padStart(2, "0")}/${params.expiryYear}`;
     const cardDisplay = `${brandDisplay} ending in ${params.last4}`;
 
@@ -494,8 +485,7 @@ export class MailService {
 
     try {
       const fromAddress =
-        this.configService.get<string>("mail.from") ??
-        "Spotly <noreply@spotly.app>";
+        this.configService.get<string>("mail.from") ?? "Spotly <noreply@spotly.app>";
 
       await transporter.sendMail({
         from: fromAddress,
@@ -523,8 +513,7 @@ export class MailService {
     const user = this.configService.get<string>("mail.user") ?? "";
     const pass = this.configService.get<string>("mail.pass") ?? "";
 
-    const hasConfig =
-      host.trim() !== "" && user.trim() !== "" && pass.trim() !== "";
+    const hasConfig = host.trim() !== "" && user.trim() !== "" && pass.trim() !== "";
     if (!hasConfig) {
       if (!this.warnedMissingConfig) {
         this.warnedMissingConfig = true;
@@ -555,9 +544,7 @@ export class MailService {
     path: "verify-email" | "reset-password" | "confirm-email-change",
     token: string,
   ): string {
-    const clientUrl =
-      this.configService.get<string>("app.clientUrl") ??
-      "http://localhost:5173";
+    const clientUrl = this.configService.get<string>("app.clientUrl") ?? "http://localhost:5173";
     const base = clientUrl.replace(/\/+$/, "");
     const encodedToken = encodeURIComponent(token);
     return `${base}/${path}?token=${encodedToken}`;

@@ -9,15 +9,7 @@ import { AdminUsersService } from "./admin-users.service";
 
 @Module({
   imports: [NotificationsModule],
-  controllers: [
-    UserEnforcementController,
-    ContentModerationController,
-    AdminUsersController,
-  ],
-  providers: [
-    UserEnforcementService,
-    ContentModerationService,
-    AdminUsersService,
-  ],
+  controllers: [UserEnforcementController, ContentModerationController, AdminUsersController],
+  providers: [UserEnforcementService, ContentModerationService, AdminUsersService],
 })
 export class AdminModule {}

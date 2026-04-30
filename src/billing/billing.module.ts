@@ -34,9 +34,7 @@ import { RealStripeBillingProvider } from "./real-stripe.provider";
         realProvider: RealStripeBillingProvider,
       ) => {
         const providerName =
-          config.get<string>("billing.provider") ??
-          process.env.BILLING_PROVIDER ??
-          "mock_stripe";
+          config.get<string>("billing.provider") ?? process.env.BILLING_PROVIDER ?? "mock_stripe";
 
         switch (providerName) {
           case "stripe":
@@ -46,17 +44,9 @@ import { RealStripeBillingProvider } from "./real-stripe.provider";
             return mockProvider;
         }
       },
-      inject: [
-        ConfigService,
-        MockStripeBillingProvider,
-        RealStripeBillingProvider,
-      ],
+      inject: [ConfigService, MockStripeBillingProvider, RealStripeBillingProvider],
     },
   ],
-  exports: [
-    BILLING_PROVIDER,
-    MockStripeBillingProvider,
-    RealStripeBillingProvider,
-  ],
+  exports: [BILLING_PROVIDER, MockStripeBillingProvider, RealStripeBillingProvider],
 })
 export class BillingModule {}

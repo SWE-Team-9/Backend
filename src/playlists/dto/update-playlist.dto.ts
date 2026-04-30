@@ -50,9 +50,7 @@ export class UpdatePlaylistDto {
     example: "PRIVATE",
   })
   @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === "string" ? value.toUpperCase().trim() : value,
-  )
+  @Transform(({ value }) => (typeof value === "string" ? value.toUpperCase().trim() : value))
   @IsIn(["PUBLIC", "SECRET", "PRIVATE"])
   visibility?: "PUBLIC" | "SECRET" | "PRIVATE";
 
@@ -62,9 +60,7 @@ export class UpdatePlaylistDto {
     example: "ALBUM",
   })
   @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === "string" ? value.toUpperCase().trim() : value,
-  )
+  @Transform(({ value }) => (typeof value === "string" ? value.toUpperCase().trim() : value))
   @IsEnum(PlaylistType)
   type?: PlaylistType;
 
@@ -101,9 +97,7 @@ export class UpdatePlaylistDto {
     if (!Array.isArray(value)) return value;
     return value
       .map((item) => (typeof item === "string" ? item.trim() : item))
-      .filter(
-        (item): item is string => typeof item === "string" && item.length > 0,
-      )
+      .filter((item): item is string => typeof item === "string" && item.length > 0)
       .slice(0, 20);
   })
   @IsArray()

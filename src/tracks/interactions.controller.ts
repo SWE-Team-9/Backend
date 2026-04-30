@@ -119,15 +119,8 @@ export class InteractionsController {
       },
     },
   })
-  getMyLikes(
-    @CurrentUser("userId") userId: string,
-    @Query() pagination: PaginationQueryDto,
-  ) {
-    return this.interactionsService.getMyLikedTracks(
-      userId,
-      pagination.page,
-      pagination.limit,
-    );
+  getMyLikes(@CurrentUser("userId") userId: string, @Query() pagination: PaginationQueryDto) {
+    return this.interactionsService.getMyLikedTracks(userId, pagination.page, pagination.limit);
   }
 
   @Get("me/reposts")
@@ -164,15 +157,8 @@ export class InteractionsController {
       },
     },
   })
-  getMyReposts(
-    @CurrentUser("userId") userId: string,
-    @Query() pagination: PaginationQueryDto,
-  ) {
-    return this.interactionsService.getMyRepostedTracks(
-      userId,
-      pagination.page,
-      pagination.limit,
-    );
+  getMyReposts(@CurrentUser("userId") userId: string, @Query() pagination: PaginationQueryDto) {
+    return this.interactionsService.getMyRepostedTracks(userId, pagination.page, pagination.limit);
   }
 
   @Get("users/:userId/likes")
@@ -214,11 +200,7 @@ export class InteractionsController {
     @Param("userId", new ParseUUIDPipe({ version: "4" })) userId: string,
     @Query() pagination: PaginationQueryDto,
   ) {
-    return this.interactionsService.getLikedTracks(
-      userId,
-      pagination.page,
-      pagination.limit,
-    );
+    return this.interactionsService.getLikedTracks(userId, pagination.page, pagination.limit);
   }
 
   @Get("users/:userId/reposts")
@@ -260,11 +242,7 @@ export class InteractionsController {
     @Param("userId", new ParseUUIDPipe({ version: "4" })) userId: string,
     @Query() pagination: PaginationQueryDto,
   ) {
-    return this.interactionsService.getRepostedTracks(
-      userId,
-      pagination.page,
-      pagination.limit,
-    );
+    return this.interactionsService.getRepostedTracks(userId, pagination.page, pagination.limit);
   }
 
   @Get("tracks/:id/likers")
@@ -311,11 +289,7 @@ export class InteractionsController {
     @Param("id", new ParseUUIDPipe({ version: "4" })) trackId: string,
     @Query() pagination: PaginationQueryDto,
   ) {
-    return this.interactionsService.getTrackLikers(
-      trackId,
-      pagination.page,
-      pagination.limit,
-    );
+    return this.interactionsService.getTrackLikers(trackId, pagination.page, pagination.limit);
   }
 
   @Get("tracks/:id/reposters")
@@ -362,11 +336,7 @@ export class InteractionsController {
     @Param("id", new ParseUUIDPipe({ version: "4" })) trackId: string,
     @Query() pagination: PaginationQueryDto,
   ) {
-    return this.interactionsService.getTrackReposters(
-      trackId,
-      pagination.page,
-      pagination.limit,
-    );
+    return this.interactionsService.getTrackReposters(trackId, pagination.page, pagination.limit);
   }
 
   @Post("tracks/:id/comments")
@@ -394,12 +364,7 @@ export class InteractionsController {
     @Param("id", new ParseUUIDPipe({ version: "4" })) trackId: string,
     @Body() body: CreateCommentDto,
   ) {
-    return this.interactionsService.createComment(
-      userId,
-      trackId,
-      body.content,
-      body.timestampAt,
-    );
+    return this.interactionsService.createComment(userId, trackId, body.content, body.timestampAt);
   }
 
   @Get("tracks/:id/comments")
@@ -423,9 +388,7 @@ export class InteractionsController {
       ],
     },
   })
-  getTrackComments(
-    @Param("id", new ParseUUIDPipe({ version: "4" })) trackId: string,
-  ) {
+  getTrackComments(@Param("id", new ParseUUIDPipe({ version: "4" })) trackId: string) {
     return this.interactionsService.getTrackComments(trackId);
   }
 

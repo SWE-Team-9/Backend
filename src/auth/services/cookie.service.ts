@@ -16,8 +16,7 @@ export class CookieService {
   private readonly isSecure: boolean;
 
   constructor(private readonly configService: ConfigService) {
-    this.isSecure =
-      this.configService.get<boolean>("security.authCookieSecure") ?? false;
+    this.isSecure = this.configService.get<boolean>("security.authCookieSecure") ?? false;
   }
 
   // Set both access and refresh token cookies on the response
@@ -48,11 +47,7 @@ export class CookieService {
 
   // Set cookies for native OAuth callback/token exchange flows.
   // Uses cross-site cookie settings required by mobile WebView cookie jars.
-  setNativeOAuthCookies(
-    res: Response,
-    accessToken: string,
-    refreshToken: string,
-  ): void {
+  setNativeOAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
     const sameSite = this.isSecure ? "none" : "lax";
 
     res.cookie(ACCESS_COOKIE, accessToken, {

@@ -173,29 +173,28 @@ export class AdminUsersService {
       });
     }
 
-    const [moderationHistory, reportsAgainst, reportsSubmitted] =
-      await Promise.all([
-        this.prisma.moderationAction.findMany({
-          where: { targetUserId: userId },
-          orderBy: { createdAt: "desc" },
-          take: 20,
-          select: {
-            id: true,
-            actionType: true,
-            notes: true,
-            createdAt: true,
-            admin: { select: { profile: { select: { handle: true } } } },
-          },
-        }),
-        this.prisma.moderationReport.aggregate({
-          where: { reportedUserId: userId },
-          _count: { id: true },
-        }),
-        this.prisma.moderationReport.aggregate({
-          where: { reporterId: userId },
-          _count: { id: true },
-        }),
-      ]);
+    const [moderationHistory, reportsAgainst, reportsSubmitted] = await Promise.all([
+      this.prisma.moderationAction.findMany({
+        where: { targetUserId: userId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          actionType: true,
+          notes: true,
+          createdAt: true,
+          admin: { select: { profile: { select: { handle: true } } } },
+        },
+      }),
+      this.prisma.moderationReport.aggregate({
+        where: { reportedUserId: userId },
+        _count: { id: true },
+      }),
+      this.prisma.moderationReport.aggregate({
+        where: { reporterId: userId },
+        _count: { id: true },
+      }),
+    ]);
 
     const pendingAgainst = await this.prisma.moderationReport.count({
       where: { reportedUserId: userId, status: "PENDING" },
@@ -262,8 +261,7 @@ export class AdminUsersService {
     const where: Prisma.ModerationActionWhereInput = {
       ...(query.actionType
         ? {
-            actionType:
-              query.actionType as Prisma.EnumModerationActionTypeFilter,
+            actionType: query.actionType as Prisma.EnumModerationActionTypeFilter,
           }
         : {}),
       ...(query.adminId ? { adminId: query.adminId } : {}),
@@ -332,9 +330,7 @@ export class AdminUsersService {
           : null,
         target_track: a.track ? { id: a.track.id, title: a.track.title } : null,
         target_comment: a.comment ? { id: a.comment.id } : null,
-        target_playlist: a.playlist
-          ? { id: a.playlist.id, title: a.playlist.title }
-          : null,
+        target_playlist: a.playlist ? { id: a.playlist.id, title: a.playlist.title } : null,
         linked_report_id: a.reportId,
         notes: a.notes,
         created_at: a.createdAt,
@@ -415,9 +411,7 @@ export class AdminUsersService {
         }),
       ]);
 
-      const totalStorageBytes = Number(
-        storageAggregate._sum.fileSizeBytes ?? BigInt(0),
-      );
+      const totalStorageBytes = Number(storageAggregate._sum.fileSizeBytes ?? BigInt(0));
 
       // Play Through Rate = (completedPlays / totalPlays) × 100
       // A completed play is one where completionRatio >= 0.90
@@ -546,9 +540,7 @@ export class AdminUsersService {
       const userIds = userReports
         .map((r) => r.reportedUserId)
         .filter((id): id is string => id !== null);
-      const trackIds = trackReports
-        .map((r) => r.trackId)
-        .filter((id): id is string => id !== null);
+      const trackIds = trackReports.map((r) => r.trackId).filter((id): id is string => id !== null);
       const playlistIds = playlistReports
         .map((r) => r.playlistId)
         .filter((id): id is string => id !== null);

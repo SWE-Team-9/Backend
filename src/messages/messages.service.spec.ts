@@ -37,10 +37,7 @@ describe("MessagesService", () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        MessagesService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [MessagesService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
 
     service = module.get<MessagesService>(MessagesService);
@@ -52,9 +49,9 @@ describe("MessagesService", () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce({
       blockerId: "userA",
     });
-    await expect(
-      service.sendMessage("userA", "userB", "hello"),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.sendMessage("userA", "userB", "hello")).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   // 2. sendMessage - creates new conversation when none exists
@@ -113,18 +110,18 @@ describe("MessagesService", () => {
   // 4. getConversationMessages - non-participant gets 404
   it("getConversationMessages: throws NotFoundException for non-participant", async () => {
     mockPrisma.conversationParticipant.findUnique.mockResolvedValueOnce(null);
-    await expect(
-      service.getConversationMessages("userX", "conv-1", 1, 20),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.getConversationMessages("userX", "conv-1", 1, 20)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   // 5. shareTrack - throws 404 when track not found
   it("shareTrack: throws 404 when track not found", async () => {
     mockPrisma.userBlock.findFirst.mockResolvedValueOnce(null);
     mockPrisma.track.findUnique.mockResolvedValueOnce(null);
-    await expect(
-      service.shareTrack("userA", "userB", "no-track"),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.shareTrack("userA", "userB", "no-track")).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   // 6. shareTrack - throws 403 for private track not owned by sender
@@ -135,9 +132,9 @@ describe("MessagesService", () => {
       visibility: "PRIVATE",
       uploaderId: "ownerC",
     });
-    await expect(
-      service.shareTrack("userA", "userB", "track-1"),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.shareTrack("userA", "userB", "track-1")).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   // 7. sharePlaylist - throws 403 for SECRET playlist not owned by sender
@@ -148,9 +145,9 @@ describe("MessagesService", () => {
       visibility: "SECRET",
       ownerId: "ownerD",
     });
-    await expect(
-      service.sharePlaylist("userA", "userB", "pl-1"),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.sharePlaylist("userA", "userB", "pl-1")).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   // 8. deleteMessage - non-sender gets 403
@@ -161,9 +158,7 @@ describe("MessagesService", () => {
       conversationId: "conv-1",
       deletedAt: null,
     });
-    await expect(service.deleteMessage("userA", "msg-3")).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(service.deleteMessage("userA", "msg-3")).rejects.toThrow(ForbiddenException);
   });
 
   // 9. getUnreadCount - returns 0 when no conversations
@@ -176,8 +171,6 @@ describe("MessagesService", () => {
   // 10. markAsUnread - non-participant gets NotFoundException
   it("markAsUnread: throws NotFoundException for non-participant", async () => {
     mockPrisma.conversationParticipant.findUnique.mockResolvedValueOnce(null);
-    await expect(service.markAsUnread("userX", "conv-1")).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(service.markAsUnread("userX", "conv-1")).rejects.toThrow(NotFoundException);
   });
 });

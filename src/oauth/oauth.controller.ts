@@ -1,25 +1,19 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
+  HttpCode,
   Post,
-  Body,
   Query,
   Redirect,
-  BadRequestException,
-  HttpCode,
-  UnauthorizedException,
   Req,
   Res,
+  UnauthorizedException,
 } from "@nestjs/common";
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiQuery,
-  ApiConsumes,
-} from "@nestjs/swagger";
+import { ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OAuthService } from "./oauth.service";
-import { AuthorizeDto, TokenDto, RevokeDto } from "./dto";
+import { AuthorizeDto, RevokeDto, TokenDto } from "./dto";
 import { CallbackDto } from "./dto/callback.dto";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Public } from "../common/decorators/public.decorator";
@@ -121,8 +115,7 @@ export class OAuthController {
   })
   @ApiResponse({
     status: 302,
-    description:
-      "User denied. Redirect: {redirect_uri}?error=access_denied&state={state}",
+    description: "User denied. Redirect: {redirect_uri}?error=access_denied&state={state}",
   })
   @ApiQuery({
     name: "client_id",
@@ -163,10 +156,7 @@ export class OAuthController {
   @Get("authorize")
   @Public()
   @Redirect()
-  async authorize(
-    @Query() query: AuthorizeDto,
-    @CurrentUser("userId") userId?: string,
-  ) {
+  async authorize(@Query() query: AuthorizeDto, @CurrentUser("userId") userId?: string) {
     if (query.response_type !== "code") {
       throw new BadRequestException("unsupported_response_type");
     }
@@ -174,9 +164,7 @@ export class OAuthController {
     // Native PKCE clients initiate auth without an existing app session.
     if (this.oauthService.isNativeClient(query.client_id)) {
       if (!query.code_challenge || query.code_challenge_method !== "S256") {
-        throw new BadRequestException(
-          "code_challenge and S256 are required for native clients.",
-        );
+        throw new BadRequestException("code_challenge and S256 are required for native clients.");
       }
 
       return {
@@ -190,9 +178,7 @@ export class OAuthController {
     }
 
     if (!userId) {
-      throw new UnauthorizedException(
-        "Authentication is required to access this resource",
-      );
+      throw new UnauthorizedException("Authentication is required to access this resource");
     }
 
     // Generate authorization code
@@ -202,9 +188,7 @@ export class OAuthController {
       query.redirect_uri,
       query.scope,
       query.state,
-      query.code_challenge
-        ? { challenge: query.code_challenge, method: "S256" }
-        : undefined,
+      query.code_challenge ? { challenge: query.code_challenge, method: "S256" } : undefined,
     );
 
     // Redirect back to the client with the code.
@@ -312,10 +296,7 @@ export class OAuthController {
   @Public()
   @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
-  async token(
-    @Body() body: TokenDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async token(@Body() body: TokenDto, @Res({ passthrough: true }) res: Response) {
     let tokens:
       | {
           access_token: string;
@@ -357,11 +338,7 @@ export class OAuthController {
       throw new BadRequestException("unsupported_grant_type");
     }
 
-    this.cookieService.setNativeOAuthCookies(
-      res,
-      tokens.access_token,
-      tokens.refresh_token,
-    );
+    this.cookieService.setNativeOAuthCookies(res, tokens.access_token, tokens.refresh_token);
 
     return tokens;
   }
@@ -406,8 +383,7 @@ This prevents attackers from enumerating valid tokens.
   })
   @ApiResponse({
     status: 200,
-    description:
-      "Token revocations (successful or was already revoked-same response)",
+    description: "Token revocations (successful or was already revoked-same response)",
     schema: {
       type: "object",
       properties: {
@@ -428,11 +404,7 @@ This prevents attackers from enumerating valid tokens.
   @ThrottlePolicy(20, 60_000)
   @HttpCode(200)
   async revoke(@Body() body: RevokeDto) {
-    return await this.oauthService.revokeToken(
-      body.client_id,
-      body.client_secret,
-      body.token,
-    );
+    return await this.oauthService.revokeToken(body.client_id, body.client_secret, body.token);
   }
 
   // ---------------------------------------------------------------------------
@@ -448,8 +420,7 @@ This prevents attackers from enumerating valid tokens.
   })
   @ApiResponse({
     status: 302,
-    description:
-      "Redirects to the native app with an internal authorization code.",
+    description: "Redirects to the native app with an internal authorization code.",
   })
   @ApiResponse({ status: 400, description: "Missing or invalid code/state." })
   @Get("google/callback")
@@ -471,12 +442,7 @@ This prevents attackers from enumerating valid tokens.
     const ip = req.ip ?? "unknown";
     const userAgent = String(req.headers["user-agent"] ?? "unknown");
 
-    const result = await this.oauthService.processGoogleNativeCallback(
-      code,
-      state,
-      ip,
-      userAgent,
-    );
+    const result = await this.oauthService.processGoogleNativeCallback(code, state, ip, userAgent);
 
     return res.redirect(result.redirectUrl);
   }
@@ -512,11 +478,7 @@ This prevents attackers from enumerating valid tokens.
 
     const result = await this.oauthService.handleCallback(dto, ip, userAgent);
 
-    this.cookieService.setAuthCookies(
-      res,
-      result.accessToken,
-      result.refreshToken,
-    );
+    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
     return {
       message: "OAuth login successful",

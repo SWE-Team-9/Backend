@@ -60,8 +60,7 @@ function isValidIp(value: string): boolean {
 
   // IPv4
   const ipv4 =
-    /^(\d{1,3}\.){3}\d{1,3}$/.test(clean) &&
-    clean.split(".").every((o) => Number(o) <= 255);
+    /^(\d{1,3}\.){3}\d{1,3}$/.test(clean) && clean.split(".").every((o) => Number(o) <= 255);
 
   // IPv6 (coarse check - at least one colon)
   const ipv6 = clean.includes(":") && /^[0-9a-fA-F:]+$/.test(clean);

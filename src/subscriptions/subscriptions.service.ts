@@ -118,9 +118,7 @@ function mockId(prefix: string): string {
   return `${prefix}_mock_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
-function planTierToCode(
-  tier: SubscriptionTier | string,
-): "FREE" | "PRO" | "GO_PLUS" {
+function planTierToCode(tier: SubscriptionTier | string): "FREE" | "PRO" | "GO_PLUS" {
   if (tier === SubscriptionTier.PRO) return "PRO";
   if (tier === SubscriptionTier.GO_PLUS) return "GO_PLUS";
   return "FREE";
@@ -147,31 +145,19 @@ export class SubscriptionsService {
     private readonly mailService: MailService,
     @Inject(BILLING_PROVIDER) private readonly billing: IBillingProvider,
   ) {
-    this.storageProvider = this.config.get<"local" | "s3">(
-      "storage.provider",
-      "local",
-    );
+    this.storageProvider = this.config.get<"local" | "s3">("storage.provider", "local");
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
     );
-    this.localUploadDir = this.config.get<string>(
-      "storage.localUploadDir",
-      "./uploads",
-    );
+    this.localUploadDir = this.config.get<string>("storage.localUploadDir", "./uploads");
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
-    this.downloadUrlTtl = parseInt(
-      process.env.S3_DOWNLOAD_URL_TTL_SECONDS ?? "900",
-      10,
-    );
+    this.downloadUrlTtl = parseInt(process.env.S3_DOWNLOAD_URL_TTL_SECONDS ?? "900", 10);
 
     if (this.storageProvider === "s3") {
       const accessKeyId = this.config.get<string>("storage.awsAccessKeyId", "");
-      const secretAccessKey = this.config.get<string>(
-        "storage.awsSecretAccessKey",
-        "",
-      );
+      const secretAccessKey = this.config.get<string>("storage.awsSecretAccessKey", "");
       this.s3Client = new S3Client({
         region: this.s3Region,
         ...(accessKeyId && secretAccessKey
@@ -205,8 +191,7 @@ export class SubscriptionsService {
       const planCode = planTierToCode(p.tier);
       const cfg = PLAN_CONFIG[planCode];
       const isUnlimited = p.uploadLimit < 0;
-      const priceDisplay =
-        p.priceCents === 0 ? "Free" : `$${(p.priceCents / 100).toFixed(2)}/mo`;
+      const priceDisplay = p.priceCents === 0 ? "Free" : `$${(p.priceCents / 100).toFixed(2)}/mo`;
       return {
         id: p.id,
         code: p.code,
@@ -268,10 +253,7 @@ export class SubscriptionsService {
 
     // The paymentMethod JSON field may hold either card info or a pendingDowngrade
     // object (set when user schedules a downgrade in checkout()). Separate them.
-    const rawPaymentMethod = (sub as any).paymentMethod as Record<
-      string,
-      unknown
-    > | null;
+    const rawPaymentMethod = (sub as any).paymentMethod as Record<string, unknown> | null;
     const pendingDowngrade =
       (rawPaymentMethod?.pendingDowngrade as {
         planCode: string;
@@ -326,19 +308,14 @@ export class SubscriptionsService {
     const planCode = dto.planCode as "PRO" | "GO_PLUS";
     const planCfg = PLAN_CONFIG[planCode];
     if (!planCfg) {
-      throw new BadRequestException(
-        `Invalid plan "${dto.planCode}". Valid: PRO, GO_PLUS`,
-      );
+      throw new BadRequestException(`Invalid plan "${dto.planCode}". Valid: PRO, GO_PLUS`);
     }
 
     const plan = await this.prisma.subscriptionPlan.findFirst({
-      where: { tier: planCode as SubscriptionTier, isActive: true },
+      where: { tier: planCode, isActive: true },
       orderBy: { priceCents: "asc" },
     });
-    if (!plan)
-      throw new BadRequestException(
-        `No active plan for "${planCode}". Contact support.`,
-      );
+    if (!plan) throw new BadRequestException(`No active plan for "${planCode}". Contact support.`);
 
     const now = new Date();
     const existing = await this.findActiveSubscription(userId);
@@ -365,7 +342,7 @@ export class SubscriptionsService {
       );
     }
 
-    if (existing && existing.planId === plan.id) {
+    if (existing?.planId === plan.id) {
       throw new ConflictException({
         code: "SUBSCRIPTION_ALREADY_ACTIVE",
         message: `You already have an active ${plan.name} subscription.`,
@@ -385,8 +362,7 @@ export class SubscriptionsService {
         // Persist the scheduled downgrade intent in the subscription's
         // paymentMethod JSON so getMySubscription can surface it.
         const currentPaymentMethod =
-          typeof existing.paymentMethod === "object" &&
-          existing.paymentMethod !== null
+          typeof existing.paymentMethod === "object" && existing.paymentMethod !== null
             ? (existing.paymentMethod as object)
             : {};
         await this.prisma.userSubscription.update({
@@ -405,22 +381,13 @@ export class SubscriptionsService {
           },
         });
 
-        await this.logPaymentEvent(
-          existing.id,
-          "customer.subscription.downgrade_scheduled",
-          {
-            fromPlanCode: currentTierCode,
-            toPlanCode: planCode,
-            effectiveAt: effectiveAt.toISOString(),
-          },
-        );
+        await this.logPaymentEvent(existing.id, "customer.subscription.downgrade_scheduled", {
+          fromPlanCode: currentTierCode,
+          toPlanCode: planCode,
+          effectiveAt: effectiveAt.toISOString(),
+        });
 
-        this.sendDowngradeScheduledEmailAsync(
-          userId,
-          existing.plan.name,
-          plan.name,
-          effectiveAt,
-        );
+        this.sendDowngradeScheduledEmailAsync(userId, existing.plan.name, plan.name, effectiveAt);
 
         return {
           subscriptionId: existing.id,
@@ -467,12 +434,8 @@ export class SubscriptionsService {
     });
 
     const periodEnd = new Date(session.renewsAt);
-    const trialEnd = session.trialEndsAt
-      ? new Date(session.trialEndsAt)
-      : undefined;
-    const status = trialEligible
-      ? SubscriptionStatus.TRIALING
-      : SubscriptionStatus.ACTIVE;
+    const trialEnd = session.trialEndsAt ? new Date(session.trialEndsAt) : undefined;
+    const status = trialEligible ? SubscriptionStatus.TRIALING : SubscriptionStatus.ACTIVE;
     const amountPaid = trialEligible ? 0 : plan.priceCents;
 
     let subscriptionId: string;
@@ -537,9 +500,7 @@ export class SubscriptionsService {
 
     await this.logPaymentEvent(
       subscriptionId,
-      trialEligible
-        ? "customer.subscription.trial_started"
-        : "invoice.payment_succeeded",
+      trialEligible ? "customer.subscription.trial_started" : "invoice.payment_succeeded",
       {
         checkoutSessionId: session.checkoutSessionId,
         amountPaid,
@@ -549,19 +510,8 @@ export class SubscriptionsService {
     );
 
     if (trialEligible)
-      this.sendTrialStartedEmailAsync(
-        userId,
-        plan.name,
-        plan.priceCents,
-        trialEnd!,
-      );
-    else
-      this.sendSubscriptionConfirmationEmailAsync(
-        userId,
-        plan.name,
-        plan.priceCents,
-        periodEnd,
-      );
+      this.sendTrialStartedEmailAsync(userId, plan.name, plan.priceCents, trialEnd!);
+    else this.sendSubscriptionConfirmationEmailAsync(userId, plan.name, plan.priceCents, periodEnd);
 
     return this.buildCheckoutResponse(
       subscriptionId,
@@ -577,10 +527,7 @@ export class SubscriptionsService {
 
   // ── POST /subscriptions/subscribe (backward-compat alias) ─────────────────
 
-  async subscribe(
-    userId: string,
-    dto: { subscriptionType: string; paymentMethodId?: string },
-  ) {
+  async subscribe(userId: string, dto: { subscriptionType: string; paymentMethodId?: string }) {
     return this.checkout(userId, {
       planCode: dto.subscriptionType as unknown as CheckoutDto["planCode"],
     });
@@ -610,8 +557,7 @@ export class SubscriptionsService {
     const storedPaymentMethod = sub
       ? ((sub as any).paymentMethod as PaymentMethodSummary | null)
       : null;
-    const paymentMethodSummary =
-      storedPaymentMethod ?? portal.paymentMethodSummary ?? null;
+    const paymentMethodSummary = storedPaymentMethod ?? portal.paymentMethodSummary ?? null;
     return {
       portalSessionId: portal.portalSessionId,
       portalUrl: portal.portalUrl,
@@ -651,11 +597,7 @@ export class SubscriptionsService {
       cancelAtPeriodEnd: true,
       currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
     });
-    this.sendCancellationEmailAsync(
-      userId,
-      sub.plan.name,
-      sub.currentPeriodEnd,
-    );
+    this.sendCancellationEmailAsync(userId, sub.plan.name, sub.currentPeriodEnd);
     return {
       message:
         "Subscription will cancel at end of billing period. You keep full access until then.",
@@ -720,8 +662,7 @@ export class SubscriptionsService {
     const newPlan = await this.prisma.subscriptionPlan.findFirst({
       where: { tier: newTier, isActive: true },
     });
-    if (!newPlan)
-      throw new BadRequestException(`Plan "${dto.planCode}" not found.`);
+    if (!newPlan) throw new BadRequestException(`Plan "${dto.planCode}" not found.`);
     const now = new Date();
     await this.billing.changePlan({
       providerSubscriptionId: sub.stripeSubscriptionId ?? mockId("sub"),
@@ -738,16 +679,8 @@ export class SubscriptionsService {
       effectiveDate: now.toISOString(),
     });
     const newPlanCode = planTierToCode(newTier);
-    await this.applyPlanLimitToTracks(
-      userId,
-      PLAN_CONFIG[newPlanCode].uploadLimit,
-    );
-    this.sendPlanChangedEmailAsync(
-      userId,
-      planTierToCode(currentTier),
-      newPlanCode,
-      now,
-    );
+    await this.applyPlanLimitToTracks(userId, PLAN_CONFIG[newPlanCode].uploadLimit);
+    this.sendPlanChangedEmailAsync(userId, planTierToCode(currentTier), newPlanCode, now);
     return this.getMySubscription(userId);
   }
 
@@ -794,10 +727,7 @@ export class SubscriptionsService {
 
   // ── POST /subscriptions/webhook ───────────────────────────────────────────
 
-  async handleStripeWebhook(
-    rawBody: Buffer,
-    signature: string,
-  ): Promise<{ received: boolean }> {
+  async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<{ received: boolean }> {
     let event: ReturnType<IBillingProvider["constructWebhookEvent"]>;
     try {
       event = this.billing.constructWebhookEvent(rawBody, signature);
@@ -821,8 +751,7 @@ export class SubscriptionsService {
 
     const obj = event.data?.object ?? {};
     const stripeSubId =
-      (obj["id"] as string | undefined) ??
-      (obj["subscription"] as string | undefined);
+      (obj["id"] as string | undefined) ?? (obj["subscription"] as string | undefined);
     let sub: {
       id: string;
       userId: string;
@@ -850,7 +779,7 @@ export class SubscriptionsService {
           subscriptionId: sub.id,
           stripeEventId: event.id,
           eventType: event.type,
-          payload: event.data as object,
+          payload: event.data,
         },
       });
     }
@@ -889,9 +818,7 @@ export class SubscriptionsService {
           }
           await this.prisma.userSubscription.update({
             where: { id: sub.id },
-            data: updateData as Parameters<
-              typeof this.prisma.userSubscription.update
-            >[0]["data"],
+            data: updateData,
           });
           const invoiceId = obj["invoice"] as string | undefined;
           const amountPaid = (obj["amount_paid"] as number | undefined) ?? 0;
@@ -951,9 +878,7 @@ export class SubscriptionsService {
                 planName: sub.plan.name,
                 gracePeriodDays: GRACE_PERIOD_DAYS,
               })
-              .catch((err) =>
-                this.logger.error(`[PAYMENT FAILED EMAIL] ${err}`),
-              );
+              .catch((err) => this.logger.error(`[PAYMENT FAILED EMAIL] ${err}`));
           }
         }
         break;
@@ -962,13 +887,10 @@ export class SubscriptionsService {
       case "customer.subscription.updated": {
         if (sub) {
           const newStatus = obj["status"] as string | undefined;
-          const cancelAtEnd = obj["cancel_at_period_end"] as
-            | boolean
-            | undefined;
+          const cancelAtEnd = obj["cancel_at_period_end"] as boolean | undefined;
           const updateData: Record<string, unknown> = {};
           if (newStatus) updateData["status"] = this.mapStripeStatus(newStatus);
-          if (cancelAtEnd !== undefined)
-            updateData["cancelAtPeriodEnd"] = cancelAtEnd;
+          if (cancelAtEnd !== undefined) updateData["cancelAtPeriodEnd"] = cancelAtEnd;
           if (Object.keys(updateData).length) {
             await this.prisma.userSubscription.update({
               where: { id: sub.id },
@@ -1022,9 +944,7 @@ export class SubscriptionsService {
                   priceCents: dbSub.plan.priceCents,
                   trialEndsAt: dbSub.currentPeriodEnd,
                 })
-                .catch((err) =>
-                  this.logger.error(`[TRIAL ENDING EMAIL] ${err}`),
-                );
+                .catch((err) => this.logger.error(`[TRIAL ENDING EMAIL] ${err}`));
             }
           }
         }
@@ -1044,8 +964,7 @@ export class SubscriptionsService {
             select: { id: true, userId: true },
           });
           if (subByCustomer) {
-            const card =
-              (obj["card"] as Record<string, unknown> | undefined) ?? {};
+            const card = (obj["card"] as Record<string, unknown> | undefined) ?? {};
             const brand =
               (card["brand"] as string | undefined) ??
               (obj["brand"] as string | undefined) ??
@@ -1083,7 +1002,7 @@ export class SubscriptionsService {
                 subscriptionId: subByCustomer.id,
                 stripeEventId: event.id,
                 eventType: "payment_method.updated",
-                payload: { brand, last4, expiryMonth, expiryYear } as object,
+                payload: { brand, last4, expiryMonth, expiryYear },
               },
             });
             this.sendPaymentMethodUpdatedEmailAsync(
@@ -1145,15 +1064,10 @@ export class SubscriptionsService {
       },
     });
 
-    if (!track)
-      throw new NotFoundException(
-        "Track not found or not available for download.",
-      );
+    if (!track) throw new NotFoundException("Track not found or not available for download.");
 
-    const file =
-      track.files.find((f) => f.fileRole === FileRole.STREAM) ?? track.files[0];
-    if (!file)
-      throw new NotFoundException("Track audio file is not ready yet.");
+    const file = track.files.find((f) => f.fileRole === FileRole.STREAM) ?? track.files[0];
+    if (!file) throw new NotFoundException("Track audio file is not ready yet.");
 
     const ttl = this.downloadUrlTtl;
     const expiresAt = new Date(Date.now() + ttl * 1000);
@@ -1308,12 +1222,10 @@ export class SubscriptionsService {
 
   // ── getUploadQuota (used by TracksService / EntitlementsService) ───────────
 
-  async getUploadQuota(
-    userId: string,
-  ): Promise<{ uploadLimit: number; uploadedCount: number }> {
+  async getUploadQuota(userId: string): Promise<{ uploadLimit: number; uploadedCount: number }> {
     const sub = await this.findActiveSubscription(userId);
     const planCode = sub ? planTierToCode(sub.plan.tier) : "FREE";
-    const uploadLimit = PLAN_CONFIG[planCode].uploadLimit;
+    const { uploadLimit } = PLAN_CONFIG[planCode];
     const uploadedCount = await this.prisma.track.count({
       where: { uploaderId: userId, deletedAt: null },
     });
@@ -1328,10 +1240,7 @@ export class SubscriptionsService {
    * On upgrade, restores tracks that were hidden by this rule ONLY (not user-hidden).
    * Never deletes tracks.
    */
-  async applyPlanLimitToTracks(
-    userId: string,
-    newLimit: number,
-  ): Promise<void> {
+  async applyPlanLimitToTracks(userId: string, newLimit: number): Promise<void> {
     const tracks = await this.prisma.track.findMany({
       where: { uploaderId: userId, deletedAt: null },
       orderBy: { createdAt: "desc" }, // newest first
@@ -1351,9 +1260,7 @@ export class SubscriptionsService {
         where: { id: { in: toRestore.map((t) => t.id) } },
         data: { hiddenByPlanLimit: false, hiddenByPlanLimitAt: null } as any,
       });
-      this.logger.log(
-        `[PLAN LIMIT] Restored ${toRestore.length} tracks for user ${userId}`,
-      );
+      this.logger.log(`[PLAN LIMIT] Restored ${toRestore.length} tracks for user ${userId}`);
     }
 
     // Auto-hide tracks that exceed the new limit
@@ -1385,11 +1292,7 @@ export class SubscriptionsService {
       where: {
         userId,
         status: {
-          in: [
-            SubscriptionStatus.ACTIVE,
-            SubscriptionStatus.TRIALING,
-            SubscriptionStatus.PAST_DUE,
-          ],
+          in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE],
         },
         currentPeriodEnd: { gte: new Date() },
       },
@@ -1589,18 +1492,12 @@ export class SubscriptionsService {
               priceCents,
               currentPeriodEnd,
             })
-            .catch((err) =>
-              this.logger.error(`[SUBSCRIPTION CONFIRMATION EMAIL] ${err}`),
-            );
+            .catch((err) => this.logger.error(`[SUBSCRIPTION CONFIRMATION EMAIL] ${err}`));
       })
       .catch(() => undefined);
   }
 
-  private sendCancellationEmailAsync(
-    userId: string,
-    planName: string,
-    expiresAt: Date,
-  ): void {
+  private sendCancellationEmailAsync(userId: string, planName: string, expiresAt: Date): void {
     this.prisma.user
       .findUnique({
         where: { id: userId },
@@ -1615,9 +1512,7 @@ export class SubscriptionsService {
               planName,
               expiresAt,
             })
-            .catch((err: unknown) =>
-              this.logger.error(`[CANCELLATION EMAIL] ${err}`),
-            );
+            .catch((err: unknown) => this.logger.error(`[CANCELLATION EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);
@@ -1646,9 +1541,7 @@ export class SubscriptionsService {
               paidAt,
               invoiceId,
             })
-            .catch((err: unknown) =>
-              this.logger.error(`[INVOICE RECEIPT EMAIL] ${err}`),
-            );
+            .catch((err: unknown) => this.logger.error(`[INVOICE RECEIPT EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);
@@ -1672,16 +1565,12 @@ export class SubscriptionsService {
               to: user.email,
               displayName: user.profile?.displayName ?? undefined,
               oldPlanName:
-                PLAN_CONFIG[oldPlanCode as keyof typeof PLAN_CONFIG]
-                  ?.displayName ?? oldPlanCode,
+                PLAN_CONFIG[oldPlanCode as keyof typeof PLAN_CONFIG]?.displayName ?? oldPlanCode,
               newPlanName:
-                PLAN_CONFIG[newPlanCode as keyof typeof PLAN_CONFIG]
-                  ?.displayName ?? newPlanCode,
+                PLAN_CONFIG[newPlanCode as keyof typeof PLAN_CONFIG]?.displayName ?? newPlanCode,
               effectiveDate,
             })
-            .catch((err: unknown) =>
-              this.logger.error(`[PLAN CHANGED EMAIL] ${err}`),
-            );
+            .catch((err: unknown) => this.logger.error(`[PLAN CHANGED EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);
@@ -1708,9 +1597,7 @@ export class SubscriptionsService {
               newPlanName,
               effectiveAt,
             })
-            .catch((err: unknown) =>
-              this.logger.error(`[DOWNGRADE SCHEDULED EMAIL] ${err}`),
-            );
+            .catch((err: unknown) => this.logger.error(`[DOWNGRADE SCHEDULED EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);
@@ -1739,9 +1626,7 @@ export class SubscriptionsService {
               expiryMonth,
               expiryYear,
             })
-            .catch((err: unknown) =>
-              this.logger.error(`[PAYMENT METHOD EMAIL] ${err}`),
-            );
+            .catch((err: unknown) => this.logger.error(`[PAYMENT METHOD EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);
@@ -1760,9 +1645,7 @@ function buildPlanFeatures(
       ? "Unlimited track uploads"
       : `${uploadLimit} track upload${uploadLimit !== 1 ? "s" : ""}`,
     cfg.adsEnabled ? "Ad-supported listening" : "Ad-free listening",
-    cfg.canDownload
-      ? "Offline listening / download tracks"
-      : "Online streaming only",
+    cfg.canDownload ? "Offline listening / download tracks" : "Online streaming only",
     cfg.supportLevel === "priority" ? "Priority support" : "Community support",
   ];
 }

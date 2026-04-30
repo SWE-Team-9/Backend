@@ -107,10 +107,7 @@ export class RegisterDto {
     example: "2000-01-15",
     description: "Date of birth in YYYY-MM-DD format. Must be 13+ years old.",
   })
-  @IsDateString(
-    {},
-    { message: "Date of birth must be a valid ISO date (YYYY-MM-DD)." },
-  )
+  @IsDateString({}, { message: "Date of birth must be a valid ISO date (YYYY-MM-DD)." })
   @Validate(IsAdult13Constraint)
   date_of_birth!: string;
 
@@ -152,8 +149,7 @@ export class CheckEmailQueryDto {
 export class VerifyEmailDto {
   @ApiProperty({
     example: "a1b2c3d4e5f6...",
-    description:
-      "Email verification token from the link in the verification email",
+    description: "Email verification token from the link in the verification email",
   })
   @IsString()
   @IsNotEmpty({ message: "Verification token is required." })
@@ -198,8 +194,7 @@ export class LoginDto {
 
   @ApiPropertyOptional({
     example: "03AGdBq...",
-    description:
-      "Google reCAPTCHA token (required when CAPTCHA is enabled on the backend)",
+    description: "Google reCAPTCHA token (required when CAPTCHA is enabled on the backend)",
   })
   @IsOptional()
   @IsString()
@@ -232,8 +227,7 @@ export class ResetPasswordDto {
 
   @ApiProperty({
     example: "NewPassw0rd!",
-    description:
-      "New password - min 8 chars, uppercase, lowercase, digit, special char",
+    description: "New password - min 8 chars, uppercase, lowercase, digit, special char",
   })
   @IsString()
   @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
@@ -262,8 +256,7 @@ export class ChangePasswordDto {
 
   @ApiProperty({
     example: "NewPassw0rd!",
-    description:
-      "New password - min 8 chars, uppercase, lowercase, digit, special char",
+    description: "New password - min 8 chars, uppercase, lowercase, digit, special char",
   })
   @IsString()
   @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })

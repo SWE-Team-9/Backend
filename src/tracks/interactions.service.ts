@@ -229,11 +229,7 @@ export class InteractionsService {
     }
   }
 
-  async getMyLikedTracks(
-    userId: string,
-    page = 1,
-    limit = 20,
-  ): Promise<MeTrackListResponse> {
+  async getMyLikedTracks(userId: string, page = 1, limit = 20): Promise<MeTrackListResponse> {
     const normalizedPage = this.normalizePage(page);
     const normalizedLimit = this.normalizeLimit(limit);
     const skip = (normalizedPage - 1) * normalizedLimit;
@@ -288,11 +284,7 @@ export class InteractionsService {
     };
   }
 
-  async getMyRepostedTracks(
-    userId: string,
-    page = 1,
-    limit = 20,
-  ): Promise<MeTrackListResponse> {
+  async getMyRepostedTracks(userId: string, page = 1, limit = 20): Promise<MeTrackListResponse> {
     const normalizedPage = this.normalizePage(page);
     const normalizedLimit = this.normalizeLimit(limit);
     const skip = (normalizedPage - 1) * normalizedLimit;
@@ -347,11 +339,7 @@ export class InteractionsService {
     };
   }
 
-  async getLikedTracks(
-    userId: string,
-    page = 1,
-    limit = 20,
-  ): Promise<MeTrackListResponse> {
+  async getLikedTracks(userId: string, page = 1, limit = 20): Promise<MeTrackListResponse> {
     const normalizedPage = this.normalizePage(page);
     const normalizedLimit = this.normalizeLimit(limit);
     const skip = (normalizedPage - 1) * normalizedLimit;
@@ -406,11 +394,7 @@ export class InteractionsService {
     };
   }
 
-  async getRepostedTracks(
-    userId: string,
-    page = 1,
-    limit = 20,
-  ): Promise<MeTrackListResponse> {
+  async getRepostedTracks(userId: string, page = 1, limit = 20): Promise<MeTrackListResponse> {
     const normalizedPage = this.normalizePage(page);
     const normalizedLimit = this.normalizeLimit(limit);
     const skip = (normalizedPage - 1) * normalizedLimit;
@@ -465,11 +449,7 @@ export class InteractionsService {
     };
   }
 
-  async getTrackLikers(
-    trackId: string,
-    page = 1,
-    limit = 20,
-  ): Promise<TrackUserListResponse> {
+  async getTrackLikers(trackId: string, page = 1, limit = 20): Promise<TrackUserListResponse> {
     const track = await this.ensureTrackExists(trackId);
     const normalizedPage = this.normalizePage(page);
     const normalizedLimit = this.normalizeLimit(limit);
@@ -515,11 +495,7 @@ export class InteractionsService {
     };
   }
 
-  async getTrackReposters(
-    trackId: string,
-    page = 1,
-    limit = 20,
-  ): Promise<TrackUserListResponse> {
+  async getTrackReposters(trackId: string, page = 1, limit = 20): Promise<TrackUserListResponse> {
     const track = await this.ensureTrackExists(trackId);
     const normalizedPage = this.normalizePage(page);
     const normalizedLimit = this.normalizeLimit(limit);
@@ -640,10 +616,7 @@ export class InteractionsService {
     };
   }
 
-  async deleteComment(
-    userId: string,
-    commentId: string,
-  ): Promise<{ message: string }> {
+  async deleteComment(userId: string, commentId: string): Promise<{ message: string }> {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       select: { id: true, userId: true },
@@ -726,11 +699,7 @@ export class InteractionsService {
     return Math.min(limit, 100);
   }
 
-  private buildPagination(
-    total: number,
-    page: number,
-    limit: number,
-  ): PaginationResult {
+  private buildPagination(total: number, page: number, limit: number): PaginationResult {
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
     return {
@@ -810,11 +779,7 @@ export class InteractionsService {
     }
   }
 
-  private assertNotOwnTrack(
-    userId: string,
-    uploaderId: string,
-    action: string,
-  ): void {
+  private assertNotOwnTrack(userId: string, uploaderId: string, action: string): void {
     if (userId === uploaderId) {
       throw new ForbiddenException({
         code: "TRACK_OWNED_BY_USER",

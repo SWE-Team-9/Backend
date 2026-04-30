@@ -1,28 +1,28 @@
 import {
-  Controller,
-  Post,
-  Get,
-  Delete,
+  BadRequestException,
   Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  Post,
   Query,
   Req,
   Res,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-  BadRequestException,
   UnauthorizedException,
+  UseGuards,
 } from "@nestjs/common";
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBody,
-  ApiParam,
   ApiBearerAuth,
+  ApiBody,
   ApiCookieAuth,
   ApiExcludeEndpoint,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { AuthService } from "../auth.service";
@@ -34,18 +34,18 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ThrottlePolicy } from "../../common/decorators/throttle-policy.decorator";
 import { GoogleAuthGuard } from "../guards/google-auth.guard";
 import {
-  RegisterDto,
-  CheckEmailQueryDto,
-  VerifyEmailDto,
-  ResendVerificationDto,
-  LoginDto,
-  ForgotPasswordDto,
-  ResetPasswordDto,
   ChangePasswordDto,
-  RequestEmailChangeDto,
+  CheckEmailQueryDto,
   ConfirmEmailChangeDto,
-  RevokeSessionParamsDto,
+  ForgotPasswordDto,
+  LoginDto,
   RefreshTokenDto,
+  RegisterDto,
+  RequestEmailChangeDto,
+  ResendVerificationDto,
+  ResetPasswordDto,
+  RevokeSessionParamsDto,
+  VerifyEmailDto,
 } from "../dto/auth.dto";
 
 @ApiTags("Auth")
@@ -72,15 +72,13 @@ export class AuthController {
     description: "Account created - verification email sent.",
     schema: {
       example: {
-        message:
-          "Registration successful. Please check your email to verify your account.",
+        message: "Registration successful. Please check your email to verify your account.",
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Validation error (weak password, invalid DOB, underage, etc.)",
+    description: "Validation error (weak password, invalid DOB, underage, etc.)",
     schema: {
       example: {
         statusCode: 400,
@@ -108,7 +106,7 @@ export class AuthController {
   @ThrottlePolicy(5, 60_000)
   @Post("register")
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
-    const ip = req.ip;
+    const { ip } = req;
     return this.authService.register(dto, ip);
   }
 
@@ -178,8 +176,7 @@ export class AuthController {
   @ApiBody({ type: ResendVerificationDto })
   @ApiResponse({
     status: 200,
-    description:
-      "Verification email sent (always, regardless of whether the email exists).",
+    description: "Verification email sent (always, regardless of whether the email exists).",
     schema: {
       example: {
         message:
@@ -311,21 +308,12 @@ export class AuthController {
     const ip = req.ip ?? "unknown";
     const userAgent = req.headers["user-agent"] ?? "unknown";
 
-    const result = await this.authService.googleLogin(
-      googleUser,
-      ip,
-      userAgent,
-    );
+    const result = await this.authService.googleLogin(googleUser, ip, userAgent);
 
     // Set httpOnly cookies
-    this.cookieService.setAuthCookies(
-      res,
-      result.accessToken,
-      result.refreshToken,
-    );
+    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-    const stateValue =
-      typeof req.query?.state === "string" ? req.query.state : "";
+    const stateValue = typeof req.query?.state === "string" ? req.query.state : "";
     const nativeRedirectUri = this.decodeGoogleState(stateValue);
 
     if (nativeRedirectUri) {
@@ -349,9 +337,7 @@ export class AuthController {
     }
 
     try {
-      const nativeRedirectUri = Buffer.from(state, "base64url")
-        .toString("utf8")
-        .trim();
+      const nativeRedirectUri = Buffer.from(state, "base64url").toString("utf8").trim();
 
       return nativeRedirectUri.length > 0 ? nativeRedirectUri : null;
     } catch {
@@ -399,8 +385,7 @@ export class AuthController {
   ) {
     // Browser clients send the token via httpOnly cookie (body.refresh_token is absent).
     // Non-browser clients (mobile/desktop) send it in the request body.
-    const refreshTokenRaw =
-      body?.refresh_token ?? req.cookies?.["refresh_token"];
+    const refreshTokenRaw = body?.refresh_token ?? req.cookies?.["refresh_token"];
     if (!refreshTokenRaw) {
       throw new UnauthorizedException({
         statusCode: 401,
@@ -412,11 +397,7 @@ export class AuthController {
     const result = await this.authService.refresh(refreshTokenRaw);
 
     // Set new cookies with rotated tokens (for browser / web clients)
-    this.cookieService.setAuthCookies(
-      res,
-      result.accessToken,
-      result.refreshToken,
-    );
+    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
     // Return new tokens in body for non-browser clients using Bearer auth.
     return {
@@ -484,12 +465,10 @@ export class AuthController {
   @ApiBody({ type: ForgotPasswordDto })
   @ApiResponse({
     status: 200,
-    description:
-      "Reset email sent (always, regardless of whether the email exists).",
+    description: "Reset email sent (always, regardless of whether the email exists).",
     schema: {
       example: {
-        message:
-          "If this email is registered, a password reset link has been sent.",
+        message: "If this email is registered, a password reset link has been sent.",
       },
     },
   })
@@ -721,10 +700,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @Get("sessions")
-  async getActiveSessions(
-    @CurrentUser("userId") userId: string,
-    @Req() req: Request,
-  ) {
+  async getActiveSessions(@CurrentUser("userId") userId: string, @Req() req: Request) {
     const refreshTokenRaw = req.cookies?.["refresh_token"];
     return this.authService.getActiveSessions(userId, refreshTokenRaw);
   }
@@ -754,8 +730,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({
     status: 403,
-    description:
-      "Attempt to revoke current session or session belonging to another user.",
+    description: "Attempt to revoke current session or session belonging to another user.",
   })
   @ApiResponse({ status: 404, description: "Session not found." })
   @Delete("sessions/:sessionId")
@@ -765,10 +740,6 @@ export class AuthController {
     @Req() req: Request,
   ) {
     const refreshTokenRaw = req.cookies?.["refresh_token"];
-    return this.authService.revokeSession(
-      userId,
-      params.sessionId,
-      refreshTokenRaw,
-    );
+    return this.authService.revokeSession(userId, params.sessionId, refreshTokenRaw);
   }
 }

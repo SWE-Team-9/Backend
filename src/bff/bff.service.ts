@@ -95,24 +95,17 @@ export class BffService {
     page: number,
     limit: number,
   ) {
-    const profile = await this.usersService.getProfileByHandle(
-      handle,
-      requesterId,
-    );
+    const profile = await this.usersService.getProfileByHandle(handle, requesterId);
 
     // Private or blocked — return minimal shape; callers redirect/render gated UI
     const isPrivate =
-      (profile as any).is_private === true &&
-      !(requesterId && (profile as any).id === requesterId);
+      (profile as any).is_private === true && !(requesterId && (profile as any).id === requesterId);
     if (isPrivate && !(requesterId && (profile as any).id === requesterId)) {
       return {
         viewer: requesterId ? await this.getViewerSummary(requesterId) : null,
         profile,
         relationship: requesterId
-          ? await this.getRelationship(
-              requesterId,
-              (profile as any).id ?? (profile as any).user_id,
-            )
+          ? await this.getRelationship(requesterId, (profile as any).id ?? (profile as any).user_id)
           : null,
         tracks: { items: [], page: 1, limit, total: 0, hasMore: false },
         counts: {
@@ -134,17 +127,11 @@ export class BffService {
       this.tracksService
         .getUserTracks(profileId, requesterId, page, limit)
         .catch(() => ({ tracks: [], totalTracks: 0 })),
-      requesterId
-        ? this.getViewerInteractions(requesterId, profileId).catch(() => null)
-        : null,
-      requesterId
-        ? this.getRelationship(requesterId, profileId).catch(() => null)
-        : null,
+      requesterId ? this.getViewerInteractions(requesterId, profileId).catch(() => null) : null,
+      requesterId ? this.getRelationship(requesterId, profileId).catch(() => null) : null,
     ]);
 
-    const viewer = requesterId
-      ? await this.getViewerSummary(requesterId).catch(() => null)
-      : null;
+    const viewer = requesterId ? await this.getViewerSummary(requesterId).catch(() => null) : null;
 
     const canEditProfile = requesterId === profileId;
     const canViewPrivateTracks = canEditProfile;
@@ -177,25 +164,19 @@ export class BffService {
   // Returns all data needed to render the settings page in one request.
 
   async getSettingsPageData(userId: string) {
-    const [
-      me,
-      profile,
-      subscription,
-      entitlements,
-      notificationPreferences,
-      sessionCount,
-    ] = await Promise.all([
-      this.authService.getMe(userId),
-      this.usersService.getMyProfile(userId).catch(() => null),
-      this.subscriptionsService.getMySubscription(userId).catch(() => null),
-      this.entitlementsService.getUserEntitlements(userId).catch(() => null),
-      this.notificationsService.getPreferences(userId).catch(() => null),
-      this.prisma.userSession
-        .count({
-          where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-        })
-        .catch(() => 0),
-    ]);
+    const [me, profile, subscription, entitlements, notificationPreferences, sessionCount] =
+      await Promise.all([
+        this.authService.getMe(userId),
+        this.usersService.getMyProfile(userId).catch(() => null),
+        this.subscriptionsService.getMySubscription(userId).catch(() => null),
+        this.entitlementsService.getUserEntitlements(userId).catch(() => null),
+        this.notificationsService.getPreferences(userId).catch(() => null),
+        this.prisma.userSession
+          .count({
+            where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+          })
+          .catch(() => 0),
+      ]);
 
     return {
       me,
@@ -268,11 +249,11 @@ export class BffService {
       }),
     ]);
 
-    const isBlocked = !!block;
-    const isBlockedBy = !!blockedBy;
+    const isBlocked = Boolean(block);
+    const isBlockedBy = Boolean(blockedBy);
 
     return {
-      isFollowing: !!follow,
+      isFollowing: Boolean(follow),
       isBlocked,
       isBlockedBy,
       canMessage: !isBlocked && !isBlockedBy,

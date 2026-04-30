@@ -1,11 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from "@nestjs/common";
-import {
-  ApiCookieAuth,
-  ApiBearerAuth,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response } from "express";
 
 import { CurrentUser } from "../../common/decorators/current-user.decorator";

@@ -45,9 +45,7 @@ export class CreatePlaylistDto {
     enum: PlaylistVisibility,
     example: "PUBLIC",
   })
-  @Transform(({ value }) =>
-    typeof value === "string" ? value.toUpperCase().trim() : value,
-  )
+  @Transform(({ value }) => (typeof value === "string" ? value.toUpperCase().trim() : value))
   @IsEnum(PlaylistVisibility)
   visibility!: PlaylistVisibility;
 

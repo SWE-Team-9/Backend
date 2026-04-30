@@ -1,10 +1,4 @@
-import {
-  IsArray,
-  IsBoolean,
-  IsEnum,
-  IsOptional,
-  IsUUID,
-} from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsOptional, IsUUID } from "class-validator";
 
 export type QueueContextType = "TRACK" | "PLAYLIST" | "ARTIST" | "CONTEXT_IDS";
 

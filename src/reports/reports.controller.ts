@@ -1,10 +1,5 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from "@nestjs/common";
-import {
-  ApiCookieAuth,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
+import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { AllowSuspended } from "../common/decorators/allow-suspended.decorator";
@@ -27,10 +22,7 @@ export class ReportsController {
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Target entity not found." })
-  createReport(
-    @CurrentUser("userId") reporterId: string,
-    @Body() dto: CreateReportDto,
-  ) {
+  createReport(@CurrentUser("userId") reporterId: string, @Body() dto: CreateReportDto) {
     return this.reportsService.createReport(reporterId, dto);
   }
 
@@ -42,10 +34,7 @@ export class ReportsController {
   @ApiResponse({ status: 400, description: "Validation error." })
   @ApiResponse({ status: 401, description: "Not authenticated." })
   @ApiResponse({ status: 404, description: "Report not found." })
-  createAppeal(
-    @CurrentUser("userId") userId: string,
-    @Body() dto: CreateAppealDto,
-  ) {
+  createAppeal(@CurrentUser("userId") userId: string, @Body() dto: CreateAppealDto) {
     return this.reportsService.createAppeal(dto.reportId, userId, dto);
   }
 }
