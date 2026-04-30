@@ -161,6 +161,12 @@ function buildPrismaMock() {
     user: {
       findUnique: jest.fn(),
     },
+    like: {
+      findUnique: jest.fn(),
+    },
+    repost: {
+      findUnique: jest.fn(),
+    },
   };
 
   return prismaMock;

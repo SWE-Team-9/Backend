@@ -9,7 +9,9 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -125,6 +127,33 @@ export class StorageService {
       this.logger.warn(`Failed to delete storage key "${key}": ${err}`);
     }
   }
+
+  /**
+   * Generate a short-lived presigned GET URL for an S3 object.
+   * Only valid when the storage provider is 's3'.
+   *
+   * Use this for audio/track assets so the URL expires and cannot be shared
+   * indefinitely. For local storage the caller should use the authenticated
+   * /uploads/tracks route instead.
+   *
+   * @param key        Storage key (e.g. "tracks/uuid.mp3")
+   * @param ttlSeconds URL validity in seconds (default: 3600 = 1 hour)
+   */
+  async getPresignedUrl(key: string, ttlSeconds = 3600): Promise<string> {
+    if (this.provider !== "s3" || !this.s3Client) {
+      throw new InternalServerErrorException(
+        "getPresignedUrl requires the s3 storage provider.",
+      );
+    }
+    const command = new GetObjectCommand({ Bucket: this.s3Bucket, Key: key });
+    return getSignedUrl(this.s3Client, command, { expiresIn: ttlSeconds });
+  }
+
+  /** Returns true when S3 storage is active (presigned URLs are available). */
+  get isS3(): boolean {
+    return this.provider === "s3";
+  }
+
 
   private async uploadToS3(
     file: Buffer,

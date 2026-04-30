@@ -30,6 +30,7 @@ import { MessagesModule } from "./messages/messages.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { AdminModule } from "./admin/admin.module";
 import { EntitlementsModule } from "./entitlements/entitlements.module";
+import { BffModule } from "./bff/bff.module";
 
 @Module({
   imports: [

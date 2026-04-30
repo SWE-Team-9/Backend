@@ -23,7 +23,12 @@ export class DiscoveryController {
     description: "Validation error for query params.",
   })
   search(@Query() query: SearchQueryDto) {
-    return this.discoveryService.search(query.q);
+    return this.discoveryService.search(
+      query.q,
+      query.type,
+      query.page,
+      query.limit,
+    );
   }
 
   @Get("trending")

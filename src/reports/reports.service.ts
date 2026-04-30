@@ -309,7 +309,24 @@ export class ReportsService {
   }
 
   async updateReport(reportId: string, adminId: string, dto: UpdateReportDto) {
-    await this.ensureReportExists(reportId);
+    const currentReport = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      select: { status: true },
+    });
+
+    if (!currentReport) {
+      throw new NotFoundException({
+        code: "REPORT_NOT_FOUND",
+        message: "Report not found.",
+      });
+    }
+
+    if (dto.status && currentReport.status === ReportStatus.RESOLVED) {
+      throw new BadRequestException({
+        code: "INVALID_TRANSITION",
+        message: "Cannot transition from RESOLVED status to another state.",
+      });
+    }
 
     const now = new Date();
     const shouldResolve =
@@ -349,6 +366,22 @@ export class ReportsService {
   }
 
   async bulkUpdateReports(adminId: string, dto: BulkUpdateReportsDto) {
+    // Check that none of the reports are already RESOLVED
+    const resolvedReports = await this.prisma.report.findMany({
+      where: {
+        id: { in: dto.reportIds },
+        status: ReportStatus.RESOLVED,
+      },
+      select: { id: true },
+    });
+
+    if ((resolvedReports ?? []).length > 0) {
+      throw new BadRequestException({
+        code: "INVALID_TRANSITION",
+        message: "Cannot transition from RESOLVED status to another state.",
+      });
+    }
+
     const now = new Date();
     const shouldResolve =
       dto.status === ReportStatus.RESOLVED ||
@@ -418,6 +451,7 @@ export class ReportsService {
     return this.prisma.report.update({
       where: { id: reportId },
       data: {
+        status: ReportStatus.UNDER_REVIEW,
         resolvedBy: adminId,
       },
     });

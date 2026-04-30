@@ -12,7 +12,6 @@ import { MessagesService, IMessagesGateway } from "./messages.service";
 
 @WebSocketGateway({
   namespace: "messages",
-  cors: { origin: true, credentials: true },
 })
 export class MessagesGateway
   implements OnGatewayConnection, OnGatewayDisconnect, IMessagesGateway

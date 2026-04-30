@@ -1,3 +1,5 @@
+import * as path from "path";
+import * as fs from "fs";
 import {
   BadRequestException,
   ConflictException,
@@ -136,6 +138,7 @@ export class SubscriptionsService {
   private readonly s3Region: string;
   private readonly storageProvider: "local" | "s3";
   private readonly localUploadUrl: string;
+  private readonly localUploadDir: string;
   private readonly downloadUrlTtl: number;
 
   constructor(
@@ -151,6 +154,10 @@ export class SubscriptionsService {
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
+    );
+    this.localUploadDir = this.config.get<string>(
+      "storage.localUploadDir",
+      "./uploads",
     );
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
@@ -1254,18 +1261,47 @@ export class SubscriptionsService {
         audioBuffer = Buffer.from(await httpRes.arrayBuffer());
       }
     } else {
-      // Local storage: fetch the local URL on the server side
-      const httpRes = await fetch(presignedUrl);
-      if (!httpRes.ok) throw new Error(`Local fetch failed: ${httpRes.status}`);
-      audioBuffer = Buffer.from(await httpRes.arrayBuffer());
+      // Local storage: read the file directly from the filesystem instead of
+      // making an HTTP request to /uploads/tracks, which is now protected by the
+      // JWT auth middleware. Direct disk reads bypass that middleware safely —
+      // entitlement was already verified by getOfflineTrack() above.
+      const localTrack = await this.prisma.track.findFirst({
+        where: { id: trackId, deletedAt: null },
+        select: {
+          files: {
+            where: { isCurrent: true, fileRole: { in: [FileRole.STREAM, FileRole.ORIGINAL] } },
+            select: { storageKey: true },
+          },
+        },
+      });
+      const localStorageKey = localTrack?.files.find(() => true)?.storageKey ?? null;
+
+      if (!localStorageKey) {
+        throw new NotFoundException({
+          code: "TRACK_FILE_NOT_FOUND",
+          message: "Track file not found.",
+        });
+      }
+
+      // Path traversal guard
+      const resolvedUploadDir = path.resolve(this.localUploadDir);
+      const fullPath = path.resolve(path.join(this.localUploadDir, localStorageKey));
+      if (!fullPath.startsWith(resolvedUploadDir + path.sep) && fullPath !== resolvedUploadDir) {
+        throw new ForbiddenException("Invalid storage path.");
+      }
+
+      audioBuffer = await fs.promises.readFile(fullPath);
     }
 
     res.set({
       "Content-Type": "audio/mpeg",
       "Content-Disposition": "inline",
       "Content-Length": String(audioBuffer.length),
+      // Private audio — must not be cached beyond this session.
       "Cache-Control": "private, max-age=900",
-      "Access-Control-Allow-Origin": "*",
+      // Do NOT set Access-Control-Allow-Origin here; the global CORS middleware
+      // handles origin restrictions. A wildcard would allow any origin to read
+      // this authenticated audio response.
     });
     res.end(audioBuffer);
   }

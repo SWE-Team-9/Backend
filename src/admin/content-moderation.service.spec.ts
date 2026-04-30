@@ -125,4 +125,142 @@ describe("ContentModerationService", () => {
       }),
     );
   });
+
+  // 5. moderateComment - 404 when comment not found
+  it("moderateComment: throws 404 when comment does not exist", async () => {
+    mockPrisma.comment.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.moderateComment("admin-1", "comment-1", {
+        isHidden: true,
+        reason: "Comment violates policy",
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  // 6. moderateComment - 400 NO_STATE_CHANGE when state is unchanged
+  it("moderateComment: throws 400 NO_STATE_CHANGE when state is already the same", async () => {
+    mockPrisma.comment.findUnique.mockResolvedValueOnce({
+      id: "comment-1",
+      userId: "user-1",
+      trackId: "track-1",
+      moderationState: "HIDDEN",
+    });
+
+    await expect(
+      service.moderateComment("admin-1", "comment-1", {
+        isHidden: true,
+        reason: "No change needed",
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  // 7. moderateComment - success path and notification
+  it("moderateComment: updates comment and emits notification", async () => {
+    mockPrisma.comment.findUnique.mockResolvedValueOnce({
+      id: "comment-1",
+      userId: "user-1",
+      trackId: "track-1",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.comment.update.mockResolvedValueOnce({});
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-3",
+      actionType: "HIDE_COMMENT",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+
+    const result = await service.moderateComment("admin-1", "comment-1", {
+      isHidden: true,
+      reason: "Comment violates policy",
+    });
+
+    expect(mockPrisma.moderationAction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          adminId: "admin-1",
+          commentId: "comment-1",
+          actionType: "HIDE_COMMENT",
+        }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientId: "user-1",
+        entityType: "COMMENT",
+        eventType: "REPORT_RESOLVED",
+      }),
+    );
+    expect(result.action_type).toBe("HIDE_COMMENT");
+  });
+
+  // 8. moderatePlaylist - 404 when playlist not found
+  it("moderatePlaylist: throws 404 when playlist does not exist", async () => {
+    mockPrisma.playlist.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.moderatePlaylist("admin-1", "playlist-1", {
+        moderationState: "HIDDEN",
+        reason: "Playlist violates policy",
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  // 9. moderatePlaylist - 400 NO_STATE_CHANGE when state is unchanged
+  it("moderatePlaylist: throws 400 NO_STATE_CHANGE when state is already the same", async () => {
+    mockPrisma.playlist.findUnique.mockResolvedValueOnce({
+      id: "playlist-1",
+      title: "My Playlist",
+      ownerId: "user-1",
+      moderationState: "HIDDEN",
+    });
+
+    await expect(
+      service.moderatePlaylist("admin-1", "playlist-1", {
+        moderationState: "HIDDEN",
+        reason: "No change needed",
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  // 10. moderatePlaylist - success path and notification
+  it("moderatePlaylist: updates playlist and emits notification", async () => {
+    mockPrisma.playlist.findUnique.mockResolvedValueOnce({
+      id: "playlist-1",
+      title: "My Playlist",
+      ownerId: "user-1",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.playlist.update.mockResolvedValueOnce({});
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-4",
+      actionType: "REMOVE_PLAYLIST",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+
+    const result = await service.moderatePlaylist("admin-1", "playlist-1", {
+      moderationState: "REMOVED",
+      reason: "Playlist violates policy",
+    });
+
+    expect(mockPrisma.moderationAction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          adminId: "admin-1",
+          playlistId: "playlist-1",
+          actionType: "REMOVE_PLAYLIST",
+        }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientId: "user-1",
+        entityType: "PLAYLIST",
+        eventType: "REPORT_RESOLVED",
+      }),
+    );
+    expect(result.action_type).toBe("REMOVE_PLAYLIST");
+  });
 });

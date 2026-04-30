@@ -7,11 +7,13 @@ import {
 import { Test, TestingModule } from "@nestjs/testing";
 import { PlaylistVisibility } from "@prisma/client";
 
+import { StorageService } from "../common/storage/storage.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlaylistsService } from "./playlists.service";
 
 function buildPrismaMock() {
   const prismaMock: any = {
+    $executeRaw: jest.fn(),
     $transaction: jest
       .fn()
       .mockImplementation((fnOrQueries: any) =>
@@ -35,12 +37,26 @@ function buildPrismaMock() {
     playlistTrack: {
       create: jest.fn(),
       createMany: jest.fn(),
+      count: jest.fn(),
       findFirst: jest.fn(),
       findUnique: jest.fn(),
       findMany: jest.fn(),
+      aggregate: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
       delete: jest.fn(),
+    },
+    genre: {
+      findFirst: jest.fn(),
+    },
+    playEvent: {
+      groupBy: jest.fn(),
+    },
+    playlistLike: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
     },
   };
 
@@ -50,6 +66,9 @@ function buildPrismaMock() {
 describe("PlaylistsService", () => {
   let service: PlaylistsService;
   let prisma: ReturnType<typeof buildPrismaMock>;
+  const storageMock = {
+    upload: jest.fn(),
+  };
 
   beforeEach(async () => {
     prisma = buildPrismaMock();
@@ -58,6 +77,7 @@ describe("PlaylistsService", () => {
       providers: [
         PlaylistsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: StorageService, useValue: storageMock },
       ],
     }).compile();
 
@@ -144,11 +164,19 @@ describe("PlaylistsService", () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it("throws when initial tracks contain duplicate names", async () => {
+    it("allows initial tracks with same title if IDs are different", async () => {
       prisma.track.findMany.mockResolvedValue([
-        { id: "trk_123", title: "Layali" },
-        { id: "trk_456", title: "layali" },
+        { id: "trk_123" },
+        { id: "trk_456" },
       ]);
+      prisma.playlist.findFirst.mockResolvedValue(null);
+      prisma.playlist.create.mockResolvedValue({
+        id: "pl_101",
+        title: "Playlist",
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+      });
+      prisma.playlistTrack.createMany.mockResolvedValue({ count: 2 });
 
       await expect(
         service.create("usr_1", {
@@ -156,7 +184,7 @@ describe("PlaylistsService", () => {
           visibility: PlaylistVisibility.PUBLIC,
           trackIds: ["trk_123", "trk_456"],
         } as any),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).resolves.toBeTruthy();
     });
   });
 
@@ -170,8 +198,11 @@ describe("PlaylistsService", () => {
         visibility: "PUBLIC",
         secretToken: "sec_hidden",
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
-        tracks: [{ track: { id: "trk_123", title: "Layali" } }],
       });
+      prisma.playlistTrack.count.mockResolvedValue(1);
+      prisma.playlistTrack.findMany.mockResolvedValue([
+        { track: { id: "trk_123", title: "Layali" } },
+      ]);
 
       const result = await service.getDetails("pl_101", "usr_2");
 
@@ -195,8 +226,11 @@ describe("PlaylistsService", () => {
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
-        tracks: [{ track: { id: "trk_123", title: "Layali" } }],
       });
+      prisma.playlistTrack.count.mockResolvedValue(1);
+      prisma.playlistTrack.findMany.mockResolvedValue([
+        { track: { id: "trk_123", title: "Layali" } },
+      ]);
 
       const result = await service.findOne("pl_101", "usr_1");
 
@@ -327,32 +361,203 @@ describe("PlaylistsService", () => {
         service.update("usr_1", "pl_101", {}),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it("updates new editable playlist metadata fields", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+      });
+      prisma.genre.findFirst.mockResolvedValue({ id: 12 });
+      prisma.playlist.update.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+        title: "Vol 2",
+        description: "updated",
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+        owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
+        tracks: [],
+      });
+
+      await service.update("usr_1", "pl_101", {
+        type: "ALBUM" as any,
+        releaseDate: "2026-03-01",
+        genreId: 12,
+        tags: ["chill", "chill", "night-drive"],
+      });
+
+      expect(prisma.genre.findFirst).toHaveBeenCalledWith({
+        where: { id: 12 },
+        select: { id: true },
+      });
+      expect(prisma.playlist.update).toHaveBeenCalledWith({
+        where: { id: "pl_101" },
+        data: expect.objectContaining({
+          type: "ALBUM",
+          releaseDate: new Date("2026-03-01"),
+          genreId: 12,
+          tags: ["chill", "night-drive"],
+        }),
+        select: expect.any(Object),
+      });
+    });
   });
 
-  describe("remove", () => {
-    it("deletes playlist for owner", async () => {
-      prisma.playlist.findUnique.mockResolvedValue({
+  describe("getEditDetails", () => {
+    it("returns owner-only editable playlist data", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+        title: "Late Night Drive",
+        description: "chill tracks",
+        visibility: PlaylistVisibility.PUBLIC,
+        slug: "late-night-drive",
+        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+        coverArtUrl: null,
+        type: "ALBUM",
+        releaseDate: new Date("2026-03-01"),
+        genreId: 12,
+        tags: ["chill", "night-drive"],
+      });
+
+      const result = await service.getEditDetails("usr_1", "pl_101");
+
+      expect(result).toEqual({
+        playlistId: "pl_101",
+        title: "Late Night Drive",
+        description: "chill tracks",
+        visibility: PlaylistVisibility.PUBLIC,
+        slug: "late-night-drive",
+        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+        type: "ALBUM",
+        releaseDate: "2026-03-01T00:00:00.000Z",
+        genreId: 12,
+        tags: ["chill", "night-drive"],
+      });
+    });
+  });
+
+  describe("uploadCover", () => {
+    it("uploads a cover image and stores the returned URL", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.playlist.delete.mockResolvedValue({});
+      storageMock.upload.mockResolvedValue({
+        url: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+        key: "playlists/pl_101/cover.jpg",
+      });
+      prisma.playlist.update.mockResolvedValue({
+        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+      });
+
+      const result = await service.uploadCover("usr_1", "pl_101", {
+        buffer: Buffer.from([1, 2, 3]),
+        mimetype: "image/jpeg",
+        originalname: "cover.jpg",
+        size: 1024,
+      } as any);
+
+      expect(storageMock.upload).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), {
+        userId: "usr_1",
+        type: "cover",
+        mimeType: "image/jpeg",
+        originalName: "cover.jpg",
+      });
+      expect(result).toEqual({
+        message: "Playlist cover uploaded successfully",
+        coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+      });
+    });
+  });
+
+  describe("getRecentPlaylists", () => {
+    it("returns unique recently played playlists ordered by last play time", async () => {
+      prisma.playEvent.groupBy.mockResolvedValue([
+        {
+          playlistId: "pl_101",
+          _max: { startedAt: new Date("2026-04-02T10:00:00Z") },
+        },
+        {
+          playlistId: "pl_102",
+          _max: { startedAt: new Date("2026-04-01T10:00:00Z") },
+        },
+      ]);
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: "pl_101",
+          title: "Late Night Drive",
+          coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+          coverArtUrl: null,
+          owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
+        },
+        {
+          id: "pl_102",
+          title: "Weekend Mix",
+          coverImageUrl: null,
+          coverArtUrl: null,
+          owner: { id: "usr_2", profile: { displayName: "Sara Ali" } },
+        },
+      ]);
+
+      const result = await service.getRecentPlaylists("usr_1", 10);
+
+      expect(prisma.playEvent.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          by: ["playlistId"],
+          where: expect.objectContaining({
+            userId: "usr_1",
+            playlistId: { not: null },
+          }),
+          take: 10,
+        }),
+      );
+      expect(result).toEqual({
+        playlists: [
+          {
+            playlistId: "pl_101",
+            title: "Late Night Drive",
+            coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+            owner: { id: "usr_1", display_name: "Ahmed Hassan" },
+          },
+          {
+            playlistId: "pl_102",
+            title: "Weekend Mix",
+            coverImageUrl: null,
+            owner: { id: "usr_2", display_name: "Sara Ali" },
+          },
+        ],
+      });
+    });
+  });
+
+  describe("remove", () => {
+    it("soft deletes playlist for owner", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+      });
+      prisma.playlist.update.mockResolvedValue({});
 
       await service.remove("usr_1", "pl_101");
 
-      expect(prisma.playlist.delete).toHaveBeenCalledWith({
+      expect(prisma.playlist.update).toHaveBeenCalledWith({
         where: { id: "pl_101" },
+        data: { deletedAt: expect.any(Date) },
       });
     });
 
     it("throws when playlist missing", async () => {
-      prisma.playlist.findUnique.mockResolvedValue(null);
+      prisma.playlist.findFirst.mockResolvedValue(null);
       await expect(service.remove("usr_1", "missing")).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
 
     it("throws when non-owner tries deleting", async () => {
-      prisma.playlist.findUnique.mockResolvedValue({
+      prisma.playlist.findFirst.mockResolvedValue({
         id: "pl_101",
         ownerId: "usr_x",
       });
@@ -362,20 +567,89 @@ describe("PlaylistsService", () => {
     });
   });
 
+  describe("likePlaylist", () => {
+    it("likes a playlist", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: "pl_101" });
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+      prisma.playlistLike.create.mockResolvedValue({});
+
+      const result = await service.likePlaylist("usr_1", "pl_101");
+
+      expect(prisma.playlistLike.findUnique).toHaveBeenCalledWith({
+        where: {
+          userId_playlistId: {
+            userId: "usr_1",
+            playlistId: "pl_101",
+          },
+        },
+        select: {
+          userId: true,
+        },
+      });
+      expect(prisma.playlistLike.create).toHaveBeenCalledWith({
+        data: {
+          userId: "usr_1",
+          playlistId: "pl_101",
+        },
+      });
+      expect(result).toEqual({ message: "Playlist liked successfully" });
+    });
+
+    it("throws conflict when playlist is already liked", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: "pl_101" });
+      prisma.playlistLike.findUnique.mockResolvedValue({ userId: "usr_1" });
+
+      await expect(
+        service.likePlaylist("usr_1", "pl_101"),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.playlistLike.create).not.toHaveBeenCalled();
+    });
+
+    it("throws when playlist is missing", async () => {
+      prisma.playlist.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.likePlaylist("usr_1", "missing"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe("unlikePlaylist", () => {
+    it("unlikes a playlist", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: "pl_101" });
+      prisma.playlistLike.deleteMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.unlikePlaylist("usr_1", "pl_101");
+
+      expect(prisma.playlistLike.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: "usr_1",
+          playlistId: "pl_101",
+        },
+      });
+      expect(result).toEqual({ message: "Playlist unliked successfully" });
+    });
+
+    it("throws when playlist is missing", async () => {
+      prisma.playlist.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.unlikePlaylist("usr_1", "missing"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe("addTrack", () => {
     it("adds track to playlist", async () => {
       prisma.playlist.findFirst.mockResolvedValue({
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.track.findFirst.mockResolvedValue({
-        id: "trk_123",
-        title: "Layali",
+      prisma.track.findFirst.mockResolvedValue({ id: "trk_123" });
+      prisma.playlistTrack.aggregate.mockResolvedValue({
+        _count: { _all: 3 },
+        _max: { position: 2 },
       });
-      prisma.playlistTrack.findUnique.mockResolvedValue(null);
-      prisma.playlistTrack.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ position: 2 });
       prisma.playlistTrack.create.mockResolvedValue({});
 
       const result = await service.addTrack("usr_1", "pl_101", {
@@ -397,32 +671,12 @@ describe("PlaylistsService", () => {
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.track.findFirst.mockResolvedValue({
-        id: "trk_123",
-        title: "Layali",
+      prisma.track.findFirst.mockResolvedValue({ id: "trk_123" });
+      prisma.playlistTrack.aggregate.mockResolvedValue({
+        _count: { _all: 0 },
+        _max: { position: null },
       });
-      prisma.playlistTrack.findUnique.mockResolvedValue({
-        playlistId: "pl_101",
-      });
-
-      await expect(
-        service.addTrack("usr_1", "pl_101", { trackId: "trk_123" }),
-      ).rejects.toBeInstanceOf(ConflictException);
-    });
-
-    it("throws conflict when another track with same title already exists", async () => {
-      prisma.playlist.findFirst.mockResolvedValue({
-        id: "pl_101",
-        ownerId: "usr_1",
-      });
-      prisma.track.findFirst.mockResolvedValue({
-        id: "trk_123",
-        title: "Layali",
-      });
-      prisma.playlistTrack.findUnique.mockResolvedValue(null);
-      prisma.playlistTrack.findFirst.mockResolvedValue({
-        trackId: "trk_other",
-      });
+      prisma.playlistTrack.create.mockRejectedValue({ code: "P2002" });
 
       await expect(
         service.addTrack("usr_1", "pl_101", { trackId: "trk_123" }),
@@ -471,14 +725,14 @@ describe("PlaylistsService", () => {
         { trackId: "trk_8" },
         { trackId: "trk_3" },
       ]);
-      prisma.playlistTrack.update.mockResolvedValue({});
+      prisma.$executeRaw.mockResolvedValue(2);
 
       const result = await service.reorderTracks("usr_1", "pl_101", {
         orderedTrackIds: ["trk_3", "trk_8"],
       });
 
       expect(result).toEqual({ message: "Playlist reordered successfully" });
-      expect(prisma.playlistTrack.update).toHaveBeenCalledTimes(2);
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
     });
 
     it("throws when orderedTrackIds miss some existing tracks", async () => {
@@ -520,6 +774,8 @@ describe("PlaylistsService", () => {
         {
           id: "pl_101",
           title: "Late Night Drive",
+          slug: "late-night-drive",
+          coverArtUrl: null,
           visibility: "PUBLIC",
           _count: { tracks: 12 },
         },
@@ -538,6 +794,8 @@ describe("PlaylistsService", () => {
           {
             playlistId: "pl_101",
             title: "Late Night Drive",
+            slug: "late-night-drive",
+            coverArtUrl: null,
             visibility: "PUBLIC",
             tracksCount: 12,
           },

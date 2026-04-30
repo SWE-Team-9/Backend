@@ -20,6 +20,9 @@ const mockPrisma = {
     findMany: jest.fn(),
     groupBy: jest.fn(),
   },
+  report: {
+    count: jest.fn(),
+  },
   track: { count: jest.fn() },
   playlist: { count: jest.fn() },
   comment: { count: jest.fn() },
@@ -266,7 +269,7 @@ describe("AdminUsersService", () => {
       mockPrisma.trackFile.aggregate.mockResolvedValue({
         _sum: { fileSizeBytes: BigInt(1024 * 1024 * 500) },
       });
-      mockPrisma.moderationReport.count.mockResolvedValue(5);
+      mockPrisma.report.count.mockResolvedValue(5);
       mockPrisma.moderationAction.count.mockResolvedValue(20);
 
       const first = await service.getOverviewStats();

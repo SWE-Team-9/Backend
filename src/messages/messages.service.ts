@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  Prisma,
   MessageType,
   TrackVisibility,
   PlaylistVisibility,
@@ -409,6 +410,82 @@ export class MessagesService {
     },
   } as const;
 
+  // ─── Build conversation preview (used after send) ────────────────────────────
+
+  private async buildConversationPreview(
+    conversationId: string,
+    userId: string,
+  ) {
+    const [participant, lastMsg, unreadCount] = await Promise.all([
+      this.prisma.conversationParticipant.findFirst({
+        where: { conversationId, userId: { not: userId } },
+        select: {
+          isArchived: true,
+          user: {
+            select: {
+              id: true,
+              profile: {
+                select: { displayName: true, handle: true, avatarUrl: true },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.message.findFirst({
+        where: { conversationId, deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          messageType: true,
+          body: true,
+          createdAt: true,
+          senderId: true,
+        },
+      }),
+      this.prisma.message.count({
+        where: { conversationId, senderId: { not: userId }, deletedAt: null },
+      }),
+    ]);
+
+    const blockFlags = participant
+      ? await this.getBlockFlags(userId, participant.user.id)
+      : {
+          isBlockedByMe: false,
+          hasBlockedMe: false,
+          canMessage: true,
+          blockReason: null,
+        };
+
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { updatedAt: true },
+    });
+
+    return {
+      conversationId,
+      participant: participant
+        ? {
+            id: participant.user.id,
+            display_name: participant.user.profile?.displayName ?? null,
+            handle: participant.user.profile?.handle ?? null,
+            avatar_url: participant.user.profile?.avatarUrl ?? null,
+          }
+        : null,
+      lastMessage: lastMsg
+        ? {
+            id: lastMsg.id,
+            type: lastMsg.messageType,
+            text: lastMsg.body,
+            createdAt: lastMsg.createdAt,
+          }
+        : null,
+      unreadCount,
+      updatedAt: conv?.updatedAt ?? new Date(),
+      isArchived: false,
+      ...blockFlags,
+    };
+  }
+
   // ─── Get conversations ───────────────────────────────────────────────────────
 
   async getConversations(
@@ -474,55 +551,102 @@ export class MessagesService {
       }),
     ]);
 
-    const conversations = await Promise.all(
-      participants.map(async (p) => {
-        const other = p.conversation.participants[0];
-        const lastMsg = p.conversation.messages[0];
+    if (!participants.length) {
+      return { page, limit, total, conversations: [] };
+    }
 
-        // Unread count: messages after lastReadAt that weren't sent by me
-        const unreadCount = await this.prisma.message.count({
-          where: {
-            conversationId: p.conversationId,
-            senderId: { not: userId },
-            deletedAt: null,
-            createdAt: p.lastReadAt ? { gt: p.lastReadAt } : undefined,
-          },
-        });
+    const conversationIds = participants.map((p) => p.conversationId);
+    const otherUserIds = [
+      ...new Set(
+        participants
+          .map((p) => p.conversation.participants[0]?.userId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
 
-        const blockFlags = other
-          ? await this.getBlockFlags(userId, other.userId)
-          : {
-              isBlockedByMe: false,
-              hasBlockedMe: false,
-              canMessage: true,
-              blockReason: null,
-            };
-
-        return {
-          conversationId: p.conversationId,
-          participant: other
-            ? {
-                id: other.user.id,
-                display_name: other.user.profile?.displayName ?? null,
-                handle: other.user.profile?.handle ?? null,
-                avatar_url: other.user.profile?.avatarUrl ?? null,
-              }
-            : null,
-          lastMessage: lastMsg
-            ? {
-                id: lastMsg.id,
-                type: lastMsg.messageType,
-                text: lastMsg.body,
-                createdAt: lastMsg.createdAt,
-              }
-            : null,
-          unreadCount,
-          updatedAt: p.conversation.updatedAt,
-          isArchived: p.isArchived,
-          ...blockFlags,
-        };
-      }),
+    // Batch 1: all unread counts in one query instead of N individual counts
+    type UnreadRow = { conversationId: string; count: bigint };
+    const unreadRows = await this.prisma.$queryRaw<UnreadRow[]>(
+      Prisma.sql`
+        SELECT m.conversation_id AS "conversationId", COUNT(*) AS count
+        FROM messages m
+        JOIN conversation_participants cp
+          ON cp.conversation_id = m.conversation_id
+          AND cp.user_id = ${userId}::uuid
+        WHERE m.sender_id != ${userId}::uuid
+          AND m.deleted_at IS NULL
+          AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+          AND m.conversation_id IN (${Prisma.join(conversationIds.map((id) => Prisma.sql`${id}::uuid`))})
+        GROUP BY m.conversation_id
+      `,
     );
+    const unreadByConvId = new Map(
+      unreadRows.map((r) => [r.conversationId, Number(r.count)]),
+    );
+
+    // Batch 2: all block relationships in one query instead of N*2 lookups
+    const allBlocks =
+      otherUserIds.length > 0
+        ? await this.prisma.userBlock.findMany({
+            where: {
+              OR: [
+                { blockerId: userId, blockedId: { in: otherUserIds } },
+                { blockerId: { in: otherUserIds }, blockedId: userId },
+              ],
+            },
+            select: { blockerId: true, blockedId: true },
+          })
+        : [];
+    const blockedByMeSet = new Set(
+      allBlocks.filter((b) => b.blockerId === userId).map((b) => b.blockedId),
+    );
+    const blockedMeSet = new Set(
+      allBlocks.filter((b) => b.blockedId === userId).map((b) => b.blockerId),
+    );
+
+    // Map to response — synchronous, no more per-conversation DB calls
+    const conversations = participants.map((p) => {
+      const other = p.conversation.participants[0];
+      const lastMsg = p.conversation.messages[0];
+
+      const unreadCount = unreadByConvId.get(p.conversationId) ?? 0;
+      const isBlockedByMe = other ? blockedByMeSet.has(other.userId) : false;
+      const hasBlockedMe = other ? blockedMeSet.has(other.userId) : false;
+      const blockFlags = {
+        isBlockedByMe,
+        hasBlockedMe,
+        canMessage: !isBlockedByMe && !hasBlockedMe,
+        blockReason: isBlockedByMe
+          ? "You have blocked this user"
+          : hasBlockedMe
+            ? "This user has blocked you"
+            : null,
+      };
+
+      return {
+        conversationId: p.conversationId,
+        participant: other
+          ? {
+              id: other.user.id,
+              display_name: other.user.profile?.displayName ?? null,
+              handle: other.user.profile?.handle ?? null,
+              avatar_url: other.user.profile?.avatarUrl ?? null,
+            }
+          : null,
+        lastMessage: lastMsg
+          ? {
+              id: lastMsg.id,
+              type: lastMsg.messageType,
+              text: lastMsg.body,
+              createdAt: lastMsg.createdAt,
+            }
+          : null,
+        unreadCount,
+        updatedAt: p.conversation.updatedAt,
+        isArchived: p.isArchived,
+        ...blockFlags,
+      };
+    });
 
     return { page, limit, total, conversations };
   }
@@ -646,9 +770,14 @@ export class MessagesService {
       currentUnreadCount: unreadCount,
     });
 
+    const conversation = await this.buildConversationPreview(
+      conversationId,
+      senderId,
+    );
+
     return {
       message: mappedMsg,
-      conversationId,
+      conversation,
       currentUnreadCount: unreadCount,
     };
   }
@@ -717,14 +846,19 @@ export class MessagesService {
       currentUnreadCount: unreadCount,
     });
 
+    const conversation = await this.buildConversationPreview(
+      conversationId,
+      senderId,
+    );
+
     return {
       message: mappedMsg,
-      conversationId,
+      conversation,
       currentUnreadCount: unreadCount,
     };
   }
 
-  // ─── Share playlist ──────────────────────────────────────────────────────────
+  // ─── Share playlist ───────────────────────────────────────────────────────────
 
   async sharePlaylist(
     senderId: string,
@@ -786,9 +920,14 @@ export class MessagesService {
       currentUnreadCount: unreadCount,
     });
 
+    const conversation = await this.buildConversationPreview(
+      conversationId,
+      senderId,
+    );
+
     return {
       message: mappedMsg,
-      conversationId,
+      conversation,
       currentUnreadCount: unreadCount,
     };
   }

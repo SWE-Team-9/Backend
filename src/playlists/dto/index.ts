@@ -1,6 +1,13 @@
 export { CreatePlaylistDto } from "./create-playlist.dto";
 export { UpdatePlaylistDto } from "./update-playlist.dto";
 export { UpdatePlaylistResponseDto } from "./update-playlist-response.dto";
+export { GetPlaylistEditResponseDto } from "./get-playlist-edit-response.dto";
+export {
+  GetRecentPlaylistsResponseDto,
+  RecentPlaylistItemDto,
+  RecentPlaylistOwnerDto,
+} from "./get-recent-playlists.dto";
+export { UploadPlaylistCoverResponseDto } from "./upload-playlist-cover-response.dto";
 export {
   AddTrackToPlaylistDto,
   AddTrackToPlaylistResponseDto,
@@ -18,6 +25,7 @@ export {
 } from "./resolve-secret-playlist.dto";
 export {
   GetPlaylistEmbedCodeParamsDto,
+  GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
 } from "./get-playlist-embed-code.dto";
 export { DeletePlaylistParamsDto } from "./delete-playlist-params.dto";
@@ -30,3 +38,4 @@ export {
   PlaylistDetailsOwnerDto,
   PlaylistDetailsTrackDto,
 } from "./get-playlist-details-response.dto";
+export { PlaylistTracksQueryDto } from "./get-playlist-details-query.dto";

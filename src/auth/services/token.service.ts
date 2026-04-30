@@ -11,8 +11,10 @@ export class TokenService {
   ) {}
 
   // Sign a short-lived access token (15 min by default)
-  signAccessToken(userId: string, role: string): string {
-    const payload = { sub: userId, role };
+  signAccessToken(userId: string, role: string, sessionId?: string): string {
+    // Include sessionId as jti so the JWT strategy can verify session revocation on every request.
+    const payload: Record<string, unknown> = { sub: userId, role };
+    if (sessionId) payload.jti = sessionId;
     return this.jwtService.sign(payload);
   }
 
