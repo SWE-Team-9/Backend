@@ -46,9 +46,17 @@ import { RealStripeBillingProvider } from "./real-stripe.provider";
             return mockProvider;
         }
       },
-      inject: [ConfigService, MockStripeBillingProvider, RealStripeBillingProvider],
+      inject: [
+        ConfigService,
+        MockStripeBillingProvider,
+        RealStripeBillingProvider,
+      ],
     },
   ],
-  exports: [BILLING_PROVIDER, MockStripeBillingProvider, RealStripeBillingProvider],
+  exports: [
+    BILLING_PROVIDER,
+    MockStripeBillingProvider,
+    RealStripeBillingProvider,
+  ],
 })
 export class BillingModule {}

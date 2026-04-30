@@ -100,7 +100,11 @@ function makeGuardStub(user: Record<string, unknown>) {
 async function buildApp(
   enforcementMock: ReturnType<typeof buildEnforcementMock>,
   reportsMock: ReturnType<typeof buildReportsMock>,
-  user: Record<string, unknown> = { userId: ADMIN_ID, role: "ADMIN", accountStatus: "ACTIVE" },
+  user: Record<string, unknown> = {
+    userId: ADMIN_ID,
+    role: "ADMIN",
+    accountStatus: "ACTIVE",
+  },
 ): Promise<INestApplication> {
   const guardStub = makeGuardStub(user);
 
@@ -357,9 +361,11 @@ describe("Module 11 — JwtAuthGuard account status enforcement", () => {
       getClass: () => ({}),
     } as any;
 
-    jest.spyOn(reflector, "getAllAndOverride").mockImplementation(
-      (key: unknown) => handlerMeta[key as string] ?? false,
-    );
+    jest
+      .spyOn(reflector, "getAllAndOverride")
+      .mockImplementation(
+        (key: unknown) => handlerMeta[key as string] ?? false,
+      );
 
     return ctx;
   }
@@ -373,9 +379,9 @@ describe("Module 11 — JwtAuthGuard account status enforcement", () => {
       accountStatus: "SUSPENDED",
     };
 
-    expect(() => guard.handleRequest(null, suspendedUser, undefined, ctx)).toThrow(
-      ForbiddenException,
-    );
+    expect(() =>
+      guard.handleRequest(null, suspendedUser, undefined, ctx),
+    ).toThrow(ForbiddenException);
 
     try {
       guard.handleRequest(null, suspendedUser, undefined, ctx);
@@ -456,11 +462,11 @@ describe("Module 11 — Banned user appeal route (@AllowSuspended e2e)", () => {
   beforeAll(async () => {
     reports = buildReportsMock();
     // Build app with BANNED user injected
-    app = await buildApp(
-      buildEnforcementMock(),
-      reports,
-      { userId: TARGET_ID, role: "USER", accountStatus: "BANNED" },
-    );
+    app = await buildApp(buildEnforcementMock(), reports, {
+      userId: TARGET_ID,
+      role: "USER",
+      accountStatus: "BANNED",
+    });
   });
 
   afterAll(async () => {
@@ -506,4 +512,3 @@ describe("Module 11 — Banned user login blocked (auth.service contract)", () =
     expect(body.statusCode).toBe(403);
   });
 });
-

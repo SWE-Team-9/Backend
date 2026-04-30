@@ -104,9 +104,15 @@ export class PaymentMethodsController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: "Only card payment methods are supported" })
+  @ApiResponse({
+    status: 400,
+    description: "Only card payment methods are supported",
+  })
   @ApiResponse({ status: 401, description: "Not authenticated" })
-  @ApiResponse({ status: 409, description: "This payment method is already saved" })
+  @ApiResponse({
+    status: 409,
+    description: "This payment method is already saved",
+  })
   async attachPaymentMethod(
     @CurrentUser() user: { id: string },
     @Body() dto: AttachPaymentMethodDto,
@@ -178,7 +184,10 @@ export class PaymentMethodsController {
       "Also updates the `default_payment_method` on the Stripe Customer so that " +
       "the next subscription renewal invoice is charged to this card.",
   })
-  @ApiParam({ name: "id", description: "Payment method UUID (from GET /payment-methods)" })
+  @ApiParam({
+    name: "id",
+    description: "Payment method UUID (from GET /payment-methods)",
+  })
   @ApiResponse({
     status: 200,
     description: "Updated card with isDefault: true",
@@ -233,10 +242,13 @@ export class PaymentMethodsController {
       "billing period** (`cancel_at_period_end = true`). The user keeps full access " +
       "until `expiresAt`. Response: `{ subscriptionScheduledToCancel: true, expiresAt }`\n\n" +
       "The frontend should inspect the response and show a banner when " +
-      "`subscriptionScheduledToCancel` is true, e.g. *\"Card removed. Your PRO " +
-      "subscription will expire on May 28 — add a new card to keep it active.\"*",
+      '`subscriptionScheduledToCancel` is true, e.g. *"Card removed. Your PRO ' +
+      'subscription will expire on May 28 — add a new card to keep it active."*',
   })
-  @ApiParam({ name: "id", description: "Payment method UUID (from GET /payment-methods)" })
+  @ApiParam({
+    name: "id",
+    description: "Payment method UUID (from GET /payment-methods)",
+  })
   @ApiResponse({
     status: 200,
     description:

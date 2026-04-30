@@ -1,7 +1,12 @@
 type Env = Record<string, string | undefined>;
 
 // Always required - the server cannot function without these.
-const REQUIRED_ENV_KEYS = ["JWT_SECRET", "JWT_REFRESH_SECRET", "CLIENT_URL", "DATABASE_URL"] as const;
+const REQUIRED_ENV_KEYS = [
+  "JWT_SECRET",
+  "JWT_REFRESH_SECRET",
+  "CLIENT_URL",
+  "DATABASE_URL",
+] as const;
 
 // Optional keys that, when present, must pass a format check.
 const BOOLEAN_KEYS = ["AUTH_COOKIE_SECURE"] as const;

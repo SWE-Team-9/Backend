@@ -188,7 +188,11 @@ export class PaymentMethodsService {
     // If one exists, allow the deletion but automatically schedule cancellation
     // at the end of the current billing period so the user keeps access until
     // then and is not surprised by an unexpected charge failure.
-    let autoCancel: { id: string; expiresAt: Date; stripeSubId: string | null } | null = null;
+    let autoCancel: {
+      id: string;
+      expiresAt: Date;
+      stripeSubId: string | null;
+    } | null = null;
     const totalMethods = await this.prisma.paymentMethod.count({
       where: { userId },
     });

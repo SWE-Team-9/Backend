@@ -87,35 +87,47 @@ export class ReportsService {
       ...(query.targetType ? { targetType: query.targetType } : {}),
     };
 
-    const [total, items] = await this.prisma.$transaction([
-      this.prisma.report.count({ where }),
-      this.prisma.report.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          reporter: {
-            select: {
-              id: true,
-              email: true,
+    const itemsQuery = this.prisma.report.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        reporter: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                displayName: true,
+                handle: true,
+              },
             },
-          },
-          adminResolution: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-          _count: {
-            select: { appeals: true },
           },
         },
-      }),
+        adminResolution: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { displayName: true, handle: true } },
+          },
+        },
+        _count: {
+          select: { appeals: true },
+        },
+      },
+    });
+    const [total, items] = await Promise.all([
+      this.prisma.report.count({ where }),
+      itemsQuery,
     ]);
 
+    const resolvedItems = await Promise.all(
+      items.map((item) => this.resolveReportTarget(item)),
+    );
+
     return {
-      items,
+      items: resolvedItems,
       pagination: {
         page,
         limit,
@@ -127,6 +139,102 @@ export class ReportsService {
     };
   }
 
+  private async resolveReportTarget(report: {
+    id: string;
+    targetType: ReportTargetType;
+    targetId: string;
+    reason: string;
+    status: string;
+    description: string | null;
+    createdAt: Date;
+    resolvedAt: Date | null;
+    resolvedBy: string | null;
+    reporter: {
+      id: string;
+      email: string;
+      profile: { displayName: string; handle: string } | null;
+    } | null;
+    adminResolution: {
+      id: string;
+      email: string;
+      profile: { displayName: string; handle: string } | null;
+    } | null;
+    _count?: { appeals: number };
+  }) {
+    let targetTitle: string | null = null;
+    let targetOwnerHandle: string | null = null;
+
+    if (report.targetType === ReportTargetType.TRACK) {
+      const track = await this.prisma.track.findUnique({
+        where: { id: report.targetId },
+        select: {
+          title: true,
+          uploader: { select: { profile: { select: { handle: true } } } },
+        },
+      });
+      targetTitle = track?.title ?? null;
+      targetOwnerHandle = track?.uploader?.profile?.handle ?? null;
+    } else if (report.targetType === ReportTargetType.USER) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: report.targetId },
+        select: { profile: { select: { displayName: true, handle: true } } },
+      });
+      targetTitle = user?.profile?.displayName ?? null;
+      targetOwnerHandle = user?.profile?.handle ?? null;
+    } else if (report.targetType === ReportTargetType.PLAYLIST) {
+      const playlist = await this.prisma.playlist.findUnique({
+        where: { id: report.targetId },
+        select: {
+          title: true,
+          owner: { select: { profile: { select: { handle: true } } } },
+        },
+      });
+      targetTitle = playlist?.title ?? null;
+      targetOwnerHandle = playlist?.owner?.profile?.handle ?? null;
+    } else if (report.targetType === ReportTargetType.COMMENT) {
+      const comment = await this.prisma.comment.findUnique({
+        where: { id: report.targetId },
+        select: {
+          content: true,
+          user: { select: { profile: { select: { handle: true } } } },
+        },
+      });
+      targetTitle = comment?.content ? comment.content.slice(0, 80) : null;
+      targetOwnerHandle = comment?.user?.profile?.handle ?? null;
+    }
+
+    return {
+      id: report.id,
+      reporter: report.reporter
+        ? {
+            id: report.reporter.id,
+            email: report.reporter.email,
+            display_name: report.reporter.profile?.displayName ?? "",
+            handle: report.reporter.profile?.handle ?? "",
+          }
+        : null,
+      category: report.reason,
+      target: {
+        type: report.targetType,
+        id: report.targetId,
+        title: targetTitle,
+        owner_handle: targetOwnerHandle,
+      },
+      status: report.status,
+      description: report.description,
+      created_at: report.createdAt,
+      resolved_at: report.resolvedAt,
+      resolved_by: report.adminResolution
+        ? {
+            id: report.adminResolution.id,
+            display_name: report.adminResolution.profile?.displayName ?? "",
+            handle: report.adminResolution.profile?.handle ?? "",
+          }
+        : null,
+      appeals_count: report._count?.appeals ?? 0,
+    };
+  }
+
   async getReportById(reportId: string) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -135,12 +243,14 @@ export class ReportsService {
           select: {
             id: true,
             email: true,
+            profile: { select: { displayName: true, handle: true } },
           },
         },
         adminResolution: {
           select: {
             id: true,
             email: true,
+            profile: { select: { displayName: true, handle: true } },
           },
         },
         appeals: {
@@ -150,12 +260,14 @@ export class ReportsService {
               select: {
                 id: true,
                 email: true,
+                profile: { select: { displayName: true, handle: true } },
               },
             },
             adminResolution: {
               select: {
                 id: true,
                 email: true,
+                profile: { select: { displayName: true, handle: true } },
               },
             },
           },
@@ -170,7 +282,30 @@ export class ReportsService {
       });
     }
 
-    return report;
+    const resolved = await this.resolveReportTarget({
+      ...report,
+      _count: undefined,
+    });
+
+    return {
+      ...resolved,
+      appeals: report.appeals.map((appeal) => ({
+        id: appeal.id,
+        message: appeal.message,
+        status: appeal.status,
+        created_at: appeal.createdAt,
+        resolved_at: appeal.resolvedAt,
+        resolution_notes: appeal.resolutionNotes,
+        user: appeal.user
+          ? {
+              id: appeal.user.id,
+              email: appeal.user.email,
+              display_name: appeal.user.profile?.displayName ?? "",
+              handle: appeal.user.profile?.handle ?? "",
+            }
+          : null,
+      })),
+    };
   }
 
   async updateReport(reportId: string, adminId: string, dto: UpdateReportDto) {
@@ -346,6 +481,21 @@ export class ReportsService {
         throw new NotFoundException({
           code: "PLAYLIST_NOT_FOUND",
           message: "Playlist not found.",
+        });
+      }
+      return;
+    }
+
+    if (targetType === ReportTargetType.COMMENT) {
+      const comment = await this.prisma.comment.findUnique({
+        where: { id: targetId },
+        select: { id: true },
+      });
+
+      if (!comment) {
+        throw new NotFoundException({
+          code: "COMMENT_NOT_FOUND",
+          message: "Comment not found.",
         });
       }
       return;

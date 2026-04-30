@@ -76,7 +76,7 @@ import { EntitlementsModule } from "./entitlements/entitlements.module";
     SubscriptionsModule, // Module 12 — Subscriptions & Upload Guard
     StripeModule,
     PaymentMethodsModule,
-    EntitlementsModule,  // GET /entitlements/me
+    EntitlementsModule, // GET /entitlements/me
   ],
   controllers: [AppController],
   providers: [
