@@ -12,6 +12,9 @@ export class MyPlaylistItemDto {
 
   @ApiProperty({ example: 12 })
   tracksCount!: number;
+
+  @ApiProperty({ example: 10 })
+  likesCount!: number;
 }
 
 export class GetMyPlaylistsResponseDto {

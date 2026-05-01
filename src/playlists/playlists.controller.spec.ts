@@ -15,6 +15,16 @@ function buildServiceMock() {
       visibility: "PUBLIC",
       secretToken: null,
     }),
+    getTopPlaylists: jest.fn().mockResolvedValue({
+      playlists: [
+        {
+          playlistId: "pl_101",
+          title: "Late Night Drive",
+          visibility: "PUBLIC",
+          likesCount: 48,
+        },
+      ],
+    }),
     getMyPlaylists: jest.fn().mockResolvedValue({
       page: 1,
       limit: 20,
@@ -168,6 +178,16 @@ describe("PlaylistsController", () => {
     });
   });
 
+  describe("GET /playlists/top", () => {
+    it("returns top playlists", async () => {
+      const res = await request(app.getHttpServer()).get("/playlists/top").expect(200);
+
+      expect(service.getTopPlaylists).toHaveBeenCalled();
+      expect(res.body.playlists).toHaveLength(1);
+      expect(res.body.playlists[0]).toHaveProperty("likesCount", 48);
+    });
+  });
+
   describe("GET /playlists/secret/:secretToken", () => {
     it("resolves secret playlist", async () => {
       await request(app.getHttpServer()).get("/playlists/secret/sec_abc").expect(200);
@@ -314,3 +334,15 @@ describe("PlaylistsController", () => {
     });
   });
 });
+// "FRIENDS_ONLY" })
+//         .expect(400);
+//     });
+//   });
+
+//   describe("DELETE /playlists/:playlistId", () => {
+//     it("returns 204 and delegates removal", async () => {
+//       await request(app.getHttpServer()).delete("/playlists/pl_101").expect(204);
+//       expect(service.remove).toHaveBeenCalledWith("usr_1", "pl_101");
+//     });
+//   });
+// });

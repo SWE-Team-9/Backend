@@ -34,5 +34,6 @@ export {
 } from "./get-playlist-details-response.dto";
 export { PlaylistTracksQueryDto } from "./get-playlist-details-query.dto";
 export { LikePlaylistResponseDto } from "./like-playlist-response.dto";
+export { GetTopPlaylistsResponseDto, TopPlaylistItemDto } from "./get-top-playlists-response.dto";
 export { UnlikePlaylistResponseDto } from "./unlike-playlist-response.dto";
 export { PlaylistRecentQueryDto } from "./playlist-recent-query.dto";

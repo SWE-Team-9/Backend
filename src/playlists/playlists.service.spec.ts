@@ -111,6 +111,7 @@ describe("PlaylistsService", () => {
         title: "Late Night Drive",
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        genre: null,
       });
       expect(prisma.playlistTrack.createMany).toHaveBeenCalledWith({
         data: [
