@@ -1,7 +1,7 @@
 {
   "name": "iqa3-backend",
   "version": "0.0.1",
-  "description": "IQA3 — Social Streaming Platform Backend (NestJS + PostgreSQL)",
+  "description": "IQA3 \u2014 Social Streaming Platform Backend (NestJS + PostgreSQL)",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -25,6 +25,7 @@
     "db:studio": "node node_modules/prisma/build/index.js studio --config ./prisma.config.ts"
   },
   "dependencies": {
+    "20": "^3.1.9",
     "@aws-sdk/client-s3": "^3.500.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",
     "@nestjs-modules/mailer": "^1.10.3",
