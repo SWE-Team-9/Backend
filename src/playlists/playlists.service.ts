@@ -22,6 +22,7 @@ import {
   GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
   GetRecentPlaylistsResponseDto,
+  GetTopPlaylistsResponseDto,
   PlaylistPaginationQueryDto,
   PlaylistTracksQueryDto,
   RemoveTrackFromPlaylistResponseDto,
@@ -65,6 +66,20 @@ export class PlaylistsService {
       const missingIds = uniqueTrackIds.filter((id) => !foundIds.has(id));
       throw this.notFound("TRACK_NOT_FOUND", `Track not found: ${missingIds.join(", ")}`);
     }
+      let genreId: number | null = null;
+
+    if (dto.genre) {
+      const genre = await this.prisma.genre.findUnique({
+        where: { slug: dto.genre },
+        select: { id: true },
+      });
+
+      if (!genre) {
+        throw this.badRequest("INVALID_GENRE", "Genre not found.");
+      }
+
+      genreId = genre.id;
+    }
 
     let playlist: {
       id: string;
@@ -86,6 +101,7 @@ export class PlaylistsService {
               visibility,
               secretToken,
               slug,
+              genreId,
             },
             select: {
               id: true,
@@ -130,6 +146,7 @@ export class PlaylistsService {
       title: playlist.title,
       visibility: playlist.visibility,
       secretToken: playlist.secretToken,
+      genre: dto.genre ?? null,
     };
   }
 
@@ -674,6 +691,32 @@ export class PlaylistsService {
     };
   }
 
+    async getTopPlaylists(): Promise<GetTopPlaylistsResponseDto> {
+      const playlists = await this.prisma.playlist.findMany({
+        where: {
+          visibility: PlaylistVisibility.PUBLIC,
+          deletedAt: null,
+        },
+        orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
+        take: 10,
+        select: {
+          id: true,
+          title: true,
+          visibility: true,
+          likesCount: true,
+        },
+      });
+
+      return {
+        playlists: playlists.map((playlist) => ({
+          playlistId: playlist.id,
+          title: playlist.title,
+          visibility: playlist.visibility,
+          likesCount: playlist.likesCount,
+        })),
+      };
+    }
+
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlistIdResult = await this.prisma.$transaction(async (tx) => {
       const playlist = await tx.playlist.findFirst({
@@ -711,6 +754,15 @@ export class PlaylistsService {
           data: {
             userId,
             playlistId: playlist.id,
+          },
+        });
+
+        await tx.playlist.update({
+          where: { id: playlist.id },
+          data: {
+            likesCount: {
+              increment: 1,
+            },
           },
         });
       } catch (error) {
@@ -766,12 +818,23 @@ export class PlaylistsService {
       throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
     }
 
-    await this.prisma.playlistLike.deleteMany({
+    const removed = await this.prisma.playlistLike.deleteMany({
       where: {
         userId,
         playlistId: playlist.id,
       },
     });
+
+    if (removed.count > 0) {
+      await this.prisma.playlist.update({
+        where: { id: playlist.id },
+        data: {
+          likesCount: {
+            decrement: removed.count,
+          },
+        },
+      });
+    }
 
     this.logAudit("playlist.unlike", userId, playlist.id);
 
@@ -1034,6 +1097,7 @@ export class PlaylistsService {
           slug: true,
           coverArtUrl: true,
           visibility: true,
+          likesCount: true,
           _count: {
             select: {
               tracks: true,
@@ -1053,6 +1117,7 @@ export class PlaylistsService {
         slug: playlist.slug,
         coverArtUrl: playlist.coverArtUrl ?? null,
         visibility: playlist.visibility,
+        likesCount: playlist.likesCount,
         tracksCount: playlist._count.tracks,
       })),
     };

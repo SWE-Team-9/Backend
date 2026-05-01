@@ -28,6 +28,7 @@ import {
 } from "@nestjs/swagger";
 
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { Public } from "../common/decorators/public.decorator";
 import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
 import { PlaylistsService } from "./playlists.service";
 import { PlaylistRecentQueryDto } from "./dto/playlist-recent-query.dto";
@@ -44,6 +45,7 @@ import {
   GetPlaylistEmbedCodeQueryDto,
   GetPlaylistEmbedCodeResponseDto,
   GetRecentPlaylistsResponseDto,
+  GetTopPlaylistsResponseDto,
   LikePlaylistResponseDto,
   PlaylistPaginationQueryDto,
   PlaylistTracksQueryDto,
@@ -95,6 +97,33 @@ export class PlaylistsController {
   @ThrottlePolicy(15, 60_000)
   create(@CurrentUser("userId") userId: string, @Body() dto: CreatePlaylistDto) {
     return this.playlistsService.create(userId, dto);
+  }
+
+  @Get("top")
+  @Public()
+  @ApiOperation({
+    summary: "Get top playlists",
+    description: "Returns the top 10 public playlists ordered by likes count.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Top playlists fetched successfully.",
+    type: GetTopPlaylistsResponseDto,
+    schema: {
+      example: {
+        playlists: [
+          {
+            playlistId: "pl_101",
+            title: "Late Night Drive",
+            visibility: "PUBLIC",
+            likesCount: 48,
+          },
+        ],
+      },
+    },
+  })
+  getTopPlaylists() {
+    return this.playlistsService.getTopPlaylists();
   }
 
   @Get("me")
@@ -713,3 +742,67 @@ export class PlaylistsController {
     this.playlistsService.remove(userId, params.playlistId);
   }
 }
+// mmary: "Delete playlist",
+//     description: "Permanently deletes a playlist. Owner only.",
+//   })
+//   @ApiParam({
+//     name: "playlistId",
+//     description: "Playlist identifier",
+//     example: "pl_101",
+//   })
+//   @ApiResponse({ status: 204, description: "Playlist deleted successfully." })
+//   @ApiResponse({ status: 401, description: "Not authenticated." })
+//   @ApiResponse({
+//     status: 403,
+//     description: "Only playlist owner can delete this playlist.",
+//   })
+//   @ApiResponse({ status: 404, description: "Playlist not found." })
+//   @ThrottlePolicy(20, 60_000)
+//   remove(@CurrentUser("userId") userId: string, @Param() params: DeletePlaylistParamsDto) {
+// e,
+//       transform: true,
+//     }),
+//   )
+//   @ApiOperation({
+//     summary: 'Delete playlist',
+//     description: 'Permanently deletes a playlist. Owner only.',
+//   })
+//   @ApiParam({
+//     name: 'playlistId',
+//     description: 'Playlist identifier',
+//     example: 'pl_101',
+//   })
+//   @ApiResponse({ status: 204, description: 'Playlist deleted successfully.' })
+//   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+//   @ApiResponse({
+//     status: 403,
+//     description: 'Only playlist owner can delete this playlist.',
+//   })
+//   @ApiResponse({ status: 404, description: 'Playlist not found.' })
+//   @ThrottlePolicy(20, 60_000)
+//   remove(@CurrentUser('userId') userId: string, @Param() params: DeletePlaylistParamsDto) {
+// Whitelisted: true,
+//       transform: true,
+//     }),
+//   )
+//   @ApiOperation({
+//     summary: "Delete playlist",
+//     description: "Permanently deletes a playlist. Owner only.",
+//   })
+//   @ApiParam({
+//     name: "playlistId",
+//     description: "Playlist identifier",
+//     example: "pl_101",
+//   })
+//   @ApiResponse({ status: 204, description: "Playlist deleted successfully." })
+//   @ApiResponse({ status: 401, description: "Not authenticated." })
+//   @ApiResponse({
+//     status: 403,
+//     description: "Only playlist owner can delete this playlist.",
+//   })
+//   @ApiResponse({ status: 404, description: "Playlist not found." })
+//   @ThrottlePolicy(20, 60_000)
+//   remove(@CurrentUser("userId") userId: string, @Param() params: DeletePlaylistParamsDto) {
+//     this.playlistsService.remove(userId, params.playlistId);
+//   }
+// }

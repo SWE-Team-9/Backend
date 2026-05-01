@@ -59,4 +59,13 @@ export class CreatePlaylistDto {
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
   trackIds!: string[];
+
+
+  @ApiPropertyOptional({
+    description: "Genre slug (must exist in predefined genres)",
+    example: "electronic",
+  })
+  @IsOptional()
+  @IsString()
+  genre?: string;
 }
