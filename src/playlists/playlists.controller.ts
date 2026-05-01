@@ -89,6 +89,7 @@ export class PlaylistsController {
         title: 'Late Night Drive',
         visibility: 'PUBLIC',
         secretToken: null,
+        genre: null,
       },
     },
   })
