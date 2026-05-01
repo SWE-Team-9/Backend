@@ -55,8 +55,9 @@ export class PlaylistDetailsTrackDto {
     description: 'Track duration in milliseconds',
     example: 240000,
     type: Number,
+    nullable: true,
   })
-  durationMs!: number;
+  durationMs!: number | null;
 
   @ApiProperty({
     description: 'Number of likes on the track',

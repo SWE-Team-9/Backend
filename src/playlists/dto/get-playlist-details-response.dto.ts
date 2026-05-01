@@ -22,6 +22,15 @@ export class GetPlaylistDetailsResponseDto {
   @ApiProperty({ example: 'PUBLIC' })
   visibility!: string;
 
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/covers/pl_101.jpg', nullable: true })
+  coverImageUrl!: string | null;
+
+  @ApiProperty({ example: 42 })
+  likesCount!: number;
+
+  @ApiProperty({ example: false })
+  isLiked!: boolean;
+
   @ApiPropertyOptional({
     example: '2e8b35f8-98d2-4f78-8899-b5fb688d809a',
     nullable: true,
