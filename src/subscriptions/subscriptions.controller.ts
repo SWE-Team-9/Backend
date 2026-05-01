@@ -404,7 +404,8 @@ export class SubscriptionsController {
             effectiveAt: '2026-05-28T00:00:00.000Z',
             currentPlan: 'GO_PLUS',
             newPlan: 'PRO',
-            message: 'Your plan will downgrade from GO+ to Pro on 2026-05-28. You keep all current benefits until then.',
+            message:
+              'Your plan will downgrade from GO+ to Pro on 2026-05-28. You keep all current benefits until then.',
           },
         },
       },
@@ -520,7 +521,8 @@ export class SubscriptionsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Subscription resumed. Returns the full updated subscription object (same shape as GET /subscriptions/me).',
+    description:
+      'Subscription resumed. Returns the full updated subscription object (same shape as GET /subscriptions/me).',
     schema: {
       example: {
         userId: 'user-uuid-1',
@@ -569,7 +571,8 @@ export class SubscriptionsController {
   @ApiBody({ type: ChangePlanDto })
   @ApiResponse({
     status: 200,
-    description: 'Plan changed. Returns the full updated subscription (same shape as GET /subscriptions/me).',
+    description:
+      'Plan changed. Returns the full updated subscription (same shape as GET /subscriptions/me).',
     schema: {
       example: {
         userId: 'user-uuid-1',
@@ -616,7 +619,8 @@ export class SubscriptionsController {
     description: 'Cancellation scheduled.',
     schema: {
       example: {
-        message: 'Subscription will cancel at end of billing period. You keep full access until then.',
+        message:
+          'Subscription will cancel at end of billing period. You keep full access until then.',
         cancelledAt: '2026-04-30T12:00:00.000Z',
         expiresAt: '2026-05-28T00:00:00.000Z',
         cancelAtPeriodEnd: true,

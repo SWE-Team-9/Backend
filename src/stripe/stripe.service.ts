@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import Stripe from "stripe";
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Stripe from 'stripe';
 
 @Injectable()
 export class StripeService {
@@ -9,27 +9,27 @@ export class StripeService {
 
   constructor(private readonly config: ConfigService) {
     const billingProvider =
-      this.config.get<string>("billing.provider") ??
-      this.config.get<string>("BILLING_PROVIDER") ??
+      this.config.get<string>('billing.provider') ??
+      this.config.get<string>('BILLING_PROVIDER') ??
       process.env.BILLING_PROVIDER ??
-      "mock_stripe";
+      'mock_stripe';
 
     const secretKey =
-      this.config.get<string>("stripe.secretKey") ??
-      this.config.get<string>("STRIPE_SECRET_KEY") ??
+      this.config.get<string>('stripe.secretKey') ??
+      this.config.get<string>('STRIPE_SECRET_KEY') ??
       process.env.STRIPE_SECRET_KEY ??
-      "";
+      '';
 
-    const isRealStripe = billingProvider === "stripe";
+    const isRealStripe = billingProvider === 'stripe';
 
     if (isRealStripe && !secretKey) {
-      throw new Error("STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe.");
+      throw new Error('STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe.');
     }
 
-    const stripeKey = secretKey || "sk_test_mock_key_do_not_use_in_real_payments";
+    const stripeKey = secretKey || 'sk_test_mock_key_do_not_use_in_real_payments';
 
     this.stripe = new Stripe(stripeKey, {
-      apiVersion: "2025-08-27.basil",
+      apiVersion: '2025-08-27.basil',
       typescript: true,
     });
 
@@ -57,7 +57,7 @@ export class StripeService {
   async retrieveCustomer(customerId: string): Promise<Stripe.Customer | null> {
     try {
       const customer = await this.stripe.customers.retrieve(customerId);
-      if ("deleted" in customer && customer.deleted) return null;
+      if ('deleted' in customer && customer.deleted) return null;
       return customer as Stripe.Customer;
     } catch (err) {
       this.logger.warn(`[STRIPE] Failed to retrieve customer ${customerId}: ${String(err)}`);
@@ -79,8 +79,8 @@ export class StripeService {
   async createSetupIntent(customerId: string): Promise<Stripe.SetupIntent> {
     return this.stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ["card"],
-      usage: "off_session",
+      payment_method_types: ['card'],
+      usage: 'off_session',
     });
   }
 
@@ -101,12 +101,12 @@ export class StripeService {
     const paymentMethod = await this.stripe.paymentMethods.retrieve(paymentMethodId);
 
     const currentCustomer =
-      typeof paymentMethod.customer === "string"
+      typeof paymentMethod.customer === 'string'
         ? paymentMethod.customer
         : paymentMethod.customer?.id;
 
     if (currentCustomer && currentCustomer !== customerId) {
-      throw new Error("Payment method is already attached to a different Stripe customer.");
+      throw new Error('Payment method is already attached to a different Stripe customer.');
     }
 
     if (currentCustomer === customerId) {
@@ -123,7 +123,7 @@ export class StripeService {
   async listCustomerPaymentMethods(customerId: string): Promise<Stripe.PaymentMethod[]> {
     const response = await this.stripe.paymentMethods.list({
       customer: customerId,
-      type: "card",
+      type: 'card',
     });
 
     return response.data;
@@ -148,7 +148,7 @@ export class StripeService {
       default_payment_method: params.paymentMethodId,
       trial_period_days: params.trialPeriodDays,
       metadata: params.metadata ?? {},
-      expand: ["latest_invoice.payment_intent"],
+      expand: ['latest_invoice.payment_intent'],
     });
   }
 
@@ -171,7 +171,7 @@ export class StripeService {
 
   async retrieveSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
     return this.stripe.subscriptions.retrieve(stripeSubscriptionId, {
-      expand: ["latest_invoice.payment_intent"],
+      expand: ['latest_invoice.payment_intent'],
     });
   }
 
@@ -185,9 +185,9 @@ export class StripeService {
   async listCustomerSubscriptions(customerId: string): Promise<Stripe.Subscription[]> {
     const response = await this.stripe.subscriptions.list({
       customer: customerId,
-      status: "all",
+      status: 'all',
       limit: 100,
-      expand: ["data.latest_invoice.payment_intent"],
+      expand: ['data.latest_invoice.payment_intent'],
     });
 
     return response.data;
@@ -197,7 +197,7 @@ export class StripeService {
 
   async retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice> {
     return this.stripe.invoices.retrieve(invoiceId, {
-      expand: ["payment_intent", "subscription"],
+      expand: ['payment_intent', 'subscription'],
     });
   }
 
@@ -205,7 +205,7 @@ export class StripeService {
     const response = await this.stripe.invoices.list({
       customer: customerId,
       limit: 100,
-      expand: ["data.payment_intent", "data.subscription"],
+      expand: ['data.payment_intent', 'data.subscription'],
     });
 
     return response.data;
@@ -238,7 +238,7 @@ export class StripeService {
 
   async retrieveCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
     return this.stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ["customer", "subscription", "payment_intent", "setup_intent"],
+      expand: ['customer', 'subscription', 'payment_intent', 'setup_intent'],
     });
   }
 

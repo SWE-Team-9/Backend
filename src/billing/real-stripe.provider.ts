@@ -1,8 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import Stripe from "stripe";
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Stripe from 'stripe';
 
-import { StripeService } from "../stripe/stripe.service";
+import { StripeService } from '../stripe/stripe.service';
 import {
   BILLING_PROVIDER,
   BillingPortalResult,
@@ -11,7 +11,7 @@ import {
   PaymentMethodSummary,
   ProviderSubscriptionResult,
   WebhookEvent,
-} from "./billing-provider.interface";
+} from './billing-provider.interface';
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -26,7 +26,7 @@ function addOneMonth(date: Date): Date {
 }
 
 function secondsToDate(value: unknown, fallback: Date): Date {
-  return typeof value === "number" && value > 0 ? new Date(value * 1000) : fallback;
+  return typeof value === 'number' && value > 0 ? new Date(value * 1000) : fallback;
 }
 
 function mapStripeSubscription(sub: Stripe.Subscription): ProviderSubscriptionResult {
@@ -42,7 +42,7 @@ function mapStripeSubscription(sub: Stripe.Subscription): ProviderSubscriptionRe
 
   return {
     providerSubscriptionId: sub.id,
-    providerCustomerId: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
+    providerCustomerId: typeof sub.customer === 'string' ? sub.customer : sub.customer.id,
     status: sub.status,
     currentPeriodStart: secondsToDate(s.current_period_start, now),
     currentPeriodEnd: secondsToDate(s.current_period_end, periodEndFallback),
@@ -98,13 +98,13 @@ export class RealStripeBillingProvider implements IBillingProvider {
       );
     }
 
-    const frontendUrl = this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
+    const frontendUrl = this.config.get<string>('app.clientUrl') ?? 'http://localhost:3000';
     const successUrl =
-      this.config.get<string>("billing.checkoutSuccessUrl") ??
+      this.config.get<string>('billing.checkoutSuccessUrl') ??
       `${frontendUrl}/subscriptions/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl =
       params.cancelUrl ??
-      this.config.get<string>("billing.checkoutCancelUrl") ??
+      this.config.get<string>('billing.checkoutCancelUrl') ??
       `${frontendUrl}/subscriptions/cancel`;
 
     const now = new Date();
@@ -113,7 +113,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
     const priceCents = Number(params.metadata?.priceCents ?? 0);
 
     const sessionCreateParams: Stripe.Checkout.SessionCreateParams = {
-      mode: "subscription",
+      mode: 'subscription',
       customer: params.providerCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: params.returnUrl
@@ -146,7 +146,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
 
     return {
       checkoutSessionId: session.id,
-      checkoutUrl: session.url ?? "",
+      checkoutUrl: session.url ?? '',
       planCode: params.planCode,
       trialEligible,
       trialDays,
@@ -162,13 +162,13 @@ export class RealStripeBillingProvider implements IBillingProvider {
     returnUrl?: string;
   }): Promise<BillingPortalResult> {
     if (!params.providerCustomerId) {
-      throw new Error("providerCustomerId is required to create a billing portal session.");
+      throw new Error('providerCustomerId is required to create a billing portal session.');
     }
 
-    const frontendUrl = this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
+    const frontendUrl = this.config.get<string>('app.clientUrl') ?? 'http://localhost:3000';
     const returnUrl =
       params.returnUrl ??
-      this.config.get<string>("billing.portalReturnUrl") ??
+      this.config.get<string>('billing.portalReturnUrl') ??
       `${frontendUrl}/settings`;
 
     const session = await this.stripeService.createBillingPortalSession({
@@ -240,12 +240,14 @@ export class RealStripeBillingProvider implements IBillingProvider {
     const existing = await this.stripeService.retrieveSubscription(params.providerSubscriptionId);
     const itemId = existing.items.data[0]?.id;
     if (!itemId) {
-      throw new Error(`Stripe subscription ${params.providerSubscriptionId} has no items to update.`);
+      throw new Error(
+        `Stripe subscription ${params.providerSubscriptionId} has no items to update.`,
+      );
     }
 
     const updated = await this.stripeService.updateSubscription(params.providerSubscriptionId, {
       items: [{ id: itemId, price: params.newProviderPriceId }],
-      proration_behavior: "create_prorations",
+      proration_behavior: 'create_prorations',
     });
 
     return mapStripeSubscription(updated);
@@ -258,13 +260,13 @@ export class RealStripeBillingProvider implements IBillingProvider {
 
   constructWebhookEvent(rawBody: Buffer, signature: string): WebhookEvent {
     const webhookSecret =
-      this.config.get<string>("stripe.webhookSecret") ??
-      this.config.get<string>("STRIPE_WEBHOOK_SECRET") ??
+      this.config.get<string>('stripe.webhookSecret') ??
+      this.config.get<string>('STRIPE_WEBHOOK_SECRET') ??
       process.env.STRIPE_WEBHOOK_SECRET ??
-      "";
+      '';
 
     if (!webhookSecret) {
-      throw new Error("STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe.");
+      throw new Error('STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe.');
     }
 
     const event = this.stripeService.constructWebhookEvent(rawBody, signature, webhookSecret);
