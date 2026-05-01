@@ -5,14 +5,14 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-} from "class-validator";
-import { Transform } from "class-transformer";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 //
 export class CreateTrackDto {
   @ApiProperty({
-    description: "Track title",
-    example: "Ya Ana",
+    description: 'Track title',
+    example: 'Ya Ana',
     maxLength: 100,
   })
   @IsString()
@@ -20,8 +20,8 @@ export class CreateTrackDto {
   title!: string;
 
   @ApiPropertyOptional({
-    description: "Genre name (must match existing genre)",
-    example: "Pop",
+    description: 'Genre name (must match existing genre)',
+    example: 'Pop',
   })
   @IsOptional()
   @IsString()
@@ -29,15 +29,15 @@ export class CreateTrackDto {
   genre?: string;
 
   @ApiPropertyOptional({
-    description: "Array of tag strings",
-    example: ["pop", "arabic"],
+    description: 'Array of tag strings',
+    example: ['pop', 'arabic'],
   })
   @IsOptional()
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === "") return undefined;
+    if (value === undefined || value === null || value === '') return undefined;
     if (Array.isArray(value)) return value.map(String);
     // Multipart sends a single tag as a plain string — wrap it in an array
-    if (typeof value === "string") return [value];
+    if (typeof value === 'string') return [value];
     return value;
   })
   @IsArray()
@@ -47,14 +47,14 @@ export class CreateTrackDto {
   tags?: string[];
 
   @ApiPropertyOptional({
-    description: "Release date (ISO 8601)",
-    example: "2026-03-01",
+    description: 'Release date (ISO 8601)',
+    example: '2026-03-01',
   })
   @IsOptional()
   @IsDateString()
   releaseDate?: string;
 
-  @ApiPropertyOptional({ description: "Track description", maxLength: 5000 })
+  @ApiPropertyOptional({ description: 'Track description', maxLength: 5000 })
   @IsOptional()
   @IsString()
   @MaxLength(5000)

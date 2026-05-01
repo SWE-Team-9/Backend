@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import {
   ApiCookieAuth,
   ApiOkResponse,
@@ -6,31 +6,31 @@ import {
   ApiParam,
   ApiResponse,
   ApiTags,
-} from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
-import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
-import { RolesGuard } from "../common/guards/roles.guard";
-import { AdminUsersService } from "./admin-users.service";
+} from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
+import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { AdminUsersService } from './admin-users.service';
 import {
   AdminUsersQueryDto,
   AuditLogQueryDto,
   DailyStatsQueryDto,
   MostReportedQueryDto,
-} from "./dto/admin-users.dto";
+} from './dto/admin-users.dto';
 
-@ApiTags("Admin - Users")
-@ApiCookieAuth("access_token")
+@ApiTags('Admin - Users')
+@ApiCookieAuth('access_token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller("admin")
-@Roles("ADMIN")
+@Controller('admin')
+@Roles('ADMIN')
 @ThrottlePolicy(30, 60_000)
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
 
   // GET /api/v1/admin/users
   @ApiOperation({
-    summary: "List all users",
+    summary: 'List all users',
     description: `Returns a paginated, filterable directory of platform users for admin tooling.
 
 **Primary use cases for other teams:**
@@ -49,7 +49,7 @@ export class AdminUsersController {
 - Endpoint is ADMIN-only`,
   })
   @ApiOkResponse({
-    description: "Paginated user list returned.",
+    description: 'Paginated user list returned.',
     schema: {
       example: {
         page: 1,
@@ -58,40 +58,40 @@ export class AdminUsersController {
         total_pages: 15,
         users: [
           {
-            id: "dca3cba3-4a77-4eac-9ebc-594a8887a02a",
-            display_name: "mohan2",
-            handle: "mohan2",
-            email: "mohanad.said06@eng-st.cu.edu.eg",
-            system_role: "ADMIN",
-            account_status: "ACTIVE",
+            id: 'dca3cba3-4a77-4eac-9ebc-594a8887a02a',
+            display_name: 'mohan2',
+            handle: 'mohan2',
+            email: 'mohanad.said06@eng-st.cu.edu.eg',
+            system_role: 'ADMIN',
+            account_status: 'ACTIVE',
             is_verified: true,
-            created_at: "2026-03-21T01:58:04.035Z",
+            created_at: '2026-03-21T01:58:04.035Z',
             avatar_url:
-              "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/avatar/68cd3125-f2a4-4423-b94b-434c8190d9ab.png",
-            account_type: "ARTIST",
+              'https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/avatar/68cd3125-f2a4-4423-b94b-434c8190d9ab.png',
+            account_type: 'ARTIST',
             track_count: 3,
             report_count: 0,
-            last_login_at: "2026-04-30T11:22:10.000Z",
+            last_login_at: '2026-04-30T11:22:10.000Z',
           },
         ],
       },
     },
   })
-  @ApiResponse({ status: 400, description: "Invalid query params." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 400, description: 'Invalid query params.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required.' })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Get("users")
+  @Get('users')
   getUsers(@Query() query: AdminUsersQueryDto) {
     return this.adminUsersService.getUsers(query);
   }
 
   // GET /api/v1/admin/users/:userId
   @ApiOperation({
-    summary: "Get user detail",
+    summary: 'Get user detail',
     description: `Returns enriched details for a single user by UUID.
 
 **Primary use cases for other teams:**
@@ -110,28 +110,28 @@ export class AdminUsersController {
 - ADMIN-only endpoint`,
   })
   @ApiParam({
-    name: "userId",
-    type: "string",
-    format: "uuid",
-    description: "Target user UUID.",
+    name: 'userId',
+    type: 'string',
+    format: 'uuid',
+    description: 'Target user UUID.',
   })
   @ApiOkResponse({
-    description: "User detail returned.",
+    description: 'User detail returned.',
     schema: {
       example: {
-        id: "dca3cba3-4a77-4eac-9ebc-594a8887a02a",
-        display_name: "mohan2",
-        handle: "mohan2",
-        email: "mohanad.said06@eng-st.cu.edu.eg",
-        system_role: "ADMIN",
-        account_status: "ACTIVE",
+        id: 'dca3cba3-4a77-4eac-9ebc-594a8887a02a',
+        display_name: 'mohan2',
+        handle: 'mohan2',
+        email: 'mohanad.said06@eng-st.cu.edu.eg',
+        system_role: 'ADMIN',
+        account_status: 'ACTIVE',
         is_verified: true,
         suspended_until: null,
-        created_at: "2026-03-21T01:58:04.035Z",
+        created_at: '2026-03-21T01:58:04.035Z',
         avatar_url:
-          "https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/avatar/68cd3125-f2a4-4423-b94b-434c8190d9ab.png",
-        account_type: "ARTIST",
-        last_login_at: "2026-04-30T11:22:10.000Z",
+          'https://iqa3-media-storage.s3.eu-north-1.amazonaws.com/avatar/68cd3125-f2a4-4423-b94b-434c8190d9ab.png',
+        account_type: 'ARTIST',
+        last_login_at: '2026-04-30T11:22:10.000Z',
         stats: {
           tracks_uploaded: 3,
           playlists_created: 2,
@@ -139,17 +139,17 @@ export class AdminUsersController {
           following_count: 2,
         },
         subscription: {
-          tier: "GO_PLUS",
-          status: "TRIALING",
-          current_period_end: "2026-05-28T15:08:28.172Z",
+          tier: 'GO_PLUS',
+          status: 'TRIALING',
+          current_period_end: '2026-05-28T15:08:28.172Z',
         },
         moderation_history: [
           {
-            id: "8f245b80-99df-453b-91ec-67f260f9b517",
-            action_type: "WARN_USER",
-            admin_handle: "admin1",
-            notes: "Posting misleading content repeatedly.",
-            created_at: "2026-04-28T12:12:03.000Z",
+            id: '8f245b80-99df-453b-91ec-67f260f9b517',
+            action_type: 'WARN_USER',
+            admin_handle: 'admin1',
+            notes: 'Posting misleading content repeatedly.',
+            created_at: '2026-04-28T12:12:03.000Z',
           },
         ],
         reports_against: {
@@ -165,22 +165,22 @@ export class AdminUsersController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: "Invalid UUID format." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
-  @ApiResponse({ status: 404, description: "User not found." })
+  @ApiResponse({ status: 400, description: 'Invalid UUID format.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Get("users/:userId")
-  getUserDetail(@Param("userId", ParseUUIDPipe) userId: string) {
+  @Get('users/:userId')
+  getUserDetail(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.adminUsersService.getUserDetail(userId);
   }
 
   // GET /api/v1/admin/audit-log
   @ApiOperation({
-    summary: "Get audit log",
+    summary: 'Get audit log',
     description: `Returns paginated moderation/admin audit actions.
 
 **Primary use cases for other teams:**
@@ -200,7 +200,7 @@ export class AdminUsersController {
 - ADMIN-only endpoint`,
   })
   @ApiOkResponse({
-    description: "Audit log entries returned.",
+    description: 'Audit log entries returned.',
     schema: {
       example: {
         page: 1,
@@ -209,44 +209,44 @@ export class AdminUsersController {
         total_pages: 5,
         actions: [
           {
-            id: "8f245b80-99df-453b-91ec-67f260f9b517",
-            action_type: "SUSPEND_USER",
+            id: '8f245b80-99df-453b-91ec-67f260f9b517',
+            action_type: 'SUSPEND_USER',
             admin: {
-              id: "1efb4228-2d9a-4c10-9de3-fc2f8f5b1a63",
-              display_name: "Admin One",
-              handle: "admin1",
+              id: '1efb4228-2d9a-4c10-9de3-fc2f8f5b1a63',
+              display_name: 'Admin One',
+              handle: 'admin1',
             },
             target_user: {
-              id: "5ae99a52-31de-4bc0-9ef4-69c0c8343b8d",
-              display_name: "User Two",
-              handle: "user2",
+              id: '5ae99a52-31de-4bc0-9ef4-69c0c8343b8d',
+              display_name: 'User Two',
+              handle: 'user2',
             },
             target_track: null,
             target_comment: null,
             target_playlist: null,
-            linked_report_id: "44fcd6ab-7f8a-4465-8e8e-66cdb5409d65",
-            notes: "Repeated policy violations",
-            created_at: "2026-04-30T10:12:03.000Z",
+            linked_report_id: '44fcd6ab-7f8a-4465-8e8e-66cdb5409d65',
+            notes: 'Repeated policy violations',
+            created_at: '2026-04-30T10:12:03.000Z',
           },
         ],
       },
     },
   })
-  @ApiResponse({ status: 400, description: "Invalid query params." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 400, description: 'Invalid query params.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required.' })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Get("audit-log")
+  @Get('audit-log')
   getAuditLog(@Query() query: AuditLogQueryDto) {
     return this.adminUsersService.getAuditLog(query);
   }
 
   // GET /api/v1/admin/stats/overview
   @ApiOperation({
-    summary: "Get platform overview stats",
+    summary: 'Get platform overview stats',
     description: `Returns high-level platform analytics for the admin/moderator dashboard. ADMIN and MODERATOR roles allowed.
 
 **Key metrics returned:**
@@ -260,7 +260,7 @@ export class AdminUsersController {
 Results are cached for 5 minutes.`,
   })
   @ApiOkResponse({
-    description: "Overview stats returned.",
+    description: 'Overview stats returned.',
     schema: {
       example: {
         users: {
@@ -302,24 +302,24 @@ Results are cached for 5 minutes.`,
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({
     status: 403,
-    description: "Forbidden — ADMIN or MODERATOR role required.",
+    description: 'Forbidden — ADMIN or MODERATOR role required.',
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Roles("ADMIN", "MODERATOR")
-  @Get("stats/overview")
+  @Roles('ADMIN', 'MODERATOR')
+  @Get('stats/overview')
   getOverviewStats() {
     return this.adminUsersService.getOverviewStats();
   }
 
   // GET /api/v1/admin/stats/daily
   @ApiOperation({
-    summary: "Get daily stats",
+    summary: 'Get daily stats',
     description: `Returns time-series metrics for dashboard charting.
 
 **Primary use cases for other teams:**
@@ -335,15 +335,15 @@ Results are cached for 5 minutes.`,
 **ADMIN-only endpoint.**`,
   })
   @ApiOkResponse({
-    description: "Daily stats returned.",
+    description: 'Daily stats returned.',
     schema: {
       example: {
-        date_from: "2026-04-01",
-        date_to: "2026-04-30",
-        granularity: "daily",
+        date_from: '2026-04-01',
+        date_to: '2026-04-30',
+        granularity: 'daily',
         metrics: [
           {
-            date: "2026-04-01",
+            date: '2026-04-01',
             new_users: 24,
             tracks_uploaded: 52,
             total_storage_bytes: 125634987654,
@@ -353,21 +353,21 @@ Results are cached for 5 minutes.`,
       },
     },
   })
-  @ApiResponse({ status: 400, description: "Invalid date range or granularity." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 400, description: 'Invalid date range or granularity.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required.' })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Get("stats/daily")
+  @Get('stats/daily')
   getDailyStats(@Query() query: DailyStatsQueryDto) {
     return this.adminUsersService.getDailyStats(query);
   }
 
   // GET /api/v1/admin/stats/most-reported
   @ApiOperation({
-    summary: "Get most-reported users",
+    summary: 'Get most-reported users',
     description: `Returns leaderboard-style "most reported" entities for trust & safety triage.
 
 **Primary use cases for other teams:**
@@ -382,43 +382,43 @@ Results are cached for 5 minutes.`,
 **ADMIN-only endpoint.**`,
   })
   @ApiOkResponse({
-    description: "Most-reported users list returned.",
+    description: 'Most-reported users, tracks, and playlists returned.',
     schema: {
       example: {
-        period: "last_30_days",
+        period: 'last_30_days',
         most_reported_users: [
           {
-            user_id: "5ae99a52-31de-4bc0-9ef4-69c0c8343b8d",
-            display_name: "User Two",
-            handle: "user2",
+            user_id: '5ae99a52-31de-4bc0-9ef4-69c0c8343b8d',
+            display_name: 'User Two',
+            handle: 'user2',
             report_count: 17,
           },
         ],
         most_reported_tracks: [
           {
-            track_id: "9eb9086e-96fc-4c2f-9ed4-ab59e8aa0bd1",
-            title: "Track A",
+            track_id: '9eb9086e-96fc-4c2f-9ed4-ab59e8aa0bd1',
+            title: 'Track A',
             report_count: 9,
           },
         ],
         most_reported_playlists: [
           {
-            playlist_id: "9adbe26a-4b95-4f3a-8706-0dd39f97f50a",
-            title: "Playlist A",
+            playlist_id: '9adbe26a-4b95-4f3a-8706-0dd39f97f50a',
+            title: 'Playlist A',
             report_count: 9,
           },
         ],
       },
     },
   })
-  @ApiResponse({ status: 400, description: "Invalid period or limit value." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @ApiResponse({ status: 403, description: "Forbidden - Admin role required." })
+  @ApiResponse({ status: 400, description: 'Invalid period or limit value.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required.' })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Get("stats/most-reported")
+  @Get('stats/most-reported')
   getMostReported(@Query() query: MostReportedQueryDto) {
     return this.adminUsersService.getMostReported(query);
   }

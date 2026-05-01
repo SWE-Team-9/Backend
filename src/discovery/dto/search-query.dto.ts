@@ -1,5 +1,5 @@
-import { Type } from "class-transformer";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
   IsInt,
@@ -9,15 +9,15 @@ import {
   Max,
   MaxLength,
   Min,
-} from "class-validator";
+} from 'class-validator';
 
-const SEARCH_TYPES = ["all", "tracks", "users", "playlists"] as const;
+const SEARCH_TYPES = ['all', 'tracks', 'users', 'playlists'] as const;
 type SearchType = (typeof SEARCH_TYPES)[number];
 
 export class SearchQueryDto {
   @ApiProperty({
-    description: "Search query text",
-    example: "lofi chill",
+    description: 'Search query text',
+    example: 'lofi chill',
     maxLength: 120,
   })
   @IsString()
@@ -26,17 +26,17 @@ export class SearchQueryDto {
   q!: string;
 
   @ApiPropertyOptional({
-    description: "Result category filter",
+    description: 'Result category filter',
     enum: SEARCH_TYPES,
-    default: "all",
+    default: 'all',
   })
   @IsOptional()
   @IsString()
   @IsIn(SEARCH_TYPES)
-  type?: SearchType = "all";
+  type?: SearchType = 'all';
 
   @ApiPropertyOptional({
-    description: "Page number",
+    description: 'Page number',
     example: 1,
     minimum: 1,
     default: 1,
@@ -48,7 +48,7 @@ export class SearchQueryDto {
   page?: number = 1;
 
   @ApiPropertyOptional({
-    description: "Results per page",
+    description: 'Results per page',
     example: 20,
     minimum: 1,
     maximum: 100,

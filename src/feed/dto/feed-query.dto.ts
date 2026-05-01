@@ -1,12 +1,12 @@
-import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsOptional, Max, Min } from "class-validator";
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
-import { PaginationQueryDto } from "../../common/dto/pagination-query.dto";
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 export class FeedQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    description: "Optional explicit offset (overrides page-based offset)",
+    description: 'Optional explicit offset (overrides page-based offset)',
     example: 0,
     minimum: 0,
   })
@@ -17,7 +17,7 @@ export class FeedQueryDto extends PaginationQueryDto {
   offset?: number;
 
   @ApiPropertyOptional({
-    description: "Max feed items to return",
+    description: 'Max feed items to return',
     example: 20,
     minimum: 1,
     maximum: 100,

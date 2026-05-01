@@ -1,5 +1,5 @@
-import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsIn,
@@ -9,7 +9,7 @@ import {
   IsString,
   Max,
   Min,
-} from "class-validator";
+} from 'class-validator';
 
 export class GetPlaylistEmbedCodeParamsDto {
   @IsString()
@@ -18,10 +18,10 @@ export class GetPlaylistEmbedCodeParamsDto {
 }
 
 export class GetPlaylistEmbedCodeQueryDto {
-  @ApiPropertyOptional({ enum: ["light", "dark"], example: "dark" })
+  @ApiPropertyOptional({ enum: ['light', 'dark'], example: 'dark' })
   @IsOptional()
-  @IsIn(["light", "dark"])
-  theme?: "light" | "dark";
+  @IsIn(['light', 'dark'])
+  theme?: 'light' | 'dark';
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
@@ -60,6 +60,9 @@ export class GetPlaylistEmbedCodeQueryDto {
 }
 
 export class GetPlaylistEmbedCodeResponseDto {
+  @ApiProperty({ example: 'pl_101' })
   playlistId!: string;
+
+  @ApiProperty({ example: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>' })
   embedCode!: string;
 }

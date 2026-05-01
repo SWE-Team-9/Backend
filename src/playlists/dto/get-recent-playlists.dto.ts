@@ -1,22 +1,22 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RecentPlaylistOwnerDto {
-  @ApiProperty({ example: "usr_1" })
+  @ApiProperty({ example: 'usr_1' })
   id!: string;
 
-  @ApiProperty({ example: "Ahmed Hassan" })
+  @ApiProperty({ example: 'Ahmed Hassan' })
   display_name!: string;
 }
 
 export class RecentPlaylistItemDto {
-  @ApiProperty({ example: "pl_101" })
+  @ApiProperty({ example: 'pl_101' })
   playlistId!: string;
 
-  @ApiProperty({ example: "Late Night Drive" })
+  @ApiProperty({ example: 'Late Night Drive' })
   title!: string;
 
   @ApiPropertyOptional({
-    example: "https://cdn.example.com/playlists/pl_101.jpg",
+    example: 'https://cdn.example.com/playlists/pl_101.jpg',
     nullable: true,
   })
   coverImageUrl!: string | null;
