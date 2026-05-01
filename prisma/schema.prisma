@@ -214,6 +214,9 @@ enum NotificationEventType {
   MESSAGE
   REPORT_RESOLVED
   SUBSCRIPTION
+  ACCOUNT_SUSPENDED
+  ACCOUNT_BANNED
+  ACCOUNT_RESTORED
 }
 
 enum DeliveryChannel {
