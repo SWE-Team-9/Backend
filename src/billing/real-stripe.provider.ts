@@ -13,8 +13,6 @@ import {
   WebhookEvent,
 } from "./billing-provider.interface";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
@@ -27,44 +25,32 @@ function addOneMonth(date: Date): Date {
   return result;
 }
 
+function secondsToDate(value: unknown, fallback: Date): Date {
+  return typeof value === "number" && value > 0 ? new Date(value * 1000) : fallback;
+}
+
 function mapStripeSubscription(sub: Stripe.Subscription): ProviderSubscriptionResult {
-  // Stripe API 2025-08-27.basil renamed / moved some subscription fields.
-  // Use a typed-any access to handle the period dates safely across API versions.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = sub as any;
+  const s = sub as unknown as {
+    current_period_start?: number;
+    current_period_end?: number;
+    trial_start?: number;
+    trial_end?: number;
+  };
+
+  const now = new Date();
+  const periodEndFallback = addOneMonth(now);
 
   return {
     providerSubscriptionId: sub.id,
-    providerCustomerId: sub.customer as string,
+    providerCustomerId: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
     status: sub.status,
-    currentPeriodStart: new Date((s.current_period_start ?? 0) * 1000),
-    currentPeriodEnd: new Date((s.current_period_end ?? 0) * 1000),
+    currentPeriodStart: secondsToDate(s.current_period_start, now),
+    currentPeriodEnd: secondsToDate(s.current_period_end, periodEndFallback),
     trialStart: s.trial_start ? new Date(s.trial_start * 1000) : undefined,
     trialEnd: s.trial_end ? new Date(s.trial_end * 1000) : undefined,
     cancelAtPeriodEnd: sub.cancel_at_period_end,
   };
 }
-
-// ── RealStripeBillingProvider ─────────────────────────────────────────────────
-//
-// Drop-in replacement for MockStripeBillingProvider that makes real Stripe API
-// calls via the injected StripeService. Activated when BILLING_PROVIDER=stripe
-// in the environment.
-//
-// Checkout flow (Hosted Checkout):
-//   1. Frontend calls POST /subscriptions/checkout
-//   2. Backend creates Stripe Checkout Session, returns { checkoutUrl }
-//   3. Frontend redirects user to checkoutUrl (stripe.com hosted page)
-//   4. User enters card, Stripe processes payment
-//   5. Stripe sends webhook: checkout.session.completed → backend activates sub
-//
-// Pre-requisites:
-//   - STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET in .env
-//   - Each SubscriptionPlan record in DB must have stripePriceId set
-//     (create the price in Stripe Dashboard, copy the price_id like 'price_xxx')
-//   - STRIPE_CHECKOUT_SUCCESS_URL (optional, defaults to /subscriptions/success)
-//   - STRIPE_CHECKOUT_CANCEL_URL  (optional, defaults to /subscriptions/cancel)
-//   - STRIPE_BILLING_PORTAL_RETURN_URL (optional, defaults to /settings)
 
 @Injectable()
 export class RealStripeBillingProvider implements IBillingProvider {
@@ -75,18 +61,11 @@ export class RealStripeBillingProvider implements IBillingProvider {
     private readonly config: ConfigService,
   ) {}
 
-  // ── Customer ───────────────────────────────────────────────────────────────
-
-  /**
-   * Finds an existing Stripe customer by userId metadata, or creates one.
-   * Using metadata search prevents duplicate customers when users re-subscribe.
-   */
   async getOrCreateCustomer(params: {
     userId: string;
     email: string;
     name?: string;
   }): Promise<string> {
-    // Check for existing customer via metadata search (idempotent)
     const existingId = await this.stripeService.searchCustomersByUserId(params.userId);
     if (existingId) {
       this.logger.debug(`[Stripe] Existing customer ${existingId} for user ${params.userId}`);
@@ -98,21 +77,11 @@ export class RealStripeBillingProvider implements IBillingProvider {
       name: params.name,
       metadata: { userId: params.userId },
     });
+
     this.logger.debug(`[Stripe] Created customer ${customer.id} for user ${params.userId}`);
     return customer.id;
   }
 
-  // ── Checkout ───────────────────────────────────────────────────────────────
-
-  /**
-   * Creates a Stripe Hosted Checkout session.
-   *
-   * The caller (SubscriptionsService) must pass the Stripe price ID via
-   * metadata.stripePriceId — this is set automatically from the DB plan record.
-   *
-   * Returns checkoutUrl which the frontend should redirect the browser to.
-   * The subscription is activated by the checkout.session.completed webhook.
-   */
   async createCheckoutSession(params: {
     userId: string;
     planCode: string;
@@ -125,19 +94,14 @@ export class RealStripeBillingProvider implements IBillingProvider {
     const priceId = params.metadata?.stripePriceId;
     if (!priceId) {
       throw new Error(
-        `No Stripe price ID for plan "${params.planCode}". ` +
-          `Set stripePriceId on the SubscriptionPlan DB record ` +
-          `(e.g. price_xxx from Stripe Dashboard).`,
+        `No Stripe price ID for plan "${params.planCode}". Set stripePriceId on the SubscriptionPlan DB record.`,
       );
     }
 
     const frontendUrl = this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
-
-    // success_url: {CHECKOUT_SESSION_ID} is replaced by Stripe automatically
     const successUrl =
       this.config.get<string>("billing.checkoutSuccessUrl") ??
       `${frontendUrl}/subscriptions/success?session_id={CHECKOUT_SESSION_ID}`;
-
     const cancelUrl =
       params.cancelUrl ??
       this.config.get<string>("billing.checkoutCancelUrl") ??
@@ -146,20 +110,17 @@ export class RealStripeBillingProvider implements IBillingProvider {
     const now = new Date();
     const trialDays = params.trialDays ?? 0;
     const trialEligible = trialDays > 0;
+    const priceCents = Number(params.metadata?.priceCents ?? 0);
 
     const sessionCreateParams: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
       customer: params.providerCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      // Stripe replaces {CHECKOUT_SESSION_ID} in success_url automatically
       success_url: params.returnUrl
         ? `${params.returnUrl}?session_id={CHECKOUT_SESSION_ID}`
         : successUrl,
       cancel_url: cancelUrl,
-      // Allow discount codes to be entered on the hosted page
       allow_promotion_codes: true,
-      // Prefill email if we have a customer (avoids duplicate data entry)
-      ...(params.providerCustomerId ? {} : {}),
       metadata: {
         userId: params.userId,
         planCode: params.planCode,
@@ -169,13 +130,13 @@ export class RealStripeBillingProvider implements IBillingProvider {
         metadata: {
           userId: params.userId,
           planCode: params.planCode,
+          ...(params.metadata ?? {}),
         },
         ...(trialEligible ? { trial_period_days: trialDays } : {}),
       },
     };
 
     const session = await this.stripeService.createCheckoutSession(sessionCreateParams);
-
     const trialEnd = trialEligible ? addDays(now, trialDays) : undefined;
     const renewsAt = trialEnd ?? addOneMonth(now);
 
@@ -189,24 +150,12 @@ export class RealStripeBillingProvider implements IBillingProvider {
       planCode: params.planCode,
       trialEligible,
       trialDays,
-      amountDueNowCents: trialEligible ? 0 : 0, // actual amount charged by Stripe on completion
+      amountDueNowCents: trialEligible ? 0 : priceCents,
       renewsAt: renewsAt.toISOString(),
       trialEndsAt: trialEnd?.toISOString(),
     };
   }
 
-  // ── Billing Portal ─────────────────────────────────────────────────────────
-
-  /**
-   * Creates a Stripe Customer Portal session.
-   *
-   * The user is redirected to portalUrl where they can:
-   * - Update / add / remove payment methods
-   * - View and download invoices
-   * - Cancel or change plans
-   *
-   * Must be configured in Stripe Dashboard → Billing → Customer Portal.
-   */
   async createBillingPortalSession(params: {
     userId: string;
     providerCustomerId?: string;
@@ -217,7 +166,6 @@ export class RealStripeBillingProvider implements IBillingProvider {
     }
 
     const frontendUrl = this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
-
     const returnUrl =
       params.returnUrl ??
       this.config.get<string>("billing.portalReturnUrl") ??
@@ -228,8 +176,6 @@ export class RealStripeBillingProvider implements IBillingProvider {
       return_url: returnUrl,
     });
 
-    // Fetch the customer's saved payment methods for the settings UI display.
-    // This is best-effort — failure is non-fatal.
     let paymentMethodSummary: PaymentMethodSummary | null = null;
     try {
       const pms = await this.stripeService.listCustomerPaymentMethods(params.providerCustomerId);
@@ -245,13 +191,9 @@ export class RealStripeBillingProvider implements IBillingProvider {
       }
     } catch (err) {
       this.logger.warn(
-        `[Stripe] Could not fetch payment methods for ${params.providerCustomerId}: ${err}`,
+        `[Stripe] Could not fetch payment methods for ${params.providerCustomerId}: ${String(err)}`,
       );
     }
-
-    this.logger.debug(
-      `[Stripe] Billing portal session ${session.id} for customer ${params.providerCustomerId}`,
-    );
 
     return {
       portalSessionId: session.id,
@@ -270,8 +212,6 @@ export class RealStripeBillingProvider implements IBillingProvider {
     };
   }
 
-  // ── Subscription lifecycle ─────────────────────────────────────────────────
-
   async cancelSubscription(params: {
     providerSubscriptionId: string;
     cancelAtPeriodEnd: boolean;
@@ -280,20 +220,12 @@ export class RealStripeBillingProvider implements IBillingProvider {
       params.providerSubscriptionId,
       params.cancelAtPeriodEnd,
     );
-    this.logger.debug(
-      `[Stripe] Cancelled ${params.providerSubscriptionId} cancelAtPeriodEnd=${params.cancelAtPeriodEnd}`,
-    );
   }
 
   async resumeSubscription(params: { providerSubscriptionId: string }): Promise<void> {
     await this.stripeService.reactivateSubscription(params.providerSubscriptionId);
-    this.logger.debug(`[Stripe] Resumed ${params.providerSubscriptionId}`);
   }
 
-  /**
-   * Upgrades or switches plans by swapping the price on the Stripe subscription.
-   * Creates prorations automatically so the user is charged/credited correctly.
-   */
   async changePlan(params: {
     providerSubscriptionId: string;
     newPlanCode: string;
@@ -301,28 +233,20 @@ export class RealStripeBillingProvider implements IBillingProvider {
   }): Promise<ProviderSubscriptionResult> {
     if (!params.newProviderPriceId) {
       throw new Error(
-        `newProviderPriceId is required for real Stripe plan change to "${params.newPlanCode}". ` +
-          `Set stripePriceId on the SubscriptionPlan DB record.`,
+        `newProviderPriceId is required for real Stripe plan change to "${params.newPlanCode}".`,
       );
     }
 
-    // Retrieve current subscription to get the subscription item ID
     const existing = await this.stripeService.retrieveSubscription(params.providerSubscriptionId);
     const itemId = existing.items.data[0]?.id;
     if (!itemId) {
-      throw new Error(
-        `Stripe subscription ${params.providerSubscriptionId} has no items to update.`,
-      );
+      throw new Error(`Stripe subscription ${params.providerSubscriptionId} has no items to update.`);
     }
 
     const updated = await this.stripeService.updateSubscription(params.providerSubscriptionId, {
       items: [{ id: itemId, price: params.newProviderPriceId }],
       proration_behavior: "create_prorations",
     });
-
-    this.logger.debug(
-      `[Stripe] Changed plan ${params.providerSubscriptionId} → ${params.newPlanCode}`,
-    );
 
     return mapStripeSubscription(updated);
   }
@@ -332,14 +256,17 @@ export class RealStripeBillingProvider implements IBillingProvider {
     return mapStripeSubscription(sub);
   }
 
-  // ── Webhook ────────────────────────────────────────────────────────────────
-
-  /**
-   * Verifies the Stripe-Signature HMAC and returns a typed WebhookEvent.
-   * Throws if the signature is invalid or the payload cannot be parsed.
-   */
   constructWebhookEvent(rawBody: Buffer, signature: string): WebhookEvent {
-    const webhookSecret = this.config.get<string>("stripe.webhookSecret") ?? "";
+    const webhookSecret =
+      this.config.get<string>("stripe.webhookSecret") ??
+      this.config.get<string>("STRIPE_WEBHOOK_SECRET") ??
+      process.env.STRIPE_WEBHOOK_SECRET ??
+      "";
+
+    if (!webhookSecret) {
+      throw new Error("STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe.");
+    }
+
     const event = this.stripeService.constructWebhookEvent(rawBody, signature, webhookSecret);
     return {
       id: event.id,

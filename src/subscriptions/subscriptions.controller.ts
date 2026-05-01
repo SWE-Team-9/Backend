@@ -143,7 +143,7 @@ export class SubscriptionsController {
           uploadLimit: 1000,
           uploadLimitDisplay: '1000',
           isUnlimited: false,
-          trialDays: 30,
+          trialDays: 0,
           adsEnabled: false,
           canDownload: true,
           supportLevel: 'priority',
@@ -351,7 +351,7 @@ export class SubscriptionsController {
       '- Subscription is activated asynchronously via the `POST /webhook` event `checkout.session.completed`\n\n' +
       '**Trial logic:**\n' +
       '- First-time PRO subscribers get a 7-day free trial\n' +
-      '- First-time GO+ subscribers get a 30-day free trial\n' +
+      '- GO+ has no free trial in this implementation\n' +
       '- Trial eligibility is tracked per-user in `TrialRedemption` to prevent abuse\n\n' +
       '**Downgrade detection:**\n' +
       '- If requesting a lower tier than the current plan, the downgrade is scheduled\n' +
