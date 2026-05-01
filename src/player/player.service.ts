@@ -166,6 +166,24 @@ export class PlayerService {
       },
     });
 
+    // Backfill completionRatio on the most recent PlayEvent for this user+track
+    // so that analytics can count completed plays (completionRatio >= 0.90).
+    if (durationSeconds > 0) {
+      const ratio = positionSeconds / durationSeconds;
+      const recentEvent = await this.prisma.playEvent.findFirst({
+        where: { userId, trackId },
+        orderBy: { startedAt: "desc" },
+        select: { id: true },
+      });
+
+      if (recentEvent) {
+        await this.prisma.playEvent.update({
+          where: { id: recentEvent.id },
+          data: { completionRatio: ratio },
+        });
+      }
+    }
+
     return {
       message: "Playback progress saved successfully",
       trackId,
