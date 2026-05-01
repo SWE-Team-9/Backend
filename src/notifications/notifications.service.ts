@@ -205,7 +205,7 @@ export class NotificationsService {
       case 'FOLLOW':
         return 'You have a new follower';
       case 'MESSAGE':
-        return 'You have a new message';
+        return (meta?.['fcmBody'] as string) ?? 'You have a new message';
       case 'REPORT_RESOLVED':
         return (meta?.['batchMessage'] as string) ?? 'Your report has been resolved';
       case 'SUBSCRIPTION':
