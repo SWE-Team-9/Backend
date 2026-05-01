@@ -568,6 +568,7 @@ export class InteractionsService {
         id: true,
         content: true,
         timestampAt: true,
+        createdAt: true,
         user: {
           select: {
             id: true,
@@ -653,7 +654,6 @@ export class InteractionsService {
         id: true,
         content: true,
         timestampAt: true,
-        createdAt: true,
         createdAt: true,
         user: {
           select: {
