@@ -115,6 +115,14 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+// Temporary QA override for expiry-flow testing.
+// Revert this constant after testing is completed.
+const PRO_TEST_EXPIRY_MINUTES = 2;
+
 function mockId(prefix: string): string {
   return `${prefix}_mock_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
 }
@@ -434,8 +442,16 @@ export class SubscriptionsService {
       },
     });
 
-    const periodEnd = new Date(session.renewsAt);
-    const trialEnd = session.trialEndsAt ? new Date(session.trialEndsAt) : undefined;
+    const periodEnd =
+      planCode === 'PRO'
+        ? addMinutes(now, PRO_TEST_EXPIRY_MINUTES)
+        : new Date(session.renewsAt);
+    const trialEnd =
+      planCode === 'PRO'
+        ? periodEnd
+        : session.trialEndsAt
+          ? new Date(session.trialEndsAt)
+          : undefined;
     const status = trialEligible ? SubscriptionStatus.TRIALING : SubscriptionStatus.ACTIVE;
     const amountPaid = trialEligible ? 0 : plan.priceCents;
 
