@@ -90,6 +90,7 @@ function buildServiceMock() {
       title: "Late Night Drive",
       description: "chill tracks",
       visibility: "PUBLIC",
+      genre: "Electronic",
       owner: { id: "usr_1", display_name: "Ahmed Hassan" },
       tracks: [{ trackId: "trk_123", title: "Layali" }],
     }),

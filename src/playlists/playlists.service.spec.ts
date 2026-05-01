@@ -192,6 +192,7 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "PUBLIC",
         secretToken: "sec_hidden",
+        genre: { name: "Electronic" },
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
       });
       prisma.playlistTrack.count.mockResolvedValue(1);
@@ -206,6 +207,7 @@ describe("PlaylistsService", () => {
         title: "Late Night Drive",
         description: "chill tracks",
         visibility: "PUBLIC",
+        genre: "Electronic",
         owner: { id: "usr_1", display_name: "Ahmed Hassan" },
         tracks: [{ trackId: "trk_123", title: "Layali" }],
       });
@@ -220,6 +222,7 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
+        genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
       });
       prisma.playlistTrack.count.mockResolvedValue(1);
@@ -235,6 +238,7 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
+        genre: null,
         owner: { id: "usr_1", display_name: "Ahmed Hassan" },
         tracks: [{ trackId: "trk_123", title: "Layali" }],
       });
@@ -261,6 +265,7 @@ describe("PlaylistsService", () => {
         description: null,
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         tracks: [],
       });
@@ -282,6 +287,7 @@ describe("PlaylistsService", () => {
           description: null,
           visibility: PlaylistVisibility.PUBLIC,
           secretToken: null,
+          genre: null,
           owner: { id: "usr_1", display_name: "Ahmed Hassan" },
           tracks: [],
         },
@@ -304,6 +310,7 @@ describe("PlaylistsService", () => {
         description: null,
         visibility: PlaylistVisibility.SECRET,
         secretToken: "placeholder",
+          genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         tracks: [],
       });
@@ -484,6 +491,7 @@ describe("PlaylistsService", () => {
           title: "Late Night Drive",
           coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
           coverArtUrl: null,
+          genre: { name: "Electronic" },
           owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         },
         {
@@ -491,6 +499,7 @@ describe("PlaylistsService", () => {
           title: "Weekend Mix",
           coverImageUrl: null,
           coverArtUrl: null,
+          genre: null,
           owner: { id: "usr_2", profile: { displayName: "Sara Ali" } },
         },
       ]);
@@ -513,12 +522,14 @@ describe("PlaylistsService", () => {
             playlistId: "pl_101",
             title: "Late Night Drive",
             coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+            genre: "Electronic",
             owner: { id: "usr_1", display_name: "Ahmed Hassan" },
           },
           {
             playlistId: "pl_102",
             title: "Weekend Mix",
             coverImageUrl: null,
+            genre: null,
             owner: { id: "usr_2", display_name: "Sara Ali" },
           },
         ],
@@ -871,9 +882,12 @@ describe("PlaylistsService", () => {
           id: "pl_101",
           title: "Late Night Drive",
           slug: "late-night-drive",
+          coverImageUrl: null,
           coverArtUrl: null,
           visibility: "PUBLIC",
+          genre: { name: "Electronic" },
           _count: { tracks: 12 },
+          likesCount: 10,
         },
       ]);
 
@@ -891,9 +905,11 @@ describe("PlaylistsService", () => {
             playlistId: "pl_101",
             title: "Late Night Drive",
             slug: "late-night-drive",
-            coverArtUrl: null,
+            coverImageUrl: null,
             visibility: "PUBLIC",
             tracksCount: 12,
+            likesCount: 10,
+            genre: "Electronic",
           },
         ],
       });

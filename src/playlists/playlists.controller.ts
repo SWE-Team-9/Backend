@@ -154,9 +154,11 @@ export class PlaylistsController {
             playlistId: 'pl_101',
             title: 'Late Night Drive',
             slug: 'late-night-drive',
-            coverArtUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
             visibility: 'PUBLIC',
             tracksCount: 12,
+            likesCount: 10,
+            genre: 'Electronic',
           },
         ],
       },
@@ -222,6 +224,7 @@ export class PlaylistsController {
             playlistId: 'pl_101',
             title: 'Late Night Drive',
             coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            genre: 'Electronic',
             owner: {
               id: 'usr_1',
               display_name: 'Ahmed Hassan',
@@ -640,6 +643,7 @@ export class PlaylistsController {
         description: 'My favorite chill tracks',
         visibility: 'PUBLIC',
         secretToken: null,
+        genre: 'Electronic',
         owner: {
           id: 'usr_1',
           display_name: 'Ahmed Hassan',

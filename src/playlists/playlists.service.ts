@@ -233,6 +233,7 @@ export class PlaylistsService {
       visibility: PlaylistVisibility;
       secretToken: string | null;
       ownerId: string;
+      genre: { name: string } | null;
       owner: { id: string; profile: { displayName: string } | null };
       tracks: Array<{ track: { id: string; title: string } }>;
     },
@@ -246,6 +247,7 @@ export class PlaylistsService {
         description: playlist.description,
         visibility: playlist.visibility,
         secretToken: playlist.secretToken,
+        genre: playlist.genre?.name ?? null,
         owner: {
           id: playlist.owner.id,
           display_name: playlist.owner.profile?.displayName ?? "Unknown User",
@@ -298,6 +300,11 @@ export class PlaylistsService {
           description: true,
           visibility: true,
           secretToken: true,
+          genre: {
+            select: {
+              name: true,
+            },
+          },
           owner: {
             select: {
               id: true,
@@ -494,6 +501,11 @@ export class PlaylistsService {
         description: true,
         visibility: true,
         secretToken: true,
+        genre: {
+          select: {
+            name: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -660,6 +672,11 @@ export class PlaylistsService {
         title: true,
         coverImageUrl: true,
         coverArtUrl: true,
+        genre: {
+          select: {
+            name: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -683,6 +700,7 @@ export class PlaylistsService {
           playlistId: playlist.id,
           title: playlist.title,
           coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+          genre: playlist.genre?.name ?? null,
           owner: {
             id: playlist.owner.id,
             display_name: playlist.owner.profile?.displayName ?? "Unknown User",
@@ -1162,9 +1180,15 @@ export class PlaylistsService {
           id: true,
           title: true,
           slug: true,
+          coverImageUrl: true,
           coverArtUrl: true,
           visibility: true,
           likesCount: true,
+          genre: {
+            select: {
+              name: true,
+            },
+          },
           _count: {
             select: {
               tracks: true,
@@ -1182,9 +1206,10 @@ export class PlaylistsService {
         playlistId: playlist.id,
         title: playlist.title,
         slug: playlist.slug,
-        coverArtUrl: playlist.coverArtUrl ?? null,
+        coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
         visibility: playlist.visibility,
         likesCount: playlist.likesCount,
+        genre: playlist.genre?.name ?? null,
         tracksCount: playlist._count.tracks,
       })),
     };

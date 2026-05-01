@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class MyPlaylistItemDto {
   @ApiProperty({ example: 'pl_101' })
@@ -15,6 +15,18 @@ export class MyPlaylistItemDto {
 
   @ApiProperty({ example: 10 })
   likesCount!: number;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/playlists/pl_101.jpg',
+    nullable: true,
+  })
+  coverImageUrl!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Electronic',
+    nullable: true,
+  })
+  genre!: string | null;
 }
 
 export class GetMyPlaylistsResponseDto {
