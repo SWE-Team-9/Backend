@@ -9,15 +9,15 @@ import {
   Post,
   UsePipes,
   ValidationPipe,
-} from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { PaymentMethodsService } from "./payment-methods.service";
-import { AttachPaymentMethodDto } from "./dto/attach-payment-method.dto";
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { PaymentMethodsService } from './payment-methods.service';
+import { AttachPaymentMethodDto } from './dto/attach-payment-method.dto';
 
-@ApiTags("Payment Methods")
+@ApiTags('Payment Methods')
 @ApiBearerAuth()
-@Controller("payment-methods")
+@Controller('payment-methods')
 export class PaymentMethodsController {
   constructor(private readonly service: PaymentMethodsService) {}
 
@@ -32,28 +32,29 @@ export class PaymentMethodsController {
   //   2. stripe.confirmCardSetup(clientSecret, { payment_method: { card: elements.getElement('card') } })
   //   3. On success, Stripe returns paymentMethod.id → call POST /payment-methods/attach
 
-  @Post("setup-intent")
+  @Post('setup-intent')
   @HttpCode(200)
   @ApiOperation({
-    summary: "Step 1 of adding a card — create a Stripe SetupIntent",
+    summary: 'Step 1 of adding a card — create a Stripe SetupIntent',
     description:
-      "Returns a Stripe `clientSecret` that the frontend passes to `stripe.confirmCardSetup()` " +
+      'Returns a Stripe `clientSecret` that the frontend passes to `stripe.confirmCardSetup()` ' +
       "(Stripe.js). The user's card number is collected directly by Stripe and never " +
-      "passes through this server.\n\n" +
-      "**Full card-add flow:**\n" +
-      "1. Call `POST /payment-methods/setup-intent` → get `clientSecret`\n" +
-      "2. Mount a Stripe Elements card form; call `stripe.confirmCardSetup(clientSecret)`\n" +
-      "3. On success Stripe returns `setupIntent.payment_method` (a `pm_xxx` ID)\n" +
-      "4. Call `POST /payment-methods/attach` with that ID to persist the card",
+      'passes through this server.\n\n' +
+      '**Full card-add flow:**\n' +
+      '1. Call `POST /payment-methods/setup-intent` → get `clientSecret`\n' +
+      '2. Mount a Stripe Elements card form; call `stripe.confirmCardSetup(clientSecret)`\n' +
+      '3. On success Stripe returns `setupIntent.payment_method` (a `pm_xxx` ID)\n' +
+      '4. Call `POST /payment-methods/attach` with that ID to persist the card',
   })
   @ApiResponse({
     status: 200,
-    description: "SetupIntent created",
+    description: 'SetupIntent created',
     schema: {
-      example: { clientSecret: "seti_xxx_secret_yyy" },
+      example: { clientSecret: 'seti_xxx_secret_yyy' },
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
+  @ApiResponse({ status: 400, description: 'Failed to create Setup Intent' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
   async createSetupIntent(@CurrentUser() user: { id: string }): Promise<{ clientSecret: string }> {
     return this.service.createSetupIntent(user.id);
   }
@@ -68,43 +69,44 @@ export class PaymentMethodsController {
   // The first card saved is automatically made the default.
   // Set setAsDefault: true to override the default for subsequent cards.
 
-  @Post("attach")
+  @Post('attach')
   @HttpCode(200)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   @ApiOperation({
-    summary: "Step 2 of adding a card — attach a confirmed payment method",
+    summary: 'Step 2 of adding a card — attach a confirmed payment method',
     description:
-      "Attaches a Stripe `pm_xxx` payment method (returned by `stripe.confirmCardSetup`) " +
+      'Attaches a Stripe `pm_xxx` payment method (returned by `stripe.confirmCardSetup`) ' +
       "to the user's account and persists display metadata (brand, last4, expiry).\n\n" +
-      "**Auto-default rule:** the very first card added is always made the default. " +
-      "For subsequent cards pass `setAsDefault: true` to override.\n\n" +
-      "Returns the saved card object (same shape as `GET /payment-methods` entries).",
+      '**Auto-default rule:** the very first card added is always made the default. ' +
+      'For subsequent cards pass `setAsDefault: true` to override.\n\n' +
+      'Returns the saved card object (same shape as `GET /payment-methods` entries).',
   })
   @ApiResponse({
     status: 200,
-    description: "Payment method saved",
+    description: 'Payment method saved',
     schema: {
       example: {
-        id: "uuid",
-        brand: "visa",
-        last4: "4242",
+        id: 'uuid',
+        brand: 'visa',
+        last4: '4242',
         expMonth: 12,
         expYear: 2028,
-        cardholderName: "Jane Doe",
+        cardholderName: 'Jane Doe',
         isDefault: true,
-        createdAt: "2026-04-28T10:00:00.000Z",
+        createdAt: '2026-04-28T10:00:00.000Z',
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description: "Only card payment methods are supported",
+    description: 'Only card payment methods are supported',
   })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
   @ApiResponse({
     status: 409,
-    description: "This payment method is already saved",
+    description: 'This payment method is already saved',
   })
+  @ApiBody({ type: AttachPaymentMethodDto })
   async attachPaymentMethod(
     @CurrentUser() user: { id: string },
     @Body() dto: AttachPaymentMethodDto,
@@ -118,42 +120,42 @@ export class PaymentMethodsController {
 
   @Get()
   @ApiOperation({
-    summary: "List all saved payment methods",
+    summary: 'List all saved payment methods',
     description:
-      "Returns all cards saved to the account, sorted with the default card first " +
-      "and then newest-first.\n\n" +
-      "Each entry contains display metadata only (brand, last4, expiry). " +
-      "Full card numbers are never stored.",
+      'Returns all cards saved to the account, sorted with the default card first ' +
+      'and then newest-first.\n\n' +
+      'Each entry contains display metadata only (brand, last4, expiry). ' +
+      'Full card numbers are never stored.',
   })
   @ApiResponse({
     status: 200,
-    description: "Array of saved payment methods (may be empty)",
+    description: 'Array of saved payment methods (may be empty)',
     schema: {
       example: [
         {
-          id: "uuid-1",
-          brand: "visa",
-          last4: "4242",
+          id: 'uuid-1',
+          brand: 'visa',
+          last4: '4242',
           expMonth: 12,
           expYear: 2028,
-          cardholderName: "Jane Doe",
+          cardholderName: 'Jane Doe',
           isDefault: true,
-          createdAt: "2026-04-28T10:00:00.000Z",
+          createdAt: '2026-04-28T10:00:00.000Z',
         },
         {
-          id: "uuid-2",
-          brand: "mastercard",
-          last4: "5555",
+          id: 'uuid-2',
+          brand: 'mastercard',
+          last4: '5555',
           expMonth: 6,
           expYear: 2027,
           cardholderName: null,
           isDefault: false,
-          createdAt: "2026-03-01T08:00:00.000Z",
+          createdAt: '2026-03-01T08:00:00.000Z',
         },
       ],
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
   async listPaymentMethods(@CurrentUser() user: { id: string }): Promise<object[]> {
     return this.service.listPaymentMethods(user.id);
   }
@@ -164,41 +166,44 @@ export class PaymentMethodsController {
   // Also updates the default_payment_method on the Stripe Customer object so
   // Stripe uses this card for the next renewal invoice.
 
-  @Post(":id/default")
+  @Post(':id/default')
   @HttpCode(200)
   @ApiOperation({
-    summary: "Set a payment method as the default",
+    summary: 'Set a payment method as the default',
     description:
-      "Makes the given card the default for future charges. " +
-      "The previous default card is unset automatically.\n\n" +
-      "Also updates the `default_payment_method` on the Stripe Customer so that " +
-      "the next subscription renewal invoice is charged to this card.",
+      'Makes the given card the default for future charges. ' +
+      'The previous default card is unset automatically.\n\n' +
+      'Also updates the `default_payment_method` on the Stripe Customer so that ' +
+      'the next subscription renewal invoice is charged to this card.',
   })
   @ApiParam({
-    name: "id",
-    description: "Payment method UUID (from GET /payment-methods)",
+    name: 'id',
+    description: 'Payment method UUID (from GET /payment-methods)',
+    type: 'string',
+    format: 'uuid',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   })
   @ApiResponse({
     status: 200,
-    description: "Updated card with isDefault: true",
+    description: 'Updated card with isDefault: true',
     schema: {
       example: {
-        id: "uuid-2",
-        brand: "mastercard",
-        last4: "5555",
+        id: 'uuid-2',
+        brand: 'mastercard',
+        last4: '5555',
         expMonth: 6,
         expYear: 2027,
         cardholderName: null,
         isDefault: true,
-        createdAt: "2026-03-01T08:00:00.000Z",
+        createdAt: '2026-03-01T08:00:00.000Z',
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
-  @ApiResponse({ status: 404, description: "Payment method not found" })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Payment method not found' })
   async setDefault(
     @CurrentUser() user: { id: string },
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<object> {
     return this.service.setDefault(user.id, id);
   }
@@ -219,52 +224,55 @@ export class PaymentMethodsController {
   //   automatically promoted to default (both in our DB and on the Stripe Customer).
   //   Response body is {}.
 
-  @Delete(":id")
+  @Delete(':id')
   @HttpCode(200)
   @ApiOperation({
-    summary: "Remove a saved payment method",
+    summary: 'Remove a saved payment method',
     description:
-      "Detaches the card from Stripe and removes it from the account. Always returns 200.\n\n" +
-      "**Normal case** (user has another card, or no active subscription): card is removed, " +
-      "if it was the default the next most recent card is auto-promoted. Response: `{}`\n\n" +
-      "**Last card + active paid subscription:** the card is still removed, but the " +
-      "subscription is **automatically scheduled to cancel at the end of the current " +
-      "billing period** (`cancel_at_period_end = true`). The user keeps full access " +
-      "until `expiresAt`. Response: `{ subscriptionScheduledToCancel: true, expiresAt }`\n\n" +
-      "The frontend should inspect the response and show a banner when " +
+      'Detaches the card from Stripe and removes it from the account. Always returns 200.\n\n' +
+      '**Normal case** (user has another card, or no active subscription): card is removed, ' +
+      'if it was the default the next most recent card is auto-promoted. Response: `{}`\n\n' +
+      '**Last card + active paid subscription:** the card is still removed, but the ' +
+      'subscription is **automatically scheduled to cancel at the end of the current ' +
+      'billing period** (`cancel_at_period_end = true`). The user keeps full access ' +
+      'until `expiresAt`. Response: `{ subscriptionScheduledToCancel: true, expiresAt }`\n\n' +
+      'The frontend should inspect the response and show a banner when ' +
       '`subscriptionScheduledToCancel` is true, e.g. *"Card removed. Your PRO ' +
       'subscription will expire on May 28 — add a new card to keep it active."*',
   })
   @ApiParam({
-    name: "id",
-    description: "Payment method UUID (from GET /payment-methods)",
+    name: 'id',
+    description: 'Payment method UUID (from GET /payment-methods)',
+    type: 'string',
+    format: 'uuid',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   })
   @ApiResponse({
     status: 200,
     description:
-      "Card removed. Body is {} if no subscription was affected, or includes " +
-      "subscriptionScheduledToCancel when the last card was removed while subscribed.",
+      'Card removed. Body is {} if no subscription was affected, or includes ' +
+      'subscriptionScheduledToCancel when the last card was removed while subscribed.',
     schema: {
       examples: {
         normal: {
-          summary: "Card removed, no subscription impact",
+          summary: 'Card removed, no subscription impact',
           value: {},
         },
         autoCancel: {
-          summary: "Last card removed — subscription scheduled to cancel",
+          summary: 'Last card removed — subscription scheduled to cancel',
           value: {
             subscriptionScheduledToCancel: true,
-            expiresAt: "2026-05-28T00:00:00.000Z",
+            expiresAt: '2026-05-28T00:00:00.000Z',
           },
         },
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated" })
-  @ApiResponse({ status: 404, description: "Payment method not found" })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Payment method not found' })
   async deletePaymentMethod(
     @CurrentUser() user: { id: string },
-    @Param("id", ParseUUIDPipe) id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<object> {
     return this.service.deletePaymentMethod(user.id, id);
   }

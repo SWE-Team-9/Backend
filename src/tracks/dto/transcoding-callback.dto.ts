@@ -1,29 +1,30 @@
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { TrackStatus } from "@prisma/client";
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TranscodingCallbackDto {
-  @ApiProperty({ description: "Track ID", example: "trk_001" })
+  @ApiProperty({ description: 'Track ID', example: 'trk_001' })
   @IsString()
   trackId!: string;
 
   @ApiProperty({
-    description: "Processing result status",
-    enum: ["FINISHED", "FAILED"],
-    example: "FINISHED",
+    description: 'Processing result status',
+    enum: ['FINISHED', 'FAILED'],
+    example: 'FINISHED',
   })
-  @IsEnum({ FINISHED: "FINISHED", FAILED: "FAILED" })
-  status!: "FINISHED" | "FAILED";
+  @IsEnum({ FINISHED: 'FINISHED', FAILED: 'FAILED' })
+  status!: 'FINISHED' | 'FAILED';
 
   @ApiPropertyOptional({
-    description: "Generated file URLs",
-    example: { mp3: "https://...", wav: "https://..." },
+    description: 'Generated file URLs keyed by format (e.g. mp3, wav)',
+    type: 'object',
+    additionalProperties: { type: 'string' },
+    example: { mp3: 'https://cdn.example.com/track.mp3', wav: 'https://cdn.example.com/track.wav' },
   })
   @IsOptional()
   fileUrls?: Record<string, string>;
 
   @ApiPropertyOptional({
-    description: "Waveform amplitude peaks (normalised 0..1)",
+    description: 'Waveform amplitude peaks (normalised 0..1)',
     example: [0.1, 0.3, 0.5, 0.8, 0.4],
   })
   @IsOptional()
@@ -32,7 +33,7 @@ export class TranscodingCallbackDto {
   waveformData?: number[];
 
   @ApiPropertyOptional({
-    description: "Track duration in milliseconds",
+    description: 'Track duration in milliseconds',
     example: 210000,
   })
   @IsOptional()

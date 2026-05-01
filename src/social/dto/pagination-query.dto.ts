@@ -1,6 +1,6 @@
-import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, Max, Min } from "class-validator";
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, Max, Min } from 'class-validator';
 
 export class PaginationQueryDto {
   // TODO(Module 3): Move common page/limit DTO to shared module after all modules adopt the same contract.
@@ -8,7 +8,7 @@ export class PaginationQueryDto {
     example: 1,
     default: 1,
     minimum: 1,
-    description: "Pagination page number.",
+    description: 'Pagination page number.',
   })
   @Type(() => Number)
   @IsInt()
@@ -20,7 +20,7 @@ export class PaginationQueryDto {
     default: 20,
     minimum: 1,
     maximum: 100,
-    description: "Page size.",
+    description: 'Page size.',
   })
   // TODO(Module 3): Confirm global max limit with frontend/cross teams before implementation phase.
   @Type(() => Number)

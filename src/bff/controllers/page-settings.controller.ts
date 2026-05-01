@@ -1,14 +1,14 @@
-import { Controller, Get, HttpCode, HttpStatus, Res } from "@nestjs/common";
-import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Response } from "express";
+import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
+import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 
-import { CurrentUser } from "../../common/decorators/current-user.decorator";
-import { BffService } from "../bff.service";
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { BffService } from '../bff.service';
 
-@ApiTags("BFF")
-@ApiCookieAuth("access_token")
+@ApiTags('BFF')
+@ApiCookieAuth('access_token')
 @ApiBearerAuth()
-@Controller("pages")
+@Controller('pages')
 export class PageSettingsController {
   constructor(private readonly bffService: BffService) {}
 
@@ -22,54 +22,80 @@ export class PageSettingsController {
    * Cache: no-store, private — all user-specific data.
    */
   @ApiOperation({
-    summary: "Settings page aggregate data",
+    summary: 'Settings page aggregate data',
     description:
-      "Returns everything needed to render the settings page in a single request. " +
-      "Fields: `me` (account identity), `profile` (editable profile data), " +
-      "`subscription` (current plan + quota), `entitlements` (feature flags), " +
-      "`notificationPreferences` (per-type toggles), and `sessionsSummary` (count of active sessions). " +
-      "All auxiliary fields fall back to null on partial failure; only `me` is hard-required.",
+      'Returns everything needed to render the settings page in a single request. ' +
+      'Fields: `me` (account identity), `profile` (editable profile data), ' +
+      '`subscription` (current plan + quota), `entitlements` (feature flags), ' +
+      '`notificationPreferences` (per-type toggles), and `sessionsSummary` (count of active sessions). ' +
+      'All auxiliary fields fall back to null on partial failure; only `me` is hard-required.',
   })
   @ApiResponse({
     status: 200,
-    description: "Settings page payload returned successfully.",
+    description: 'Settings page payload returned successfully.',
     schema: {
       example: {
         me: {
-          id: "uuid",
-          email: "user@example.com",
-          display_name: "Alice",
-          handle: "alice",
+          id: 'uuid',
+          email: 'user@example.com',
+          display_name: 'Alice',
+          handle: 'alice',
           avatar_url: null,
           is_verified: true,
-          account_type: "ARTIST",
-          system_role: "USER",
-          subscription_tier: "PRO",
+          account_type: 'ARTIST',
+          system_role: 'USER',
+          subscription_tier: 'PRO',
         },
         profile: {
-          id: "uuid",
-          handle: "alice",
-          display_name: "Alice",
-          bio: "Producer & DJ",
+          id: 'uuid',
+          user_id: 'uuid',
+          handle: 'alice',
+          display_name: 'Alice',
+          bio: 'Producer & DJ',
+          location: 'Cairo, Egypt',
           avatarUrl: null,
           coverPhotoUrl: null,
-          account_type: "ARTIST",
+          account_type: 'ARTIST',
+          visibility: 'PUBLIC',
           is_private: false,
-          social_links: [],
-          favorite_genres: ["electronic", "house"],
+          likes_visible: true,
+          website_url: null,
+          is_verified: true,
+          created_at: '2025-01-15T10:00:00.000Z',
+          updated_at: '2026-04-01T08:00:00.000Z',
+          followers_count: 120,
+          following_count: 45,
+          track_count: 8,
+          social_links: [{ platform: 'INSTAGRAM', url: 'https://instagram.com/alice', sort_order: 0 }],
+          favorite_genres: [{ slug: 'electronic', name: 'Electronic' }, { slug: 'house', name: 'House' }],
         },
         subscription: {
-          subscriptionType: "PRO",
+          userId: 'uuid',
+          planCode: 'PRO',
+          subscriptionType: 'PRO',
+          subscriptionStatus: 'ACTIVE',
+          planName: 'Pro',
+          isPremium: true,
+          adsEnabled: false,
+          canDownload: true,
+          supportLevel: 'priority',
           uploadLimit: 100,
+          uploadLimitDisplay: '100',
           uploadedTracks: 8,
           remainingUploads: 92,
+          currentPeriodEnd: '2026-06-01T00:00:00.000Z',
+          renewalDate: '2026-06-01T00:00:00.000Z',
+          expiresAt: null,
           cancelAtPeriodEnd: false,
-          currentPeriodEnd: null,
-          paymentMethodSummary: null,
-          perks: { adFree: true, offlineListening: true },
+          trialStart: null,
+          trialEnd: null,
+          paymentMethodSummary: 'Visa ending in 4242',
+          paymentMethod: null,
+          pendingDowngrade: null,
+          latestInvoice: null,
         },
         entitlements: {
-          planCode: "PRO",
+          planCode: 'PRO',
           isPremium: true,
           uploadLimit: 100,
           uploadedCount: 8,
@@ -77,7 +103,7 @@ export class PageSettingsController {
           canUpload: true,
           adsEnabled: false,
           canDownload: true,
-          supportLevel: "priority",
+          supportLevel: 'priority',
           trialEnd: null,
         },
         notificationPreferences: {
@@ -90,14 +116,14 @@ export class PageSettingsController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Missing or expired session — redirect to login." })
+  @ApiResponse({ status: 401, description: 'Missing or expired session — redirect to login.' })
   @HttpCode(HttpStatus.OK)
-  @Get("settings")
+  @Get('settings')
   async getSettingsPage(
-    @CurrentUser("userId") userId: string,
+    @CurrentUser('userId') userId: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.setHeader("Cache-Control", "no-store, private");
+    res.setHeader('Cache-Control', 'no-store, private');
     return this.bffService.getSettingsPageData(userId);
   }
 }

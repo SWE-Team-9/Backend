@@ -1,6 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 
 export class LikePlaylistResponseDto {
-  @ApiProperty({ example: "Playlist liked successfully" })
+  @ApiProperty({ example: 'Playlist liked successfully' })
   message!: string;
 }
