@@ -691,31 +691,77 @@ export class PlaylistsService {
     };
   }
 
-    async getTopPlaylists(): Promise<GetTopPlaylistsResponseDto> {
-      const playlists = await this.prisma.playlist.findMany({
-        where: {
-          visibility: PlaylistVisibility.PUBLIC,
-          deletedAt: null,
-        },
-        orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
-        take: 10,
-        select: {
-          id: true,
-          title: true,
-          visibility: true,
-          likesCount: true,
-        },
-      });
+  async getTopPlaylists(): Promise<GetTopPlaylistsResponseDto> {
+    const noGenreLabel = "No Genre";
 
-      return {
-        playlists: playlists.map((playlist) => ({
+    const playlists = await this.prisma.playlist.findMany({
+      where: {
+        visibility: PlaylistVisibility.PUBLIC,
+        deletedAt: null,
+      },
+      orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        visibility: true,
+        likesCount: true,
+        genre: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    const groupedGenres = new Map<
+      string,
+      {
+        genre: string;
+        playlists: Array<{
+          playlistId: string;
+          title: string;
+          visibility: PlaylistVisibility;
+          likesCount: number;
+        }>;
+      }
+    >();
+
+    for (const playlist of playlists) {
+      const genreName = playlist.genre?.name ?? noGenreLabel;
+      const groupedGenre =
+        groupedGenres.get(genreName) ??
+        {
+          genre: genreName,
+          playlists: [],
+        };
+
+      if (groupedGenre.playlists.length < 10) {
+        const playlistItem = {
           playlistId: playlist.id,
           title: playlist.title,
           visibility: playlist.visibility,
           likesCount: playlist.likesCount,
-        })),
-      };
+        };
+
+        groupedGenre.playlists.push(playlistItem);
+      }
+
+      groupedGenres.set(genreName, groupedGenre);
     }
+
+    const orderedGenres = [...groupedGenres.values()]
+      .filter((group) => group.genre !== noGenreLabel)
+      .sort((left, right) => left.genre.localeCompare(right.genre));
+
+    const noGenreGroup = groupedGenres.get(noGenreLabel);
+    if (noGenreGroup) {
+      orderedGenres.push(noGenreGroup);
+    }
+
+    return {
+      genres: orderedGenres,
+    };
+  }
 
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlistIdResult = await this.prisma.$transaction(async (tx) => {

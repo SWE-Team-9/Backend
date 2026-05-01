@@ -105,7 +105,7 @@ export class PlaylistsController {
   @Public()
   @ApiOperation({
     summary: "Get top playlists",
-    description: "Returns the top 10 public playlists ordered by likes count.",
+    description: "Returns the top 10 public playlists per genre ordered by likes count.",
   })
   @ApiResponse({
     status: 200,
@@ -113,12 +113,17 @@ export class PlaylistsController {
     type: GetTopPlaylistsResponseDto,
     schema: {
       example: {
-        playlists: [
+        genres: [
           {
-            playlistId: "pl_101",
-            title: "Late Night Drive",
-            visibility: "PUBLIC",
-            likesCount: 48,
+            genre: "Electronic",
+            playlists: [
+              {
+                playlistId: "pl_101",
+                title: "Late Night Drive",
+                visibility: "PUBLIC",
+                likesCount: 48,
+              },
+            ],
           },
         ],
       },

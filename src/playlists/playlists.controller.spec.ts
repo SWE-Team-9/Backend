@@ -16,12 +16,17 @@ function buildServiceMock() {
       secretToken: null,
     }),
     getTopPlaylists: jest.fn().mockResolvedValue({
-      playlists: [
+      genres: [
         {
-          playlistId: "pl_101",
-          title: "Late Night Drive",
-          visibility: "PUBLIC",
-          likesCount: 48,
+          genre: "Electronic",
+          playlists: [
+            {
+              playlistId: "pl_101",
+              title: "Late Night Drive",
+              visibility: "PUBLIC",
+              likesCount: 48,
+            },
+          ],
         },
       ],
     }),
@@ -183,8 +188,8 @@ describe("PlaylistsController", () => {
       const res = await request(app.getHttpServer()).get("/playlists/top").expect(200);
 
       expect(service.getTopPlaylists).toHaveBeenCalled();
-      expect(res.body.playlists).toHaveLength(1);
-      expect(res.body.playlists[0]).toHaveProperty("likesCount", 48);
+      expect(res.body.genres).toHaveLength(1);
+      expect(res.body.genres[0]).toHaveProperty("genre", "Electronic");
     });
   });
 

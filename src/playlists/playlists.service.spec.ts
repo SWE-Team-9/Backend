@@ -46,6 +46,7 @@ function buildPrismaMock() {
     },
     genre: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     playEvent: {
       groupBy: jest.fn(),
@@ -519,6 +520,104 @@ describe("PlaylistsService", () => {
             title: "Weekend Mix",
             coverImageUrl: null,
             owner: { id: "usr_2", display_name: "Sara Ali" },
+          },
+        ],
+      });
+    });
+  });
+
+  describe("getTopPlaylists", () => {
+    it("returns top public playlists grouped by genre and keeps no-genre playlists only in their bucket", async () => {
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: "pl_101",
+          title: "Late Night Drive",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 48,
+          genre: { name: "Electronic" },
+        },
+        {
+          id: "pl_201",
+          title: "Sunrise Club",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 33,
+          genre: { name: "House" },
+        },
+        {
+          id: "pl_102",
+          title: "Neon Pulse",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 20,
+          genre: { name: "Electronic" },
+        },
+        {
+          id: "pl_301",
+          title: "Midnight Float",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 12,
+          genre: null,
+        },
+      ]);
+
+      const result = await service.getTopPlaylists();
+
+      expect(prisma.genre.findMany).not.toHaveBeenCalled();
+      expect(prisma.playlist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            visibility: PlaylistVisibility.PUBLIC,
+            deletedAt: null,
+          },
+          orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
+          select: expect.objectContaining({
+            genre: {
+              select: {
+                name: true,
+              },
+            },
+          }),
+        }),
+      );
+      expect(result).toEqual({
+        genres: [
+          {
+            genre: "Electronic",
+            playlists: [
+              {
+                playlistId: "pl_101",
+                title: "Late Night Drive",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 48,
+              },
+              {
+                playlistId: "pl_102",
+                title: "Neon Pulse",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 20,
+              },
+            ],
+          },
+          {
+            genre: "House",
+            playlists: [
+              {
+                playlistId: "pl_201",
+                title: "Sunrise Club",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 33,
+              },
+            ],
+          },
+          {
+            genre: "No Genre",
+            playlists: [
+              {
+                playlistId: "pl_301",
+                title: "Midnight Float",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 12,
+              },
+            ],
           },
         ],
       });
