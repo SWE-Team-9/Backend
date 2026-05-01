@@ -105,6 +105,8 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+
+
 function mockId(prefix: string): string {
   return `${prefix}_mock_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
 }
@@ -815,13 +817,7 @@ export class SubscriptionsService {
       stripeCustomerId: string | null;
       stripeSubscriptionId: string | null;
       currentPeriodEnd: Date;
-      plan: {
-        id?: string;
-        code?: string;
-        name: string;
-        tier: SubscriptionTier;
-        priceCents?: number;
-      };
+      plan: { id?: string; code?: string; name: string; tier: SubscriptionTier; priceCents?: number };
     } | null = null;
 
     for (const lookupId of lookupIds) {
@@ -859,9 +855,7 @@ export class SubscriptionsService {
     }
 
     if (!sub) {
-      this.logger.warn(
-        `[WEBHOOK] No local subscription matched event ${event.type} (${event.id}).`,
-      );
+      this.logger.warn(`[WEBHOOK] No local subscription matched event ${event.type} (${event.id}).`);
       return { received: true };
     }
 
@@ -880,8 +874,7 @@ export class SubscriptionsService {
         const metadata = (obj['metadata'] as Record<string, unknown> | undefined) ?? {};
         const trialEligible = metadata['trialEligible'] === 'true';
         const trialDays = Number(metadata['trialDays'] ?? 0);
-        const periodEnd =
-          trialEligible && trialDays > 0 ? addDays(now, trialDays) : addOneMonth(now);
+        const periodEnd = trialEligible && trialDays > 0 ? addDays(now, trialDays) : addOneMonth(now);
         const updateData: Record<string, unknown> = {
           status: trialEligible ? SubscriptionStatus.TRIALING : SubscriptionStatus.ACTIVE,
           cancelAtPeriodEnd: false,
@@ -919,12 +912,7 @@ export class SubscriptionsService {
               providerSubscriptionId: realSubId ?? sub.stripeSubscriptionId,
             },
           });
-          this.sendTrialStartedEmailAsync(
-            sub.userId,
-            sub.plan.name,
-            sub.plan.priceCents ?? 0,
-            periodEnd,
-          );
+          this.sendTrialStartedEmailAsync(sub.userId, sub.plan.name, sub.plan.priceCents ?? 0, periodEnd);
         } else {
           this.sendSubscriptionConfirmationEmailAsync(
             sub.userId,
@@ -973,13 +961,7 @@ export class SubscriptionsService {
                 paidAt: now,
               },
             });
-            this.sendInvoiceReceiptEmailAsync(
-              sub.userId,
-              sub.plan.name,
-              amountPaid,
-              now,
-              newInv.id,
-            );
+            this.sendInvoiceReceiptEmailAsync(sub.userId, sub.plan.name, amountPaid, now, newInv.id);
           }
         }
         break;
@@ -1082,7 +1064,9 @@ export class SubscriptionsService {
           (obj['brand'] as string | undefined) ??
           'unknown';
         const last4 =
-          (card['last4'] as string | undefined) ?? (obj['last4'] as string | undefined) ?? '0000';
+          (card['last4'] as string | undefined) ??
+          (obj['last4'] as string | undefined) ??
+          '0000';
         const expiryMonth =
           (card['exp_month'] as number | undefined) ??
           (obj['exp_month'] as number | undefined) ??
@@ -1423,7 +1407,9 @@ export class SubscriptionsService {
     });
   }
 
-  private async finalizeExpiredCancelAtPeriodEndSubscriptions(userId: string): Promise<void> {
+  private async finalizeExpiredCancelAtPeriodEndSubscriptions(
+    userId: string,
+  ): Promise<void> {
     const now = new Date();
     const expiredCancelingSubs = await this.prisma.userSubscription.findMany({
       where: {
@@ -1431,7 +1417,11 @@ export class SubscriptionsService {
         cancelAtPeriodEnd: true,
         currentPeriodEnd: { lt: now },
         status: {
-          in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE],
+          in: [
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.TRIALING,
+            SubscriptionStatus.PAST_DUE,
+          ],
         },
       },
       select: {

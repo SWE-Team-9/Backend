@@ -1,22 +1,23 @@
+
 type Env = Record<string, string | undefined>;
 
 // Always required - the server cannot function without these.
 const REQUIRED_ENV_KEYS = [
-  'JWT_SECRET',
-  'JWT_REFRESH_SECRET',
-  'CLIENT_URL',
-  'DATABASE_URL',
+  "JWT_SECRET",
+  "JWT_REFRESH_SECRET",
+  "CLIENT_URL",
+  "DATABASE_URL",
 ] as const;
 
 // Optional keys that, when present, must pass a format check.
-const BOOLEAN_KEYS = ['AUTH_COOKIE_SECURE'] as const;
-const NUMBER_KEYS = ['PORT', 'MAIL_PORT'] as const;
-const URL_KEYS = ['CLIENT_URL', 'API_URL', 'GOOGLE_CALLBACK_URL', 'CDN_URL'] as const;
+const BOOLEAN_KEYS = ["AUTH_COOKIE_SECURE"] as const;
+const NUMBER_KEYS = ["PORT", "MAIL_PORT"] as const;
+const URL_KEYS = ["CLIENT_URL", "API_URL", "GOOGLE_CALLBACK_URL", "CDN_URL"] as const;
 
 function isValidUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
@@ -27,7 +28,7 @@ export function validateEnvironment(config: Env): Env {
 
   // ── Required keys ──────────────────────────────────────────────────────────
   for (const key of REQUIRED_ENV_KEYS) {
-    if (!config[key] || config[key].trim() === '') {
+    if (!config[key] || config[key].trim() === "") {
       errors.push(`${key} is required but was not set.`);
     }
   }
@@ -35,7 +36,7 @@ export function validateEnvironment(config: Env): Env {
   // ── Boolean keys ───────────────────────────────────────────────────────────
   for (const key of BOOLEAN_KEYS) {
     const value = config[key];
-    if (value !== undefined && !['true', 'false'].includes(value)) {
+    if (value !== undefined && !["true", "false"].includes(value)) {
       errors.push(`${key} must be "true" or "false" (got "${value}").`);
     }
   }
@@ -51,13 +52,13 @@ export function validateEnvironment(config: Env): Env {
   // ── URL keys ───────────────────────────────────────────────────────────────
   for (const key of URL_KEYS) {
     const value = config[key];
-    if (value !== undefined && value.trim() !== '' && !isValidUrl(value)) {
+    if (value !== undefined && value.trim() !== "" && !isValidUrl(value)) {
       errors.push(`${key} must be a valid http/https URL (got "${value}").`);
     }
   }
 
   // ── JWT_SECRET strength ────────────────────────────────────────────────────
-  const jwtSecret = config['JWT_SECRET'];
+  const jwtSecret = config["JWT_SECRET"];
   if (jwtSecret && jwtSecret.length < 64) {
     errors.push(
       `JWT_SECRET must be at least 64 characters long for security (got ${jwtSecret.length} chars).`,
@@ -65,7 +66,7 @@ export function validateEnvironment(config: Env): Env {
   }
 
   // ── JWT_REFRESH_SECRET strength ───────────────────────────────────────────
-  const jwtRefreshSecret = config['JWT_REFRESH_SECRET'];
+  const jwtRefreshSecret = config["JWT_REFRESH_SECRET"];
   if (jwtRefreshSecret && jwtRefreshSecret.length < 64) {
     errors.push(
       `JWT_REFRESH_SECRET must be at least 64 characters long for security (got ${jwtRefreshSecret.length} chars).`,
@@ -73,22 +74,22 @@ export function validateEnvironment(config: Env): Env {
   }
 
   // ── DATABASE_URL SSL (production) ─────────────────────────────────────────
-  const dbUrl = config['DATABASE_URL'];
-  const nodeEnvForDb = config['NODE_ENV'];
+  const dbUrl = config["DATABASE_URL"];
+  const nodeEnvForDb = config["NODE_ENV"];
   if (
     dbUrl &&
-    nodeEnvForDb === 'production' &&
-    !dbUrl.includes('sslmode=require') &&
-    !dbUrl.includes('ssl=true')
+    nodeEnvForDb === "production" &&
+    !dbUrl.includes("sslmode=require") &&
+    !dbUrl.includes("ssl=true")
   ) {
     errors.push(`DATABASE_URL must include sslmode=require (or ssl=true) in production.`);
   }
 
   // ── NODE_ENV ───────────────────────────────────────────────────────────────
-  const nodeEnv = config['NODE_ENV'];
+  const nodeEnv = config["NODE_ENV"];
   if (
     nodeEnv !== undefined &&
-    !['development', 'test', 'production', 'staging'].includes(nodeEnv)
+    !["development", "test", "production", "staging"].includes(nodeEnv)
   ) {
     errors.push(
       `NODE_ENV must be one of: development, test, production, staging (got "${nodeEnv}").`,
@@ -96,16 +97,16 @@ export function validateEnvironment(config: Env): Env {
   }
 
   // ── STORAGE_PROVIDER ───────────────────────────────────────────────────────
-  const storageProvider = config['STORAGE_PROVIDER'];
-  if (storageProvider !== undefined && !['local', 's3'].includes(storageProvider)) {
+  const storageProvider = config["STORAGE_PROVIDER"];
+  if (storageProvider !== undefined && !["local", "s3"].includes(storageProvider)) {
     errors.push(`STORAGE_PROVIDER must be "local" or "s3" (got "${storageProvider}").`);
   }
 
   // ── S3 - require bucket credentials when provider is s3 ───────────────────
-  if (storageProvider === 's3') {
-    const s3Keys = ['AWS_S3_BUCKET', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+  if (storageProvider === "s3") {
+    const s3Keys = ["AWS_S3_BUCKET", "AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
     for (const key of s3Keys) {
-      if (!config[key] || config[key].trim() === '') {
+      if (!config[key] || config[key].trim() === "") {
         errors.push(`${key} is required when STORAGE_PROVIDER=s3.`);
       }
     }
@@ -114,38 +115,42 @@ export function validateEnvironment(config: Env): Env {
   // ── Stripe ────────────────────────────────────────────────────────────────
   // If real Stripe billing is enabled, fail fast unless all required Stripe
   // secrets/redirect URLs are present. Mock mode can run without Stripe keys.
-  const billingProvider = config['BILLING_PROVIDER'] ?? 'mock_stripe';
-  if (!['mock_stripe', 'stripe'].includes(billingProvider)) {
-    errors.push(`BILLING_PROVIDER must be "mock_stripe" or "stripe" (got "${billingProvider}").`);
+  const billingProvider = config["BILLING_PROVIDER"] ?? "mock_stripe";
+  if (!["mock_stripe", "stripe"].includes(billingProvider)) {
+    errors.push(
+      `BILLING_PROVIDER must be "mock_stripe" or "stripe" (got "${billingProvider}").`,
+    );
   }
 
-  if (billingProvider === 'stripe') {
+  if (billingProvider === "stripe") {
     const requiredStripeKeys = [
-      'STRIPE_SECRET_KEY',
-      'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_CHECKOUT_SUCCESS_URL',
-      'STRIPE_CHECKOUT_CANCEL_URL',
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+      "STRIPE_CHECKOUT_SUCCESS_URL",
+      "STRIPE_CHECKOUT_CANCEL_URL",
     ];
 
     for (const key of requiredStripeKeys) {
-      if (!config[key] || config[key].trim() === '') {
+      if (!config[key] || config[key].trim() === "") {
         errors.push(`${key} is required when BILLING_PROVIDER=stripe.`);
       }
     }
 
-    if (config['STRIPE_SECRET_KEY'] && !config['STRIPE_SECRET_KEY']!.startsWith('sk_')) {
-      errors.push('STRIPE_SECRET_KEY must start with sk_test_ or sk_live_.');
+    if (config["STRIPE_SECRET_KEY"] && !config["STRIPE_SECRET_KEY"]!.startsWith("sk_")) {
+      errors.push("STRIPE_SECRET_KEY must start with sk_test_ or sk_live_.");
     }
 
-    if (config['STRIPE_WEBHOOK_SECRET'] && !config['STRIPE_WEBHOOK_SECRET']!.startsWith('whsec_')) {
-      errors.push('STRIPE_WEBHOOK_SECRET must start with whsec_.');
+    if (config["STRIPE_WEBHOOK_SECRET"] && !config["STRIPE_WEBHOOK_SECRET"]!.startsWith("whsec_")) {
+      errors.push("STRIPE_WEBHOOK_SECRET must start with whsec_.");
     }
   }
 
   // ── Fail fast ──────────────────────────────────────────────────────────────
   if (errors.length > 0) {
-    throw new Error(`Environment validation failed:\n  - ${errors.join('\n  - ')}`);
+    throw new Error(`Environment validation failed:\n  - ${errors.join("\n  - ")}`);
   }
 
   return config;
 }
+
+

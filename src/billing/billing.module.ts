@@ -1,9 +1,9 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { StripeModule } from '../stripe/stripe.module';
-import { BILLING_PROVIDER } from './billing-provider.interface';
-import { MockStripeBillingProvider } from './mock-stripe.provider';
-import { RealStripeBillingProvider } from './real-stripe.provider';
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { StripeModule } from "../stripe/stripe.module";
+import { BILLING_PROVIDER } from "./billing-provider.interface";
+import { MockStripeBillingProvider } from "./mock-stripe.provider";
+import { RealStripeBillingProvider } from "./real-stripe.provider";
 
 /**
  * BillingModule - provides IBillingProvider to the application.
@@ -25,12 +25,12 @@ import { RealStripeBillingProvider } from './real-stripe.provider';
         realProvider: RealStripeBillingProvider,
       ) => {
         const providerName =
-          config.get<string>('billing.provider') ??
-          config.get<string>('BILLING_PROVIDER') ??
+          config.get<string>("billing.provider") ??
+          config.get<string>("BILLING_PROVIDER") ??
           process.env.BILLING_PROVIDER ??
-          'mock_stripe';
+          "mock_stripe";
 
-        return providerName === 'stripe' ? realProvider : mockProvider;
+        return providerName === "stripe" ? realProvider : mockProvider;
       },
       inject: [ConfigService, MockStripeBillingProvider, RealStripeBillingProvider],
     },
