@@ -8,6 +8,7 @@ import { TrackStatus } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage/storage.service";
+import { EntitlementsService } from "../entitlements/entitlements.service";
 import { PlayerService } from "./player.service";
 
 describe("PlayerService", () => {
@@ -38,6 +39,7 @@ describe("PlayerService", () => {
     playerSession: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
+      update: jest.fn(),
     },
     $transaction: jest.fn(),
   } as unknown as PrismaService;
@@ -50,6 +52,23 @@ describe("PlayerService", () => {
     visibility: "PUBLIC",
     accessLevel: "PLAYABLE",
     durationMs: 240000,
+  };
+
+  /** Rich track object that satisfies both findTrackOrFail and buildQueueTrackMetadata shapes. */
+  const queueTrackMock = {
+    id: "track-1",
+    uploaderId: "uploader-uuid",
+    title: "Queue Track",
+    status: "FINISHED",
+    visibility: "PUBLIC",
+    accessLevel: "PLAYABLE",
+    durationMs: 210000,
+    coverArtUrl: null,
+    uploader: {
+      id: "uploader-uuid",
+      profile: { displayName: "Test Artist", handle: "test-artist", avatarUrl: null },
+    },
+    primaryGenre: { name: "Electronic" },
   };
 
   const configMock = {
@@ -79,10 +98,55 @@ describe("PlayerService", () => {
     getPresignedUrl: jest.fn(),
   } as unknown as StorageService;
 
+  /** Default: FREE user (ads enabled). Override with mockResolvedValueOnce for premium tests. */
+  const entitlementsMock = {
+    getUserEntitlements: jest.fn().mockResolvedValue({
+      planCode: "FREE",
+      isPremium: false,
+      adsEnabled: true,
+      canDownload: false,
+      canUpload: true,
+      uploadLimit: 3,
+      uploadedCount: 0,
+      remainingUploads: 3,
+      supportLevel: "community",
+      trialEnd: null,
+    }),
+  } as unknown as EntitlementsService;
+
+  /** Helper: configure entitlements mock to return a premium plan for the next call(s). */
+  const setPremiumUser = () => {
+    (entitlementsMock.getUserEntitlements as jest.Mock).mockResolvedValueOnce({
+      planCode: "PRO",
+      isPremium: true,
+      adsEnabled: false,
+      canDownload: true,
+      canUpload: true,
+      uploadLimit: 100,
+      uploadedCount: 0,
+      remainingUploads: 100,
+      supportLevel: "priority",
+      trialEnd: null,
+    });
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
+    // Re-apply the default FREE entitlement after clearAllMocks wipes the mockResolvedValue
+    (entitlementsMock.getUserEntitlements as jest.Mock).mockResolvedValue({
+      planCode: "FREE",
+      isPremium: false,
+      adsEnabled: true,
+      canDownload: false,
+      canUpload: true,
+      uploadLimit: 3,
+      uploadedCount: 0,
+      remainingUploads: 3,
+      supportLevel: "community",
+      trialEnd: null,
+    });
     // Default: S3 storage mode
-    service = new PlayerService(prismaMock, configMock, storageMockS3);
+    service = new PlayerService(prismaMock, configMock, storageMockS3, entitlementsMock);
   });
 
   // ── getPlaybackSource ─────────────────────────────────────────────────
@@ -126,7 +190,7 @@ describe("PlayerService", () => {
       } as unknown as ConfigService;
 
       // Rebuild service with local storage mock and local config
-      const localService = new PlayerService(prismaMock, localConfigMock, storageMockLocal);
+      const localService = new PlayerService(prismaMock, localConfigMock, storageMockLocal, entitlementsMock);
 
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
         finishedTrack,
@@ -645,6 +709,7 @@ describe("PlayerService", () => {
         prismaMock,
         localConfigMock,
         storageMockLocal,
+        entitlementsMock,
       );
 
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(
@@ -682,3 +747,446 @@ describe("PlayerService", () => {
       );
     });
   });
+
+  // ── loadQueueContext ──────────────────────────────────────────────────
+  describe("loadQueueContext", () => {
+    const makeSession = () => ({
+      userId: "user-uuid",
+      queueTrackIds: ["track-1"],
+      currentQueueIndex: 0,
+      realTracksSinceLastAd: 0,
+      currentTrackId: "track-1",
+      isPlaying: false,
+      volume: 0.8,
+      positionSeconds: 0,
+      shuffle: false,
+      repeatMode: "OFF",
+      updatedAt: new Date(),
+      queueContext: null,
+    });
+
+    it("FREE user TRACK context: loads queue and returns tracksUntilAd=3", async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+      (prismaMock.playerSession.upsert as jest.Mock).mockResolvedValue(makeSession());
+
+      const result = await service.loadQueueContext("user-uuid", {
+        contextType: "TRACK",
+        startTrackId: "track-1",
+      });
+
+      expect(result.tracksUntilAd).toBe(3);
+      expect(result.currentTrack).toBeDefined();
+      expect(result.queueLength).toBe(1);
+      expect(result.currentIndex).toBe(0);
+      expect(prismaMock.playerSession.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ realTracksSinceLastAd: 0 }),
+        }),
+      );
+    });
+
+    it("PRO user: returns tracksUntilAd=null", async () => {
+      setPremiumUser();
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+      (prismaMock.playerSession.upsert as jest.Mock).mockResolvedValue(makeSession());
+
+      const result = await service.loadQueueContext("user-uuid", {
+        contextType: "TRACK",
+        startTrackId: "track-1",
+      });
+
+      expect(result.tracksUntilAd).toBeNull();
+    });
+
+    it("CONTEXT_IDS with empty trackIds: throws BadRequestException", async () => {
+      await expect(
+        service.loadQueueContext("user-uuid", {
+          contextType: "CONTEXT_IDS",
+          trackIds: [],
+        }),
+      ).rejects.toBeInstanceOf(Error);
+    });
+
+    it("PLAYLIST context: loads tracks from playlist", async () => {
+      (prismaMock.playlist.findFirst as jest.Mock).mockResolvedValue({
+        tracks: [{ trackId: "track-1" }, { trackId: "track-2" }],
+      });
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+      (prismaMock.playerSession.upsert as jest.Mock).mockResolvedValue(makeSession());
+
+      const result = await service.loadQueueContext("user-uuid", {
+        contextType: "PLAYLIST",
+        contextId: "playlist-1",
+      });
+
+      expect(result.queueLength).toBe(2);
+      expect(result.tracksUntilAd).toBe(3);
+    });
+
+    it("PLAYLIST not found: throws NotFoundException", async () => {
+      (prismaMock.playlist.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.loadQueueContext("user-uuid", {
+          contextType: "PLAYLIST",
+          contextId: "bad-playlist",
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // ── getNextTrackInQueue ───────────────────────────────────────────────
+  describe("getNextTrackInQueue", () => {
+    const makeSession = (overrides: Record<string, unknown> = {}) => ({
+      userId: "user-uuid",
+      queueTrackIds: ["track-1", "track-2", "track-3", "track-4"],
+      currentQueueIndex: 0,
+      realTracksSinceLastAd: 0,
+      repeatMode: "OFF",
+      isPlaying: true,
+      volume: 0.8,
+      positionSeconds: 0,
+      shuffle: false,
+      currentTrackId: "track-1",
+      updatedAt: new Date(),
+      queueContext: null,
+      ...overrides,
+    });
+
+    it("no session: throws NotFoundException", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.getNextTrackInQueue("user-uuid")).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "NO_QUEUE" }),
+      });
+    });
+
+    it("empty queue: throws NotFoundException", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ queueTrackIds: [] }),
+      );
+
+      await expect(service.getNextTrackInQueue("user-uuid")).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "NO_QUEUE" }),
+      });
+    });
+
+    it("FREE user, counter=0: returns TRACK, counter becomes 1, tracksUntilAd=2", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 0, realTracksSinceLastAd: 0 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", 2);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ realTracksSinceLastAd: 1 }),
+        }),
+      );
+    });
+
+    it("FREE user, counter=2: returns TRACK, counter becomes 3, tracksUntilAd=0", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 1, realTracksSinceLastAd: 2 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", 0);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ realTracksSinceLastAd: 3 }),
+        }),
+      );
+    });
+
+    it("FREE user, counter=3: returns AD and resets counter to 0", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 1, realTracksSinceLastAd: 3 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("AD");
+      expect(result).toHaveProperty("ad");
+      expect((result as any).ad).toHaveProperty("adId");
+      expect((result as any).ad).toHaveProperty("durationSeconds", 15);
+      expect(result).toHaveProperty("tracksUntilAd", 3);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { realTracksSinceLastAd: 0 },
+        }),
+      );
+    });
+
+    it("FREE user, counter=6 (multiple of 3): returns AD", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 2, realTracksSinceLastAd: 6 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("AD");
+    });
+
+    it("PRO user, counter=3: returns TRACK (no ad), tracksUntilAd=null", async () => {
+      setPremiumUser();
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 1, realTracksSinceLastAd: 3 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", null);
+    });
+
+    it("PRO user, counter=6: never returns AD", async () => {
+      setPremiumUser();
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 2, realTracksSinceLastAd: 6 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", null);
+    });
+
+    it("GO_PLUS user, counter=3: returns TRACK (no ad), tracksUntilAd=null", async () => {
+      (entitlementsMock.getUserEntitlements as jest.Mock).mockResolvedValueOnce({
+        planCode: "GO_PLUS",
+        isPremium: true,
+        adsEnabled: false,
+        canDownload: true,
+        canUpload: true,
+        uploadLimit: 1000,
+        uploadedCount: 0,
+        remainingUploads: 1000,
+        supportLevel: "priority",
+        trialEnd: null,
+      });
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 1, realTracksSinceLastAd: 3 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", null);
+    });
+
+    it("last track, repeatMode=OFF: returns ENDED", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({
+          queueTrackIds: ["track-1", "track-2"],
+          currentQueueIndex: 1,
+          realTracksSinceLastAd: 0,
+          repeatMode: "OFF",
+        }),
+      );
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("ENDED");
+    });
+
+    it("last track, repeatMode=ALL: wraps back to index 0", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({
+          queueTrackIds: ["track-1", "track-2"],
+          currentQueueIndex: 1,
+          realTracksSinceLastAd: 0,
+          repeatMode: "ALL",
+        }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue("user-uuid");
+
+      expect(result.type).toBe("TRACK");
+      expect((result as any).currentIndex).toBe(0);
+    });
+
+    it("track no longer in DB: throws NotFoundException with TRACK_NOT_FOUND", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
+        makeSession({ currentQueueIndex: 0, realTracksSinceLastAd: 0 }),
+      );
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.getNextTrackInQueue("user-uuid")).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "TRACK_NOT_FOUND" }),
+      });
+    });
+  });
+
+  // ── getQueueState ─────────────────────────────────────────────────────
+  describe("getQueueState", () => {
+    it("no session: returns empty queue with tracksUntilAd=3 for FREE user", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.getQueueState("user-uuid");
+
+      expect(result.queue).toEqual([]);
+      expect(result.tracksUntilAd).toBe(3);
+    });
+
+    it("no session: returns tracksUntilAd=null for PRO user", async () => {
+      setPremiumUser();
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.getQueueState("user-uuid");
+
+      expect(result.tracksUntilAd).toBeNull();
+    });
+
+    it("FREE user, counter=1: tracksUntilAd=2", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        queueTrackIds: ["track-1"],
+        currentQueueIndex: 0,
+        realTracksSinceLastAd: 1,
+        shuffle: false,
+        repeatMode: "OFF",
+      });
+      (prismaMock.track.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: "track-1",
+          title: "Track One",
+          durationMs: 180000,
+          coverArtUrl: null,
+          uploader: { id: "u1", profile: { displayName: "Art", handle: "art", avatarUrl: null } },
+          primaryGenre: { name: "Pop" },
+        },
+      ]);
+
+      const result = await service.getQueueState("user-uuid");
+
+      expect(result.tracksUntilAd).toBe(2);
+    });
+
+    it("FREE user, counter=3 (ad due): tracksUntilAd computed as 3 (wraps)", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        queueTrackIds: ["track-1"],
+        currentQueueIndex: 0,
+        realTracksSinceLastAd: 3,
+        shuffle: false,
+        repeatMode: "OFF",
+      });
+      (prismaMock.track.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getQueueState("user-uuid");
+
+      // 3 - (3 % 3) = 3 - 0 = 3
+      expect(result.tracksUntilAd).toBe(3);
+    });
+
+    it("PRO user with active session: tracksUntilAd=null", async () => {
+      setPremiumUser();
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        queueTrackIds: ["track-1"],
+        currentQueueIndex: 0,
+        realTracksSinceLastAd: 2,
+        shuffle: false,
+        repeatMode: "OFF",
+      });
+      (prismaMock.track.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getQueueState("user-uuid");
+
+      expect(result.tracksUntilAd).toBeNull();
+    });
+  });
+
+  // ── jumpToTrackInQueue ────────────────────────────────────────────────
+  describe("jumpToTrackInQueue", () => {
+    const makeSession = (overrides: Record<string, unknown> = {}) => ({
+      userId: "user-uuid",
+      queueTrackIds: ["track-1", "track-2", "track-3"],
+      currentQueueIndex: 0,
+      realTracksSinceLastAd: 2,
+      repeatMode: "OFF",
+      isPlaying: true,
+      volume: 0.8,
+      positionSeconds: 0,
+      shuffle: false,
+      currentTrackId: "track-1",
+      updatedAt: new Date(),
+      queueContext: null,
+      ...overrides,
+    });
+
+    it("no session: throws NotFoundException with NO_QUEUE", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.jumpToTrackInQueue("user-uuid", "track-2")).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "NO_QUEUE" }),
+      });
+    });
+
+    it("track not in queue: throws NotFoundException with TRACK_NOT_IN_QUEUE", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(makeSession());
+
+      await expect(
+        service.jumpToTrackInQueue("user-uuid", "track-99"),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "TRACK_NOT_IN_QUEUE" }),
+      });
+    });
+
+    it("FREE user: resets counter to 0, returns tracksUntilAd=3", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(makeSession());
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.jumpToTrackInQueue("user-uuid", "track-2");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", 3);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ realTracksSinceLastAd: 0, currentTrackId: "track-2" }),
+        }),
+      );
+    });
+
+    it("PRO user: returns tracksUntilAd=null", async () => {
+      setPremiumUser();
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(makeSession());
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.jumpToTrackInQueue("user-uuid", "track-2");
+
+      expect(result.type).toBe("TRACK");
+      expect(result).toHaveProperty("tracksUntilAd", null);
+    });
+
+    it("jumps to correct index in queue", async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(makeSession());
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.jumpToTrackInQueue("user-uuid", "track-3");
+
+      expect((result as any).currentIndex).toBe(2);
+      expect((result as any).queueLength).toBe(3);
+    });
+  });
+});
