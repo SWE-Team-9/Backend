@@ -39,10 +39,10 @@ import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
 import { TracksService } from './tracks.service';
 import {
   CreateTrackDto,
-  UpdateTrackDto,
-  TrackVisibilityDto,
   PaginationQueryDto,
+  TrackVisibilityDto,
   TranscodingCallbackDto,
+  UpdateTrackDto,
 } from './dto';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -63,17 +63,14 @@ const UPLOAD_OPTIONS = {
       if (AUDIO_MIMES.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(
-          new BadRequestException('Only MP3 and WAV audio files are allowed.') as unknown as Error,
-          false,
-        );
+        cb(new BadRequestException('Only MP3 and WAV audio files are allowed.'), false);
       }
     } else if (file.fieldname === 'coverArt') {
       if (IMAGE_MIMES.includes(file.mimetype)) {
         cb(null, true);
       } else {
         cb(
-          new BadRequestException('Only JPEG, PNG, and WebP images are allowed for cover art.') as unknown as Error,
+          new BadRequestException('Only JPEG, PNG, and WebP images are allowed for cover art.'),
           false,
         );
       }
@@ -89,13 +86,13 @@ const UPLOAD_OPTIONS = {
 export class TracksController {
   constructor(private readonly tracksService: TracksService) {}
 
-  // ─── Endpoint 1: POST /tracks — Upload a new track ────────────────────
+  // ─── Endpoint 1: POST /tracks - Upload a new track ────────────────────
   @ApiOperation({
     summary: 'Upload a new audio track',
     description:
       'Accepts a multipart/form-data request containing an audio file (MP3 or WAV, max 250 MB) ' +
       'and track metadata. The file is validated by magic bytes (not just MIME type) to prevent ' +
-      'disguised uploads. Returns immediately with status=PROCESSING — the frontend should poll ' +
+      'disguised uploads. Returns immediately with status=PROCESSING - the frontend should poll ' +
       'GET /tracks/{trackId}/status until it becomes FINISHED or FAILED. ' +
       'Rate limited to 5 uploads per minute per user.',
   })
@@ -106,11 +103,28 @@ export class TracksController {
       type: 'object',
       required: ['audioFile', 'title'],
       properties: {
-        audioFile: { type: 'string', format: 'binary', description: 'MP3 or WAV file (max 250 MB)' },
-        coverArt: { type: 'string', format: 'binary', description: 'Optional cover art image (JPEG, PNG, or WebP, max 15 MB)' },
+        audioFile: {
+          type: 'string',
+          format: 'binary',
+          description: 'MP3 or WAV file (max 250 MB)',
+        },
+        coverArt: {
+          type: 'string',
+          format: 'binary',
+          description: 'Optional cover art image (JPEG, PNG, or WebP, max 15 MB)',
+        },
         title: { type: 'string', maxLength: 100, example: 'Ya Ana' },
-        genre: { type: 'string', example: 'Pop', description: 'Must match an existing genre name' },
-        tags: { type: 'array', items: { type: 'string' }, example: ['pop', 'arabic'], description: 'Max 10 tags, 30 chars each' },
+        genre: {
+          type: 'string',
+          example: 'Pop',
+          description: 'Must match an existing genre name',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['pop', 'arabic'],
+          description: 'Max 10 tags, 30 chars each',
+        },
         releaseDate: { type: 'string', format: 'date', example: '2026-03-01' },
         description: { type: 'string', maxLength: 5000 },
       },
@@ -118,7 +132,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 202,
-    description: 'Track upload accepted — processing started.',
+    description: 'Track upload accepted - processing started.',
     schema: {
       example: {
         trackId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -126,13 +140,15 @@ export class TracksController {
         artistId: 'user_123',
         status: 'PROCESSING',
         visibility: 'PRIVATE',
+        coverArtUrl: null,
         waveformData: null,
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid file or metadata — file missing, too large, not a real audio file, invalid genre, or validation errors.',
+    description:
+      'Invalid file or metadata - file missing, too large, not a real audio file, invalid genre, or validation errors.',
     schema: {
       example: {
         statusCode: 400,
@@ -143,35 +159,64 @@ export class TracksController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Not authenticated — missing or invalid JWT cookie.',
+    description: 'Not authenticated - missing or invalid JWT cookie.',
     schema: { example: { statusCode: 401, message: 'Unauthorized' } },
   })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded (5 uploads per minute).' })
+  @ApiResponse({
+    status: 403,
+    description: 'Upload quota reached - user must upgrade their plan to upload more tracks.',
+    schema: {
+      example: {
+        statusCode: 403,
+        message: 'You have reached your upload limit. Upgrade your plan to upload more tracks.',
+        error: 'Forbidden',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Rate limit exceeded (5 uploads per minute).',
+  })
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ThrottlePolicy(5, 60_000)
-  @UsePipes(new ValidationPipe({ whitelist: true, transform: true, transformOptions: { enableImplicitConversion: true } }))
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'audioFile', maxCount: 1 },
-    { name: 'coverArt', maxCount: 1 },
-  ], UPLOAD_OPTIONS))
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'audioFile', maxCount: 1 },
+        { name: 'coverArt', maxCount: 1 },
+      ],
+      UPLOAD_OPTIONS,
+    ),
+  )
   async uploadTrack(
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateTrackDto,
-    @UploadedFiles() files: { audioFile?: Express.Multer.File[]; coverArt?: Express.Multer.File[] },
+    @UploadedFiles()
+    files: {
+      audioFile?: Express.Multer.File[];
+      coverArt?: Express.Multer.File[];
+    },
   ) {
     const audioFile = files?.audioFile?.[0] as Express.Multer.File;
     const coverArt = files?.coverArt?.[0];
     return this.tracksService.uploadTrack(userId, dto, audioFile, coverArt);
   }
 
-  // ─── Endpoint 10: GET /tracks/secret/:secretToken — Resolve private track ─
+  // ─── Endpoint 10: GET /tracks/secret/:secretToken - Resolve private track ─
   // (must be declared BEFORE :trackId routes to avoid param collision)
   @ApiOperation({
     summary: 'Access a private track via secret token',
     description:
       'Returns full track details for a private track using its unique secret share link. ' +
-      'This endpoint is public — no authentication required. ' +
+      'This endpoint is public - no authentication required. ' +
       'A new secret token is generated every time a track is switched to PRIVATE, ' +
       'so old links become invalid.',
   })
@@ -182,7 +227,7 @@ export class TracksController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Track details returned — access granted via secret token.',
+    description: 'Track details returned - access granted via secret token.',
     schema: {
       example: {
         trackId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -217,13 +262,11 @@ export class TracksController {
   })
   @Get('secret/:secretToken')
   @Public()
-  async getTrackBySecretToken(
-    @Param('secretToken') secretToken: string,
-  ) {
+  async getTrackBySecretToken(@Param('secretToken') secretToken: string) {
     return this.tracksService.getTrackBySecretToken(secretToken);
   }
 
-  // ─── Endpoint 9: POST /tracks/transcoding/callback — Internal callback ─
+  // ─── Endpoint 9: POST /tracks/transcoding/callback - Internal callback ─
   @ApiOperation({
     summary: 'Transcoding service callback (internal)',
     description:
@@ -304,12 +347,12 @@ export class TracksController {
     return this.tracksService.handleTranscodingCallback(apiKey, dto);
   }
 
-  // ─── Endpoint 2: GET /tracks/:trackId — Get track details ─────────────
+  // ─── Endpoint 2: GET /tracks/:trackId - Get track details ─────────────
   @ApiOperation({
     summary: 'Get full track details',
     description:
       'Returns complete track metadata including artist info, genre, tags, waveform data, and files. ' +
-      'Public tracks are visible to everyone. Private tracks are only visible to the owner — ' +
+      'Public tracks are visible to everyone. Private tracks are only visible to the owner - ' +
       'other users receive a 404 (to avoid leaking the existence of private tracks). ' +
       'Use GET /tracks/secret/{secretToken} for sharing private tracks externally.',
   })
@@ -375,19 +418,16 @@ export class TracksController {
   })
   @Get(':trackId')
   @Public()
-  async getTrack(
-    @Param('trackId', ParseUUIDPipe) trackId: string,
-    @Req() req: Request,
-  ) {
+  async getTrack(@Param('trackId', ParseUUIDPipe) trackId: string, @Req() req: Request) {
     const requesterId = (req as any).user?.userId;
     return this.tracksService.getTrackById(trackId, requesterId);
   }
 
-  // ─── Endpoint 3: GET /tracks/:trackId/status — Lightweight polling ────
+  // ─── Endpoint 3: GET /tracks/:trackId/status - Lightweight polling ────
   @ApiOperation({
     summary: 'Get track processing status (lightweight)',
     description:
-      'Returns only the trackId and current status — designed for polling after upload. ' +
+      'Returns only the trackId and current status - designed for polling after upload. ' +
       'The frontend should call this every few seconds after uploading until status is ' +
       'FINISHED or FAILED. Private tracks return 404 for non-owners.',
   })
@@ -419,21 +459,17 @@ export class TracksController {
   })
   @Get(':trackId/status')
   @Public()
-  async getTrackStatus(
-    @Param('trackId', ParseUUIDPipe) trackId: string,
-    @Req() req: Request,
-  ) {
+  async getTrackStatus(@Param('trackId', ParseUUIDPipe) trackId: string, @Req() req: Request) {
     const requesterId = (req as any).user?.userId;
     return this.tracksService.getTrackStatus(trackId, requesterId);
   }
 
-  // ─── Endpoint 8: GET /tracks/:trackId/waveform — Waveform data ────────
+  // ─── Endpoint 8: GET /tracks/:trackId/waveform - Waveform data ────────
   @ApiOperation({
     summary: 'Get track waveform data',
     description:
-      'Returns only the waveform amplitude array for a track — lightweight endpoint for rendering. ' +
-      'Only available after track processing is complete (status=FINISHED). ' +
-      'Returns null waveformData if processing is still in progress.',
+      'Returns only the waveform amplitude array for a track - lightweight endpoint for rendering. ' +
+      'Returns null waveformData if the track is still processing (status≠FINISHED).',
   })
   @ApiParam({
     name: 'trackId',
@@ -463,27 +499,47 @@ export class TracksController {
   })
   @Get(':trackId/waveform')
   @Public()
-  async getWaveform(
-    @Param('trackId', ParseUUIDPipe) trackId: string,
-  ) {
+  async getWaveform(@Param('trackId', ParseUUIDPipe) trackId: string) {
     return this.tracksService.getWaveform(trackId);
   }
 
-  // ─── Endpoint 4: PUT /tracks/:trackId — Update track metadata ─────────
+  // ─── Endpoint 4: PUT /tracks/:trackId - Update track metadata ─────────
   @ApiOperation({
     summary: 'Update track metadata (owner only)',
     description:
       'Updates one or more metadata fields for a track. Only the track owner can update. ' +
-      'All fields are optional — only provided fields are changed. ' +
+      'All fields are optional - only provided fields are changed. ' +
       'Changing the title automatically regenerates the slug. ' +
-      'Tags are replaced entirely (not merged) when provided.',
+      'Tags are replaced entirely (not merged) when provided. ' +
+      'An optional cover art image can also be uploaded in the same request.',
   })
   @ApiParam({
     name: 'trackId',
     description: 'Track UUID',
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })
-  @ApiBody({ type: UpdateTrackDto })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', maxLength: 100, example: 'New Title' },
+        genre: { type: 'string', example: 'Pop' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['summer', 'hit'],
+        },
+        releaseDate: { type: 'string', format: 'date', example: '2026-03-01' },
+        description: { type: 'string', maxLength: 5000 },
+        coverArt: {
+          type: 'string',
+          format: 'binary',
+          description: 'Optional cover art image (JPEG, PNG, or WebP)',
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Updated track details returned.',
@@ -538,22 +594,46 @@ export class TracksController {
       },
     },
   })
+  @ApiResponse({
+    status: 409,
+    description: 'Cannot edit track while it is still processing.',
+    schema: {
+      example: {
+        statusCode: 409,
+        message: 'Cannot edit track while it is still processing.',
+        error: 'Conflict',
+      },
+    },
+  })
   @Put(':trackId')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'coverArt', maxCount: 1 }], UPLOAD_OPTIONS))
   async updateTrack(
     @Param('trackId', ParseUUIDPipe) trackId: string,
     @CurrentUser('userId') userId: string,
     @Body() dto: UpdateTrackDto,
+    @UploadedFiles()
+    files: {
+      coverArt?: Express.Multer.File[];
+    },
   ) {
-    return this.tracksService.updateTrack(trackId, userId, dto);
+    const coverArt = files?.coverArt?.[0];
+    return this.tracksService.updateTrack(trackId, userId, dto, coverArt);
   }
 
-  // ─── Endpoint 5: DELETE /tracks/:trackId — Soft-delete track ──────────
+  // ─── Endpoint 5: DELETE /tracks/:trackId - Soft-delete track ──────────
   @ApiOperation({
     summary: 'Delete a track (owner or admin)',
     description:
       'Soft-deletes a track by setting its deletedAt timestamp. ' +
       'Only the track owner or an ADMIN user can delete. ' +
-      'Returns 204 No Content on success — no response body. ' +
+      'Returns 204 No Content on success - no response body. ' +
       'Associated files (S3 or local) are cleaned up asynchronously in the background.',
   })
   @ApiParam({
@@ -561,7 +641,10 @@ export class TracksController {
     description: 'Track UUID',
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })
-  @ApiResponse({ status: 204, description: 'Track deleted successfully — no response body.' })
+  @ApiResponse({
+    status: 204,
+    description: 'Track deleted successfully - no response body.',
+  })
   @ApiResponse({
     status: 401,
     description: 'Not authenticated.',
@@ -599,7 +682,7 @@ export class TracksController {
     await this.tracksService.deleteTrack(trackId, userId, role);
   }
 
-  // ─── Endpoint 7: PATCH /tracks/:trackId/visibility — Toggle visibility ─
+  // ─── Endpoint 7: PATCH /tracks/:trackId/visibility - Toggle visibility ─
   @ApiOperation({
     summary: 'Change track visibility (owner only)',
     description:
@@ -615,7 +698,7 @@ export class TracksController {
   @ApiBody({ type: TrackVisibilityDto })
   @ApiResponse({
     status: 200,
-    description: 'Track visibility updated — full track details returned.',
+    description: 'Track visibility updated - full track details returned.',
     schema: {
       example: {
         trackId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',

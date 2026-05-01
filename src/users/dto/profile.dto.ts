@@ -1,8 +1,10 @@
-﻿import {
+import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -10,14 +12,12 @@
   Length,
   Matches,
   MaxLength,
-  ValidateNested,
-  ArrayMaxSize,
-  IsInt,
   Min,
-} from "class-validator";
-import { Type } from "class-transformer";
-import { AccountType } from "@prisma/client";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { AccountType } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // =============================================================================
 // Profile DTOs
@@ -26,59 +26,59 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 const HANDLE_REGEX = /^[a-z0-9][a-z0-9_-]{1,28}[a-z0-9]$/;
 
 export const ALLOWED_GENRES = [
-  "electronic",
-  "hip-hop",
-  "pop",
-  "rock",
-  "alternative",
-  "ambient",
-  "classical",
-  "jazz",
-  "r-b-soul",
-  "metal",
-  "folk-singer-songwriter",
-  "country",
-  "reggaeton",
-  "dancehall",
-  "drum-bass",
-  "house",
-  "techno",
-  "deep-house",
-  "trance",
-  "lo-fi",
-  "indie",
-  "punk",
-  "blues",
-  "latin",
-  "afrobeat",
-  "trap",
-  "experimental",
-  "world",
-  "gospel",
-  "spoken-word",
-  "quran",
-  "sha3by",
-  "islamic",
+  'electronic',
+  'hip-hop',
+  'pop',
+  'rock',
+  'alternative',
+  'ambient',
+  'classical',
+  'jazz',
+  'r-b-soul',
+  'metal',
+  'folk-singer-songwriter',
+  'country',
+  'reggaeton',
+  'dancehall',
+  'drum-bass',
+  'house',
+  'techno',
+  'deep-house',
+  'trance',
+  'lo-fi',
+  'indie',
+  'punk',
+  'blues',
+  'latin',
+  'afrobeat',
+  'trap',
+  'experimental',
+  'world',
+  'gospel',
+  'spoken-word',
+  'quran',
+  'sha3by',
+  'islamic',
 ] as const;
 
 export type GenreSlug = (typeof ALLOWED_GENRES)[number];
 
 export const ALLOWED_PLATFORMS = [
-  "website",
-  "twitter",
-  "instagram",
-  "facebook",
-  "youtube",
-  "tiktok",
-  "spotify",
-  "apple-music",
-  "bandcamp",
-  "soundcloud",
-  "patreon",
-  "twitch",
-  "discord",
-  "linkedin",
-  "github",
+  'website',
+  'twitter',
+  'instagram',
+  'facebook',
+  'youtube',
+  'tiktok',
+  'spotify',
+  'apple-music',
+  'bandcamp',
+  'soundcloud',
+  'patreon',
+  'twitch',
+  'discord',
+  'linkedin',
+  'github',
 ] as const;
 
 export type PlatformSlug = (typeof ALLOWED_PLATFORMS)[number];
@@ -94,11 +94,10 @@ export class UpdateProfileDto {
    * Does NOT change the user's handle.
    */
   @ApiPropertyOptional({
-    example: "Yahia Dev",
+    example: 'Yahia Dev',
     maxLength: 50,
     minLength: 2,
-    description:
-      "Display name shown throughout the UI. Does not change the handle.",
+    description: 'Display name shown throughout the UI. Does not change the handle.',
   })
   @IsOptional()
   @IsString()
@@ -106,7 +105,7 @@ export class UpdateProfileDto {
   display_name?: string;
 
   @ApiPropertyOptional({
-    example: "Music producer from Cairo.",
+    example: 'Music producer from Cairo.',
     maxLength: 500,
   })
   @IsOptional()
@@ -114,7 +113,7 @@ export class UpdateProfileDto {
   @MaxLength(500)
   bio?: string;
 
-  @ApiPropertyOptional({ example: "Cairo, Egypt", maxLength: 100 })
+  @ApiPropertyOptional({ example: 'Cairo, Egypt', maxLength: 100 })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -123,11 +122,11 @@ export class UpdateProfileDto {
   // SSRF validation is deferred to the service; IsUrl alone is not SSRF-safe.
   // Send '' (empty string) to clear a previously set URL.
   @ApiPropertyOptional({
-    example: "https://mysite.com",
-    description: "Must be https. Send empty string to clear.",
+    example: 'https://mysite.com',
+    description: 'Must be https. Send empty string to clear.',
   })
   @IsOptional()
-  @IsUrl({ protocols: ["https"], require_tld: true, require_protocol: true })
+  @IsUrl({ protocols: ['https'], require_tld: true, require_protocol: true })
   @MaxLength(255)
   website?: string;
 
@@ -136,8 +135,7 @@ export class UpdateProfileDto {
    */
   @ApiPropertyOptional({
     example: false,
-    description:
-      "When true, non-followers see only handle, name, avatar, and account type.",
+    description: 'When true, non-followers see only handle, name, avatar, and account type.',
   })
   @IsOptional()
   @IsBoolean()
@@ -146,14 +144,14 @@ export class UpdateProfileDto {
   // Replaces the full set atomically - send [] to clear all genres.
   @ApiPropertyOptional({
     type: [String],
-    example: ["electronic", "jazz"],
-    description: "Replaces genre set atomically. Max 5. Send [] to clear.",
+    example: ['electronic', 'jazz'],
+    description: 'Replaces genre set atomically. Max 5. Send [] to clear.',
   })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
   @IsString({ each: true })
-  @IsIn(ALLOWED_GENRES as unknown as string[], { each: true })
+  @IsIn(ALLOWED_GENRES, { each: true })
   favorite_genres?: string[];
 
   /**
@@ -163,13 +161,13 @@ export class UpdateProfileDto {
   @ApiPropertyOptional({
     enum: AccountType,
     example: AccountType.ARTIST,
-    description: "LISTENER or ARTIST. Artists expose track count.",
+    description: 'LISTENER or ARTIST. Artists expose track count.',
   })
   @IsOptional()
-  @IsIn(["LISTENER", "ARTIST"], {
-    message: "account_type must be either LISTENER or ARTIST.",
+  @IsIn(['LISTENER', 'ARTIST'], {
+    message: 'account_type must be either LISTENER or ARTIST.',
   })
-  account_type?: "LISTENER" | "ARTIST";
+  account_type?: 'LISTENER' | 'ARTIST';
 }
 
 // =============================================================================
@@ -178,15 +176,14 @@ export class UpdateProfileDto {
 
 export class CheckHandleQueryDto {
   @ApiProperty({
-    example: "yahia_dev",
-    description:
-      "Handle to check (3–30 chars, lowercase letters, numbers, underscores, hyphens).",
+    example: 'yahia_dev',
+    description: 'Handle to check (3-30 chars, lowercase letters, numbers, underscores, hyphens).',
   })
   @IsString()
   @IsNotEmpty()
   @Matches(HANDLE_REGEX, {
     message:
-      "handle must be 3–30 characters and contain only lowercase letters, numbers, underscores, and hyphens.",
+      'handle must be 3-30 characters and contain only lowercase letters, numbers, underscores, and hyphens.',
   })
   handle!: string;
 }
@@ -197,28 +194,28 @@ export class CheckHandleQueryDto {
 
 export class ExternalLinkItemDto {
   @ApiProperty({
-    example: "instagram",
+    example: 'instagram',
     enum: ALLOWED_PLATFORMS,
-    description: "Social platform slug.",
+    description: 'Social platform slug.',
   })
   @IsString()
   @IsEnum(ALLOWED_PLATFORMS, {
-    message: `platform must be one of: ${ALLOWED_PLATFORMS.join(", ")}`,
+    message: `platform must be one of: ${ALLOWED_PLATFORMS.join(', ')}`,
   })
   platform!: PlatformSlug;
 
   @ApiProperty({
-    example: "https://instagram.com/yahia_dev",
-    description: "Must be https.",
+    example: 'https://instagram.com/yahia_dev',
+    description: 'Must be https.',
   })
-  @IsUrl({ protocols: ["https"], require_tld: true, require_protocol: true })
+  @IsUrl({ protocols: ['https'], require_tld: true, require_protocol: true })
   @MaxLength(2048)
   url!: string;
 
   // Defaults to insertion order if omitted.
   @ApiPropertyOptional({
     example: 0,
-    description: "Display order (0-based). Defaults to insertion order.",
+    description: 'Display order (0-based). Defaults to insertion order.',
   })
   @IsOptional()
   @IsInt()
@@ -234,8 +231,7 @@ export class ExternalLinkItemDto {
 export class UpdateExternalLinksDto {
   @ApiProperty({
     type: [ExternalLinkItemDto],
-    description:
-      "Complete desired link list. Send [] to clear all. Max 10 links.",
+    description: 'Complete desired link list. Send [] to clear all. Max 10 links.',
   })
   @IsArray()
   @ArrayMaxSize(10)
@@ -250,16 +246,15 @@ export class UpdateExternalLinksDto {
 
 export class UploadImageParamsDto {
   @ApiProperty({
-    enum: ["avatar", "cover"],
-    example: "avatar",
-    description:
-      "avatar = profile picture (max 5 MB), cover = banner image (max 15 MB).",
+    enum: ['avatar', 'cover'],
+    example: 'avatar',
+    description: 'avatar = profile picture (max 5 MB), cover = banner image (max 15 MB).',
   })
   @IsString()
-  @IsEnum(["avatar", "cover"], {
+  @IsEnum(['avatar', 'cover'], {
     message: 'type must be either "avatar" or "cover".',
   })
-  type!: "avatar" | "cover";
+  type!: 'avatar' | 'cover';
 }
 
 // =============================================================================
@@ -268,13 +263,13 @@ export class UploadImageParamsDto {
 
 export class GetProfileParamsDto {
   @ApiProperty({
-    example: "yahia_dev",
-    description: "The profile handle to look up.",
+    example: 'yahia_dev',
+    description: 'The profile handle to look up.',
   })
   @IsString()
   @IsNotEmpty()
   @Matches(HANDLE_REGEX, {
-    message: "handle must be a valid profile handle.",
+    message: 'handle must be a valid profile handle.',
   })
   handle!: string;
 }

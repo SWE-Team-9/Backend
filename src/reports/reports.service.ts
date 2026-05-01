@@ -1,14 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  Prisma,
-  ReportStatus,
-  ReportTargetType,
-  SystemRole,
-} from "@prisma/client";
+import { Prisma, ReportStatus, ReportTargetType, SystemRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { BulkUpdateReportsDto } from "./dto/bulk-update-reports.dto";
@@ -26,6 +22,23 @@ export class ReportsService {
 
   async createReport(reporterId: string, dto: CreateReportDto) {
     await this.ensureTargetExists(dto.targetType, dto.targetId);
+
+    // Prevent duplicate reports from same user on same content
+    const existing = await this.prisma.report.findFirst({
+      where: {
+        reporterId,
+        targetType: dto.targetType,
+        targetId: dto.targetId,
+        status: { not: ReportStatus.REJECTED },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException({
+        code: "DUPLICATE_REPORT",
+        message: "You have already reported this content.",
+      });
+    }
 
     const report = await this.prisma.report.create({
       data: {
@@ -69,35 +82,42 @@ export class ReportsService {
       ...(query.targetType ? { targetType: query.targetType } : {}),
     };
 
-    const [total, items] = await this.prisma.$transaction([
-      this.prisma.report.count({ where }),
-      this.prisma.report.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          reporter: {
-            select: {
-              id: true,
-              email: true,
+    const itemsQuery = this.prisma.report.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        reporter: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                displayName: true,
+                handle: true,
+              },
             },
-          },
-          adminResolution: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-          _count: {
-            select: { appeals: true },
           },
         },
-      }),
-    ]);
+        adminResolution: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { displayName: true, handle: true } },
+          },
+        },
+        _count: {
+          select: { appeals: true },
+        },
+      },
+    });
+    const [total, items] = await Promise.all([this.prisma.report.count({ where }), itemsQuery]);
+
+    const resolvedItems = await Promise.all(items.map((item) => this.resolveReportTarget(item)));
 
     return {
-      items,
+      items: resolvedItems,
       pagination: {
         page,
         limit,
@@ -109,6 +129,137 @@ export class ReportsService {
     };
   }
 
+  private async resolveReportTarget(report: {
+    id: string;
+    targetType: ReportTargetType;
+    targetId: string;
+    reason: string;
+    status: string;
+    description: string | null;
+    createdAt: Date;
+    resolvedAt: Date | null;
+    resolvedBy: string | null;
+    reporter: {
+      id: string;
+      email: string;
+      profile: { displayName: string; handle: string } | null;
+    } | null;
+    adminResolution: {
+      id: string;
+      email: string;
+      profile: { displayName: string; handle: string } | null;
+    } | null;
+    _count?: { appeals: number };
+  }) {
+    let targetTitle: string | null = null;
+    let targetOwnerHandle: string | null = null;
+    let offenderId: string | null = null;
+    let offenderAccountStatus: string | null = null;
+
+    if (report.targetType === ReportTargetType.TRACK) {
+      const track = await this.prisma.track.findUnique({
+        where: { id: report.targetId },
+        select: {
+          title: true,
+          uploader: {
+            select: {
+              id: true,
+              accountStatus: true,
+              profile: { select: { handle: true } },
+            },
+          },
+        },
+      });
+      targetTitle = track?.title ?? null;
+      targetOwnerHandle = track?.uploader?.profile?.handle ?? null;
+      offenderId = track?.uploader?.id ?? null;
+      offenderAccountStatus = track?.uploader?.accountStatus ?? null;
+    } else if (report.targetType === ReportTargetType.USER) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: report.targetId },
+        select: {
+          id: true,
+          accountStatus: true,
+          profile: { select: { displayName: true, handle: true } },
+        },
+      });
+      targetTitle = user?.profile?.displayName ?? null;
+      targetOwnerHandle = user?.profile?.handle ?? null;
+      offenderId = user?.id ?? null;
+      offenderAccountStatus = user?.accountStatus ?? null;
+    } else if (report.targetType === ReportTargetType.PLAYLIST) {
+      const playlist = await this.prisma.playlist.findUnique({
+        where: { id: report.targetId },
+        select: {
+          title: true,
+          owner: {
+            select: {
+              id: true,
+              accountStatus: true,
+              profile: { select: { handle: true } },
+            },
+          },
+        },
+      });
+      targetTitle = playlist?.title ?? null;
+      targetOwnerHandle = playlist?.owner?.profile?.handle ?? null;
+      offenderId = playlist?.owner?.id ?? null;
+      offenderAccountStatus = playlist?.owner?.accountStatus ?? null;
+    } else if (report.targetType === ReportTargetType.COMMENT) {
+      const comment = await this.prisma.comment.findUnique({
+        where: { id: report.targetId },
+        select: {
+          content: true,
+          user: {
+            select: {
+              id: true,
+              accountStatus: true,
+              profile: { select: { handle: true } },
+            },
+          },
+        },
+      });
+      targetTitle = comment?.content ? comment.content.slice(0, 80) : null;
+      targetOwnerHandle = comment?.user?.profile?.handle ?? null;
+      offenderId = comment?.user?.id ?? null;
+      offenderAccountStatus = comment?.user?.accountStatus ?? null;
+    }
+
+    return {
+      id: report.id,
+      reporter: report.reporter
+        ? {
+            id: report.reporter.id,
+            email: report.reporter.email,
+            display_name: report.reporter.profile?.displayName ?? "",
+            handle: report.reporter.profile?.handle ?? "",
+          }
+        : null,
+      category: report.reason,
+      target: {
+        type: report.targetType,
+        id: report.targetId,
+        title: targetTitle,
+        owner_handle: targetOwnerHandle,
+      },
+      offender: offenderId
+        ? { id: offenderId, account_status: offenderAccountStatus }
+        : null,
+      status: report.status,
+      description: report.description,
+      created_at: report.createdAt,
+      resolved_at: report.resolvedAt,
+      resolved_by: report.adminResolution
+        ? {
+            id: report.adminResolution.id,
+            display_name: report.adminResolution.profile?.displayName ?? "",
+            handle: report.adminResolution.profile?.handle ?? "",
+          }
+        : null,
+      appeals_count: report._count?.appeals ?? 0,
+    };
+  }
+
   async getReportById(reportId: string) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -117,12 +268,14 @@ export class ReportsService {
           select: {
             id: true,
             email: true,
+            profile: { select: { displayName: true, handle: true } },
           },
         },
         adminResolution: {
           select: {
             id: true,
             email: true,
+            profile: { select: { displayName: true, handle: true } },
           },
         },
         appeals: {
@@ -132,12 +285,14 @@ export class ReportsService {
               select: {
                 id: true,
                 email: true,
+                profile: { select: { displayName: true, handle: true } },
               },
             },
             adminResolution: {
               select: {
                 id: true,
                 email: true,
+                profile: { select: { displayName: true, handle: true } },
               },
             },
           },
@@ -152,11 +307,51 @@ export class ReportsService {
       });
     }
 
-    return report;
+    const resolved = await this.resolveReportTarget({
+      ...report,
+      _count: undefined,
+    });
+
+    return {
+      ...resolved,
+      appeals: report.appeals.map((appeal) => ({
+        id: appeal.id,
+        message: appeal.message,
+        status: appeal.status,
+        created_at: appeal.createdAt,
+        resolved_at: appeal.resolvedAt,
+        resolution_notes: appeal.resolutionNotes,
+        user: appeal.user
+          ? {
+              id: appeal.user.id,
+              email: appeal.user.email,
+              display_name: appeal.user.profile?.displayName ?? "",
+              handle: appeal.user.profile?.handle ?? "",
+            }
+          : null,
+      })),
+    };
   }
 
   async updateReport(reportId: string, adminId: string, dto: UpdateReportDto) {
-    await this.ensureReportExists(reportId);
+    const currentReport = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      select: { status: true },
+    });
+
+    if (!currentReport) {
+      throw new NotFoundException({
+        code: "REPORT_NOT_FOUND",
+        message: "Report not found.",
+      });
+    }
+
+    if (dto.status && currentReport.status === ReportStatus.RESOLVED) {
+      throw new BadRequestException({
+        code: "INVALID_TRANSITION",
+        message: "Cannot transition from RESOLVED status to another state.",
+      });
+    }
 
     const now = new Date();
     const shouldResolve =
@@ -195,6 +390,22 @@ export class ReportsService {
   }
 
   async bulkUpdateReports(adminId: string, dto: BulkUpdateReportsDto) {
+    // Check that none of the reports are already RESOLVED
+    const resolvedReports = await this.prisma.report.findMany({
+      where: {
+        id: { in: dto.reportIds },
+        status: ReportStatus.RESOLVED,
+      },
+      select: { id: true },
+    });
+
+    if ((resolvedReports ?? []).length > 0) {
+      throw new BadRequestException({
+        code: "INVALID_TRANSITION",
+        message: "Cannot transition from RESOLVED status to another state.",
+      });
+    }
+
     const now = new Date();
     const shouldResolve =
       dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
@@ -259,6 +470,7 @@ export class ReportsService {
     return this.prisma.report.update({
       where: { id: reportId },
       data: {
+        status: ReportStatus.UNDER_REVIEW,
         resolvedBy: adminId,
       },
     });
@@ -278,10 +490,7 @@ export class ReportsService {
     }
   }
 
-  private async ensureTargetExists(
-    targetType: ReportTargetType,
-    targetId: string,
-  ): Promise<void> {
+  private async ensureTargetExists(targetType: ReportTargetType, targetId: string): Promise<void> {
     if (targetType === ReportTargetType.TRACK) {
       const track = await this.prisma.track.findUnique({
         where: { id: targetId },
@@ -312,16 +521,39 @@ export class ReportsService {
       return;
     }
 
-    const playlist = await this.prisma.playlist.findUnique({
-      where: { id: targetId },
-      select: { id: true },
-    });
-
-    if (!playlist) {
-      throw new NotFoundException({
-        code: "PLAYLIST_NOT_FOUND",
-        message: "Playlist not found.",
+    if (targetType === ReportTargetType.PLAYLIST) {
+      const playlist = await this.prisma.playlist.findUnique({
+        where: { id: targetId },
+        select: { id: true },
       });
+
+      if (!playlist) {
+        throw new NotFoundException({
+          code: "PLAYLIST_NOT_FOUND",
+          message: "Playlist not found.",
+        });
+      }
+      return;
     }
+
+    if (targetType === ReportTargetType.COMMENT) {
+      const comment = await this.prisma.comment.findUnique({
+        where: { id: targetId },
+        select: { id: true },
+      });
+
+      if (!comment) {
+        throw new NotFoundException({
+          code: "COMMENT_NOT_FOUND",
+          message: "Comment not found.",
+        });
+      }
+      return;
+    }
+
+    throw new BadRequestException({
+      code: "INVALID_TARGET_TYPE",
+      message: "Unsupported report target type.",
+    });
   }
 }

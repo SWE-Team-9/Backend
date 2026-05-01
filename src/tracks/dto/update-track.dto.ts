@@ -1,15 +1,19 @@
 import {
-  IsString,
-  IsOptional,
-  MaxLength,
+  ArrayMaxSize,
   IsArray,
   IsDateString,
-  ArrayMaxSize,
+  IsOptional,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateTrackDto {
-  @ApiPropertyOptional({ description: 'Track title', example: 'New Title', maxLength: 100 })
+  @ApiPropertyOptional({
+    description: 'Track title',
+    example: 'New Title',
+    maxLength: 100,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -32,7 +36,10 @@ export class UpdateTrackDto {
   @ArrayMaxSize(10)
   tags?: string[];
 
-  @ApiPropertyOptional({ description: 'Release date (ISO 8601)', example: '2026-03-01' })
+  @ApiPropertyOptional({
+    description: 'Release date (ISO 8601)',
+    example: '2026-03-01',
+  })
   @IsOptional()
   @IsDateString()
   releaseDate?: string;

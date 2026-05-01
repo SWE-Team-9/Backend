@@ -1,17 +1,18 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EntitlementsService } from './entitlements.service';
 
 @ApiTags('Entitlements')
+@ApiCookieAuth('access_token')
 @ApiBearerAuth()
 @Controller('entitlements')
 export class EntitlementsController {
   constructor(private readonly entitlementsService: EntitlementsService) {}
 
   @ApiOperation({
-    summary: 'Get the current user\'s entitlements',
+    summary: "Get the current user's entitlements",
     description:
       'Returns a full snapshot of what the authenticated user is allowed to do: ' +
       'upload limit, remaining uploads, premium features (ads, downloads, support level). ' +

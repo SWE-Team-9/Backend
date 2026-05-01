@@ -36,6 +36,12 @@ export class GetPlaylistDetailsResponseDto {
   })
   secretToken?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Electronic',
+    nullable: true,
+  })
+  genre!: string | null;
+
   @ApiProperty({ type: () => PlaylistDetailsOwnerDto })
   owner!: PlaylistDetailsOwnerDto;
 

@@ -1,11 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
-import { InvoiceStatus, SubscriptionStatus } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { Injectable, Logger } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
+import { InvoiceStatus, SubscriptionStatus } from "@prisma/client";
+import { randomUUID } from "crypto";
 
-import { PrismaService } from '../prisma/prisma.service';
-import { MailService } from '../mail/mail.service';
-import { FREE_UPLOAD_LIMIT, GRACE_PERIOD_DAYS, SubscriptionsService } from './subscriptions.service';
+import { PrismaService } from "../prisma/prisma.service";
+import { MailService } from "../mail/mail.service";
+import {
+  FREE_UPLOAD_LIMIT,
+  GRACE_PERIOD_DAYS,
+  SubscriptionsService,
+} from "./subscriptions.service";
 
 /** Returns a new Date exactly one calendar month after the given date. */
 function addOneMonth(date: Date): Date {
@@ -19,7 +23,7 @@ function addOneMonth(date: Date): Date {
 }
 
 function mockId(prefix: string): string {
-  return `${prefix}_mock_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  return `${prefix}_mock_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
 @Injectable()
@@ -34,7 +38,7 @@ export class TrialSchedulerService {
   ) {
     this.paymentFeaturesEnabled =
       (process.env.ENABLE_PAYMENT_FEATURES ??
-        (process.env.NODE_ENV === 'test' ? 'true' : 'false')) === 'true';
+        (process.env.NODE_ENV === "test" ? "true" : "false")) === "true";
   }
 
   /**
@@ -43,7 +47,7 @@ export class TrialSchedulerService {
    * Uses a PaymentEvent record as an idempotency flag so the email is only ever sent once
    * per subscription, regardless of how many times the job runs.
    */
-  @Cron('0 9 * * *')
+  @Cron("0 9 * * *")
   async sendTrialEndingWarnings(): Promise<void> {
     if (!this.paymentFeaturesEnabled) {
       return;
@@ -70,7 +74,7 @@ export class TrialSchedulerService {
         },
         plan: { select: { name: true, priceCents: true } },
         payments: {
-          where: { eventType: 'trial.renewal_warning' },
+          where: { eventType: "trial.renewal_warning" },
           select: { id: true },
           take: 1,
         },
@@ -102,8 +106,8 @@ export class TrialSchedulerService {
       await this.prisma.paymentEvent.create({
         data: {
           subscriptionId: sub.id,
-          stripeEventId: mockId('evt'),
-          eventType: 'trial.renewal_warning',
+          stripeEventId: mockId("evt"),
+          eventType: "trial.renewal_warning",
           payload: {
             trialEnd: sub.currentPeriodEnd.toISOString(),
             warningSentAt: now.toISOString(),
@@ -122,7 +126,7 @@ export class TrialSchedulerService {
    * Auto-charges and converts subscriptions whose trial period has expired.
    * Skips subscriptions with cancelAtPeriodEnd=true (user cancelled during trial).
    */
-  @Cron('0 * * * *')
+  @Cron("0 * * * *")
   async autoRenewExpiredTrials(): Promise<void> {
     if (!this.paymentFeaturesEnabled) {
       return;
@@ -145,16 +149,16 @@ export class TrialSchedulerService {
     });
 
     for (const sub of expiredTrials) {
-      const newStripeSubId = mockId('sub');
+      const newStripeSubId = mockId("sub");
 
       try {
         const invoice = await this.prisma.billingInvoice.create({
           data: {
             subscriptionId: sub.id,
-            stripeInvoiceId: mockId('in'),
+            stripeInvoiceId: mockId("in"),
             amountDueCents: sub.plan.priceCents,
             amountPaidCents: sub.plan.priceCents,
-            currency: 'USD',
+            currency: "USD",
             status: InvoiceStatus.PAID,
             dueAt: now,
             paidAt: now,
@@ -175,13 +179,13 @@ export class TrialSchedulerService {
           data: {
             subscriptionId: sub.id,
             invoiceId: invoice.id,
-            stripeEventId: mockId('evt'),
-            eventType: 'invoice.payment_succeeded',
+            stripeEventId: mockId("evt"),
+            eventType: "invoice.payment_succeeded",
             payload: {
               subscriptionId: newStripeSubId,
               customerId: sub.stripeCustomerId,
               amountPaid: sub.plan.priceCents,
-              currency: 'USD',
+              currency: "USD",
               planTier: sub.plan.tier,
               trialAutoRenewed: true,
               timestamp: now.toISOString(),
@@ -193,9 +197,7 @@ export class TrialSchedulerService {
           `[TRIAL AUTO-RENEW] Sub ${sub.id} converted to ACTIVE, amount=${sub.plan.priceCents}`,
         );
       } catch (err) {
-        this.logger.error(
-          `[TRIAL AUTO-RENEW] Failed to renew sub ${sub.id}: ${String(err)}`,
-        );
+        this.logger.error(`[TRIAL AUTO-RENEW] Failed to renew sub ${sub.id}: ${String(err)}`);
       }
     }
   }
@@ -206,7 +208,7 @@ export class TrialSchedulerService {
    * cancelAtPeriodEnd flag is false (user has not cancelled).
    * In a real integration this would call the Stripe API; here it always succeeds (mock).
    */
-  @Cron('0 * * * *')
+  @Cron("0 * * * *")
   async autoRenewActiveSubscriptions(): Promise<void> {
     if (!this.paymentFeaturesEnabled) {
       return;
@@ -229,16 +231,16 @@ export class TrialSchedulerService {
     });
 
     for (const sub of expiredActive) {
-      const newStripeSubId = mockId('sub');
+      const newStripeSubId = mockId("sub");
 
       try {
         const invoice = await this.prisma.billingInvoice.create({
           data: {
             subscriptionId: sub.id,
-            stripeInvoiceId: mockId('in'),
+            stripeInvoiceId: mockId("in"),
             amountDueCents: sub.plan.priceCents,
             amountPaidCents: sub.plan.priceCents,
-            currency: 'USD',
+            currency: "USD",
             status: InvoiceStatus.PAID,
             dueAt: now,
             paidAt: now,
@@ -258,13 +260,13 @@ export class TrialSchedulerService {
           data: {
             subscriptionId: sub.id,
             invoiceId: invoice.id,
-            stripeEventId: mockId('evt'),
-            eventType: 'invoice.payment_succeeded',
+            stripeEventId: mockId("evt"),
+            eventType: "invoice.payment_succeeded",
             payload: {
               subscriptionId: newStripeSubId,
               customerId: sub.stripeCustomerId,
               amountPaid: sub.plan.priceCents,
-              currency: 'USD',
+              currency: "USD",
               planTier: sub.plan.tier,
               autoRenewed: true,
               timestamp: now.toISOString(),
@@ -272,13 +274,9 @@ export class TrialSchedulerService {
           },
         });
 
-        this.logger.log(
-          `[MONTHLY RENEWAL] Sub ${sub.id} renewed, amount=${sub.plan.priceCents}`,
-        );
+        this.logger.log(`[MONTHLY RENEWAL] Sub ${sub.id} renewed, amount=${sub.plan.priceCents}`);
       } catch (err) {
-        this.logger.error(
-          `[MONTHLY RENEWAL] Failed to renew sub ${sub.id}: ${String(err)}`,
-        );
+        this.logger.error(`[MONTHLY RENEWAL] Failed to renew sub ${sub.id}: ${String(err)}`);
       }
     }
   }
@@ -288,10 +286,10 @@ export class TrialSchedulerService {
    * Cancels PAST_DUE subscriptions whose grace period (GRACE_PERIOD_DAYS) has elapsed
    * without the user updating their payment method.
    * Moves the user to Free and sends a "moved to free" email.
-   * The grace period is measured from `updatedAt` — the timestamp when the sub
+   * The grace period is measured from `updatedAt` - the timestamp when the sub
    * was set to PAST_DUE by the invoice.payment_failed webhook.
    */
-  @Cron('0 * * * *')
+  @Cron("0 * * * *")
   async cancelExpiredGracePeriodSubscriptions(): Promise<void> {
     if (!this.paymentFeaturesEnabled) {
       return;
@@ -333,8 +331,8 @@ export class TrialSchedulerService {
         await this.prisma.paymentEvent.create({
           data: {
             subscriptionId: sub.id,
-            stripeEventId: mockId('evt'),
-            eventType: 'subscription.grace_period_expired',
+            stripeEventId: mockId("evt"),
+            eventType: "subscription.grace_period_expired",
             payload: { cancelledAt: now.toISOString() },
           },
         });
@@ -351,18 +349,14 @@ export class TrialSchedulerService {
             planName: sub.plan.name,
           })
           .catch((err) =>
-            this.logger.error(
-              `[GRACE EXPIRED EMAIL] Failed for sub ${sub.id}: ${String(err)}`,
-            ),
+            this.logger.error(`[GRACE EXPIRED EMAIL] Failed for sub ${sub.id}: ${String(err)}`),
           );
 
         this.logger.log(
           `[GRACE EXPIRED] Sub ${sub.id} cancelled after ${GRACE_PERIOD_DAYS}d grace period`,
         );
       } catch (err) {
-        this.logger.error(
-          `[GRACE EXPIRED] Failed to cancel sub ${sub.id}: ${String(err)}`,
-        );
+        this.logger.error(`[GRACE EXPIRED] Failed to cancel sub ${sub.id}: ${String(err)}`);
       }
     }
   }

@@ -40,7 +40,7 @@ describe("JwtAuthGuard", () => {
 
   // ─── @Public() bypass ─────────────────────────────────────────────────────
 
-  describe("canActivate — public routes", () => {
+  describe("canActivate - public routes", () => {
     it("should return true immediately when the route is decorated with @Public()", async () => {
       jest
         .spyOn(reflector, "getAllAndOverride")
@@ -52,16 +52,11 @@ describe("JwtAuthGuard", () => {
     });
 
     it("should consult both the handler and the class for the IS_PUBLIC_KEY metadata", () => {
-      const spy = jest
-        .spyOn(reflector, "getAllAndOverride")
-        .mockReturnValue(true as unknown);
+      const spy = jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
 
       guard.canActivate(buildContext());
 
-      expect(spy).toHaveBeenCalledWith(IS_PUBLIC_KEY, [
-        expect.any(Function),
-        expect.any(Function),
-      ]);
+      expect(spy).toHaveBeenCalledWith(IS_PUBLIC_KEY, [expect.any(Function), expect.any(Function)]);
     });
   });
 
@@ -93,29 +88,23 @@ describe("JwtAuthGuard", () => {
     });
 
     it("should throw UnauthorizedException when user is false (no token / invalid)", () => {
-      expect(() => guard.handleRequest(null, false)).toThrow(
-        UnauthorizedException,
-      );
+      expect(() => guard.handleRequest(null, false)).toThrow(UnauthorizedException);
     });
 
     it("should throw UnauthorizedException when user is null", () => {
-      expect(() => guard.handleRequest(null, null as any)).toThrow(
-        UnauthorizedException,
-      );
+      expect(() => guard.handleRequest(null, null as any)).toThrow(UnauthorizedException);
     });
 
     it("should throw UnauthorizedException when user is undefined", () => {
-      expect(() => guard.handleRequest(null, undefined as any)).toThrow(
-        UnauthorizedException,
-      );
+      expect(() => guard.handleRequest(null, undefined as any)).toThrow(UnauthorizedException);
     });
 
     it("should throw UnauthorizedException when an error is passed even if user is truthy", () => {
       const user = { userId: "user-uuid-123", role: "USER" };
 
-      expect(() =>
-        guard.handleRequest(new Error("token expired"), user as any),
-      ).toThrow(UnauthorizedException);
+      expect(() => guard.handleRequest(new Error("token expired"), user as any)).toThrow(
+        UnauthorizedException,
+      );
     });
 
     it("should throw UnauthorizedException when both err and user are bad", () => {
@@ -130,10 +119,7 @@ describe("JwtAuthGuard", () => {
         fail("Expected UnauthorizedException to be thrown");
       } catch (err: unknown) {
         expect(err).toBeInstanceOf(UnauthorizedException);
-        const response = (err as UnauthorizedException).getResponse() as Record<
-          string,
-          unknown
-        >;
+        const response = (err as UnauthorizedException).getResponse() as Record<string, unknown>;
         expect(response.code).toBe("NOT_AUTHENTICATED");
       }
     });
@@ -144,10 +130,7 @@ describe("JwtAuthGuard", () => {
         fail("Expected UnauthorizedException to be thrown");
       } catch (err: unknown) {
         expect(err).toBeInstanceOf(UnauthorizedException);
-        const response = (err as UnauthorizedException).getResponse() as Record<
-          string,
-          unknown
-        >;
+        const response = (err as UnauthorizedException).getResponse() as Record<string, unknown>;
         expect(typeof response.message).toBe("string");
         expect((response.message as string).length).toBeGreaterThan(0);
       }
@@ -156,20 +139,15 @@ describe("JwtAuthGuard", () => {
 
   // ─── non-public route (super.canActivate delegation) ─────────────────────
 
-  describe("canActivate — protected routes", () => {
+  describe("canActivate - protected routes", () => {
     it("should delegate to passport AuthGuard when the route is not public", async () => {
       // Reflect that there is NO @Public() decorator on this context.
-      jest
-        .spyOn(reflector, "getAllAndOverride")
-        .mockReturnValue(false as unknown);
+      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
 
       // Stub the parent AuthGuard so we do not need a real Passport/JWT setup.
       const superSpy = jest
-        .spyOn(
-          Object.getPrototypeOf(Object.getPrototypeOf(guard)) as JwtAuthGuard,
-          "canActivate",
-        )
-        .mockReturnValue(Promise.resolve(true) as any);
+        .spyOn(Object.getPrototypeOf(Object.getPrototypeOf(guard)) as JwtAuthGuard, "canActivate")
+        .mockReturnValue(Promise.resolve(true));
 
       const result = await guard.canActivate(buildContext());
 
@@ -178,20 +156,13 @@ describe("JwtAuthGuard", () => {
     });
 
     it("should propagate the rejected promise from passport for expired tokens", async () => {
-      jest
-        .spyOn(reflector, "getAllAndOverride")
-        .mockReturnValue(false as unknown);
+      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
 
       jest
-        .spyOn(
-          Object.getPrototypeOf(Object.getPrototypeOf(guard)) as JwtAuthGuard,
-          "canActivate",
-        )
-        .mockReturnValue(Promise.resolve(false) as any);
+        .spyOn(Object.getPrototypeOf(Object.getPrototypeOf(guard)) as JwtAuthGuard, "canActivate")
+        .mockReturnValue(Promise.resolve(false));
 
-      const result = await (guard.canActivate(
-        buildContext(),
-      ) as Promise<boolean>);
+      const result = await guard.canActivate(buildContext());
 
       expect(result).toBe(false);
     });

@@ -16,8 +16,7 @@ export class CookieService {
   private readonly isSecure: boolean;
 
   constructor(private readonly configService: ConfigService) {
-    this.isSecure =
-      this.configService.get<boolean>("security.authCookieSecure") ?? false;
+    this.isSecure = this.configService.get<boolean>("security.authCookieSecure") ?? false;
   }
 
   // Set both access and refresh token cookies on the response
@@ -27,7 +26,7 @@ export class CookieService {
     refreshToken: string,
     rememberMe = false,
   ): void {
-    // Access token cookie — short-lived
+    // Access token cookie - short-lived
     res.cookie(ACCESS_COOKIE, accessToken, {
       httpOnly: true,
       secure: this.isSecure,
@@ -36,7 +35,7 @@ export class CookieService {
       maxAge: FIFTEEN_MINUTES,
     });
 
-    // Refresh token cookie — longer-lived
+    // Refresh token cookie - longer-lived
     res.cookie(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
       secure: this.isSecure,
@@ -48,11 +47,7 @@ export class CookieService {
 
   // Set cookies for native OAuth callback/token exchange flows.
   // Uses cross-site cookie settings required by mobile WebView cookie jars.
-  setNativeOAuthCookies(
-    res: Response,
-    accessToken: string,
-    refreshToken: string,
-  ): void {
+  setNativeOAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
     const sameSite = this.isSecure ? "none" : "lax";
 
     res.cookie(ACCESS_COOKIE, accessToken, {

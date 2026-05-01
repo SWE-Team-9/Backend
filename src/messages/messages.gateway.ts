@@ -8,21 +8,18 @@ import { Server, Socket } from "socket.io";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
-import { MessagesService, IMessagesGateway } from "./messages.service";
+import { IMessagesGateway, MessagesService } from "./messages.service";
 
 @WebSocketGateway({
   namespace: "messages",
-  cors: { origin: true, credentials: true },
 })
-export class MessagesGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, IMessagesGateway
-{
+export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect, IMessagesGateway {
   @WebSocketServer()
   private readonly server!: Server;
 
-  // userId → Set of socketIds
+  // userId -> Set of socketIds
   private readonly userSocketMap = new Map<string, Set<string>>();
-  // socketId → userId
+  // socketId -> userId
   private readonly socketUserMap = new Map<string, string>();
 
   constructor(
@@ -37,11 +34,10 @@ export class MessagesGateway
   async handleConnection(socket: Socket): Promise<void> {
     try {
       const token =
-        (socket.handshake.headers.cookie
+        socket.handshake.headers.cookie
           ?.split(";")
           .find((c) => c.trim().startsWith("access_token="))
-          ?.split("=")[1]) ??
-        (socket.handshake.auth?.token as string | undefined);
+          ?.split("=")[1] ?? (socket.handshake.auth?.token as string | undefined);
 
       if (!token) throw new Error("No token");
 
@@ -92,11 +88,15 @@ export class MessagesGateway
   }
 
   emitMessageDeleted(conversationId: string, messageId: string): void {
-    this.server.to(`conversation_${conversationId}`).emit("message_deleted", { conversationId, messageId });
+    this.server
+      .to(`conversation_${conversationId}`)
+      .emit("message_deleted", { conversationId, messageId });
   }
 
   emitConversationRead(conversationId: string, userId: string): void {
-    this.server.to(`conversation_${conversationId}`).emit("conversation_read", { conversationId, userId });
+    this.server
+      .to(`conversation_${conversationId}`)
+      .emit("conversation_read", { conversationId, userId });
   }
 
   emitUnreadCountUpdated(userId: string, count: number): void {

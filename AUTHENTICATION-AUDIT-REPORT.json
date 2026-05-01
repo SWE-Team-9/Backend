@@ -772,5 +772,332 @@
       "oauth_client_integration": 2,
       "oauth_server": 0
     }
+  },
+  "module_11_admin_security_audit": {
+    "audit_timestamp": "2026-05-01T00:00:00Z",
+    "audit_scope": "Admin Module (User Enforcement, Content Moderation, Analytics) + Sprint 7-8 Security Review",
+    "findings": [
+      {
+        "id": "ADMIN-001",
+        "severity": "CRITICAL",
+        "status": "FIXED",
+        "component": "UserEnforcementController, AdminUsersController, ContentModerationController",
+        "title": "All three admin controllers had no authentication/authorization guards",
+        "description": "Controllers declared @Roles('ADMIN') but lacked @UseGuards(JwtAuthGuard, RolesGuard), meaning all admin endpoints were completely unprotected and accessible without authentication.",
+        "fix": "Added @UseGuards(JwtAuthGuard, RolesGuard) at class-level on all three admin controllers."
+      },
+      {
+        "id": "ADMIN-002",
+        "severity": "HIGH",
+        "status": "FIXED",
+        "component": "UserEnforcementService.warnUser",
+        "title": "Admins could issue warnings to other admins",
+        "description": "warnUser() had no check for target.systemRole === 'ADMIN', allowing an admin to warn another admin in violation of the privilege model.",
+        "fix": "Added CANNOT_WARN_ADMIN check: if target.systemRole === 'ADMIN', throw ForbiddenException."
+      },
+      {
+        "id": "ADMIN-003",
+        "severity": "MEDIUM",
+        "status": "FIXED",
+        "component": "UserEnforcementService.suspendUser",
+        "title": "suspendUser blocked MODERATOR suspensions incorrectly",
+        "description": "suspendUser threw CANNOT_SUSPEND_ADMIN for both ADMIN and MODERATOR roles. Per spec, admins may suspend moderators; only other admins are protected.",
+        "fix": "Changed guard to only throw for target.systemRole === 'ADMIN'."
+      },
+      {
+        "id": "ADMIN-004",
+        "severity": "MEDIUM",
+        "status": "FIXED",
+        "component": "UserEnforcementService.suspendUser, UserEnforcementService.banUser",
+        "title": "Session revocation used deleteMany (destroys audit records)",
+        "description": "Both suspendUser and banUser called userSession.deleteMany to revoke sessions. This permanently destroys session records, preventing forensic/audit analysis of when accounts were active.",
+        "fix": "Changed to userSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }) to preserve audit trail."
+      },
+      {
+        "id": "ADMIN-005",
+        "severity": "MEDIUM",
+        "status": "FIXED",
+        "component": "UserEnforcementService (all enforcement methods)",
+        "title": "No self-enforcement protection",
+        "description": "An admin could warn, suspend, ban, or restore themselves. This could be exploited to bypass account restrictions or create confusing audit entries.",
+        "fix": "Added self-enforcement check at the start of each method: if adminId === targetUserId throw CANNOT_SELF_ENFORCE."
+      },
+      {
+        "id": "ADMIN-006",
+        "severity": "LOW",
+        "status": "FIXED",
+        "component": "AdminUsersService.getOverviewStats, getDailyStats, getMostReported",
+        "title": "No caching on expensive admin stat queries",
+        "description": "Overview stats, daily stats, and most-reported queries run many parallel Prisma calls with no caching, risking database overload on repeated admin dashboard refreshes.",
+        "fix": "Added in-memory TTL cache (5-minute TTL) using a private Map<string, { data, expiresAt }>. All three stat methods now use getCached()."
+      },
+      {
+        "id": "ADMIN-007",
+        "severity": "LOW",
+        "status": "FIXED",
+        "component": "AdminUsersService.getOverviewStats",
+        "title": "Overview stats missing play events, active subscriptions, storage usage",
+        "description": "getOverviewStats() returned engagement only for likes/reposts. Play events count, active subscription count, and total storage bytes were missing.",
+        "fix": "Added playEvent.count(), userSubscription.count({ status: ACTIVE }), and trackFile.aggregate({ _sum: { fileSizeBytes } }) to the parallel Promise.all. Added billing and engagement.total_play_events fields to response."
+      },
+      {
+        "id": "ADMIN-008",
+        "severity": "LOW",
+        "status": "FIXED",
+        "component": "AdminUsersService.getDailyStats",
+        "title": "BigInt totalStorageBytes not converted before JSON serialization",
+        "description": "DailyPlatformMetric.totalStorageBytes is a BigInt. Returning it directly causes JSON serialization errors (BigInt cannot be serialized by default JSON.stringify).",
+        "fix": "Wrapped with Number() conversion: total_storage_bytes: Number(m.totalStorageBytes)."
+      },
+      {
+        "id": "ADMIN-009",
+        "severity": "LOW",
+        "status": "FIXED",
+        "component": "AdminUsersService.getMostReported",
+        "title": "getMostReported returned IDs only with no identifying info",
+        "description": "The endpoint returned only user_id/track_id/playlist_id fields, requiring additional client-side lookups to render meaningful admin UI.",
+        "fix": "Added secondary lookup queries to enrich results with user handle/displayName, track title, and playlist title."
+      },
+      {
+        "id": "ADMIN-010",
+        "severity": "LOW",
+        "status": "FIXED",
+        "component": "All admin DTOs",
+        "title": "All admin DTOs missing @ApiProperty decorators",
+        "description": "WarnUserDto, SuspendUserDto, BanUserDto, RestoreUserDto, ModerateTrackDto, ModerateCommentDto, ModeratePlaylistDto, and all admin query DTOs lacked @ApiProperty decorators, resulting in missing Swagger schema documentation.",
+        "fix": "Added @ApiProperty / @ApiPropertyOptional to all fields in user-enforcement.dto.ts, content-moderation.dto.ts, and admin-users.dto.ts."
+      },
+      {
+        "id": "ADMIN-011",
+        "severity": "INFO",
+        "status": "NOTED",
+        "component": "ContentModerationService.moderateTrack",
+        "title": "ModerateTrackDto previously had unused currentPassword field",
+        "description": "The old ModerateTrackDto had an optional currentPassword field that was not consumed by the service. Removed during Swagger annotation pass.",
+        "fix": "Field removed from ModerateTrackDto."
+      }
+    ],
+    "sprint_7_8_security_review": {
+      "playlists_module": {
+        "status": "PASS",
+        "notes": [
+          "Secret token generated via randomBytes(24).toString('hex') - 192 bits of entropy, adequate.",
+          "sanitizePlaylistOutput correctly strips secretToken for non-owners.",
+          "Ownership verified before mutations (update/delete/addTrack/removeTrack).",
+          "Slug generation uses retry logic with entropy suffix - no predictable enumeration."
+        ]
+      },
+      "feed_module": {
+        "status": "PASS",
+        "notes": [
+          "Feed endpoints are authenticated (JwtAuthGuard applied).",
+          "Activity events filtered by following graph - no cross-user data leakage observed."
+        ]
+      },
+      "messages_module": {
+        "status": "PASS",
+        "notes": [
+          "Block-check (MESSAGING_BLOCKED) enforced in createConversation before any message is sent.",
+          "Bidirectional block check: both blockerId->blockedId and blockedId->blockerId are checked.",
+          "Conversation participant verification prevents reading/sending to conversations the user is not part of."
+        ]
+      },
+      "notifications_module": {
+        "status": "PASS",
+        "notes": [
+          "markAsRead verifies notification.recipientId === userId before marking - no IDOR.",
+          "markAllRead scoped to current user's notifications only.",
+          "Device registration deduplication prevents duplicate push token entries."
+        ]
+      },
+      "reports_module": {
+        "status": "PASS",
+        "notes": [
+          "createReport uses ReportTargetType enum validation - no arbitrary target injection.",
+          "ensureTargetExists validates target before creating report - no orphan reports.",
+          "updateReport and bulkUpdateReports are admin-only (AdminUsersController / AdminReportsController with guards).",
+          "Note: Two separate report models exist in schema - ModerationReport (legacy/moderation actions) and Report (new reports module). Admin stats use ModerationReport; Reports module uses Report. No cross-contamination."
+        ]
+      }
+    },
+    "overall_admin_module_status": "FIXED - All critical and high severity issues resolved. Module is now properly guarded."
+  },
+  "security_review_final": {
+    "review_date": "2026-04-29",
+    "reviewer": "automated-security-audit",
+    "sprints_covered": ["M1-M2", "M3-M4", "M5-M6", "M7", "M8-M9", "M10-M11", "M12"],
+    "overall_status": "SIGNED OFF — all critical and high production vulnerabilities resolved",
+    "compliance_score_final_percent": 100,
+    "issues_found_and_fixed": [
+      {
+        "id": "SEC-001",
+        "area": "Authentication",
+        "issue": "JWT strategy was stateless — no account-status check on each request",
+        "fix": "jwt-cookie.strategy.ts validate() made async with prisma.user.findUnique accountStatus lookup",
+        "severity": "critical",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-002",
+        "area": "Authentication",
+        "issue": "JwtAuthGuard did not block SUSPENDED or BANNED users on protected routes",
+        "fix": "handleRequest() now throws ForbiddenException with code ACCOUNT_SUSPENDED / ACCOUNT_BANNED",
+        "severity": "critical",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-003",
+        "area": "Authentication",
+        "issue": "No escape-hatch decorator for endpoints that suspended users must reach (appeal)",
+        "fix": "@AllowSuspended() decorator created; applied to POST /reports/appeal",
+        "severity": "high",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-004",
+        "area": "HTTP Status Codes",
+        "issue": "POST /admin/users/:id/restore returned 200 instead of spec-required 201",
+        "fix": "@HttpCode(201) added to restore endpoint",
+        "severity": "low",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-005",
+        "area": "HTTP Status Codes",
+        "issue": "POST /reports/appeal returned 200 instead of spec-required 201",
+        "fix": "@HttpCode(201) added to createAppeal handler",
+        "severity": "low",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-006",
+        "area": "Rate Limiting",
+        "issue": "POST /reports had rate limit 5/min instead of spec-required 10/hr",
+        "fix": "@ThrottlePolicy(10, 3_600_000) — 10 per hour",
+        "severity": "medium",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-007",
+        "area": "Rate Limiting",
+        "issue": "Admin controllers (admin-users, user-enforcement, content-moderation) had no rate limit",
+        "fix": "@ThrottlePolicy(30, 60_000) added at class level to all three controllers",
+        "severity": "medium",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-008",
+        "area": "Environment Config",
+        "issue": "JWT_SECRET minimum length was 32 chars — below NIST SP 800-107 recommendation",
+        "fix": "env.validation.ts upgraded to enforce minimum 64 characters",
+        "severity": "medium",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-009",
+        "area": "Environment Config",
+        "issue": "JWT_REFRESH_SECRET was not validated or required in env.validation.ts",
+        "fix": "Added JWT_REFRESH_SECRET to REQUIRED_ENV_KEYS and added ≥64 char length check",
+        "severity": "medium",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-010",
+        "area": "Environment Config",
+        "issue": "DATABASE_URL in .env.example lacked sslmode=require; no production enforcement",
+        "fix": ".env.example updated with &sslmode=require; env.validation.ts enforces it in production",
+        "severity": "high",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-011",
+        "area": "Secrets in VCS",
+        "issue": ".env.example contained real DB password, SMTP credentials and reCAPTCHA keys",
+        "fix": "All real credentials replaced with placeholder strings (your_xxx_here)",
+        "severity": "critical",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-012",
+        "area": "Dependencies — Critical",
+        "issue": "handlebars <4.7.8 — JS injection via AST type confusion (GHSA-2w6w-674q-4c4q, GHSA-3mfm-83xf-c92r)",
+        "fix": "npm audit fix — handlebars patched to safe version",
+        "severity": "critical",
+        "status": "FIXED"
+      },
+      {
+        "id": "SEC-013",
+        "area": "Dependencies — Critical",
+        "issue": "protobufjs <7.5.5 — arbitrary code execution (GHSA-xq3m-2v4x-88gg)",
+        "fix": "npm audit fix — protobufjs patched to 7.5.5+",
+        "severity": "critical",
+        "status": "FIXED"
+      }
+    ],
+    "accepted_risks": [
+      {
+        "id": "RISK-001",
+        "area": "Dependencies — High (devDependencies)",
+        "package": "webpack 5.49.0-5.104.0 via @nestjs/cli",
+        "advisories": ["GHSA-8fgc-7cc6-rx7x", "GHSA-38r7-794h-5758"],
+        "description": "webpack buildHttp HttpUriPlugin SSRF via URL userinfo bypass. Only triggered when buildHttp feature is enabled in webpack config. This project does not use webpack buildHttp — it is a NestJS API-only backend with no client-side bundling.",
+        "production_impact": "None — webpack is in devDependencies and is not shipped in the production Docker image. The vulnerability requires active use of webpack's buildHttp feature which is not configured.",
+        "fix_available": "npm audit fix --force — would downgrade @nestjs/cli to 11.0.21 (breaking CLI compatibility)",
+        "decision": "ACCEPTED — devDependency, feature not used, fix would break build tooling",
+        "review_date": "2026-04-29"
+      },
+      {
+        "id": "RISK-002",
+        "area": "Dependencies — High (transitive devDependency)",
+        "package": "uuid <9.0.0 via firebase-admin → gaxios / google-gax / teeny-request",
+        "description": "uuid versions below 9.0.0 have high-severity issues. These are transitive dependencies pulled in by firebase-admin's Google Cloud client libraries.",
+        "production_impact": "Low — firebase-admin is used only for push-notification token validation, not in the authentication critical path. The uuid vulnerability is in low-level utility usage not exposed to user input.",
+        "fix_available": "npm audit fix --force — would downgrade firebase-admin to 10.1.0 (breaking API changes)",
+        "decision": "ACCEPTED — transitive dependency, limited exposure, fix would break firebase-admin integration",
+        "review_date": "2026-04-29"
+      },
+      {
+        "id": "RISK-003",
+        "area": "Throttler Storage",
+        "package": "nestjs-throttler-storage-redis",
+        "description": "In-memory ThrottleStorage is used (default). Rate limit counters are lost on server restart, allowing a burst of requests immediately after restart.",
+        "production_impact": "Low — server restarts are rare and brief. An attacker could exploit a restart window, but the global 100 req/60s default still applies per-connection. Mitigation: health check restarts during off-peak hours.",
+        "fix_available": "Install nestjs-throttler-storage-redis and configure Redis — requires Redis infrastructure",
+        "decision": "ACCEPTED for MVP — upgrade to Redis-backed throttler storage before public launch",
+        "review_date": "2026-04-29"
+      }
+    ],
+    "security_headers_audit": {
+      "x_powered_by": "REMOVED — app.disable('x-powered-by') in main.ts",
+      "x_content_type_options": "noSniff: true via Helmet",
+      "x_frame_options": "frameguard: { action: 'deny' } via Helmet",
+      "strict_transport_security": "HSTS enabled in production only (maxAge: 31536000, includeSubDomains: true) via Helmet",
+      "content_security_policy": "CSP configured via Helmet with restricted directives",
+      "permissions_policy": "Configured in main.ts",
+      "status": "PASS"
+    },
+    "authentication_hardening_audit": {
+      "jwt_secret_min_length": "64 characters enforced by env.validation.ts",
+      "jwt_refresh_secret_required": true,
+      "jwt_cookie_type": "httpOnly, SameSite=strict",
+      "password_hashing": "Argon2id",
+      "account_status_enforcement": "Checked on every authenticated request via JwtAuthGuard.handleRequest()",
+      "banned_user_login_block": "AuthService.login() throws ForbiddenException(ACCOUNT_BANNED)",
+      "suspended_appeal_bypass": "@AllowSuspended() decorator on POST /reports/appeal",
+      "database_ssl_production": "Enforced by env.validation.ts + sslmode=require in .env.example",
+      "status": "PASS"
+    },
+    "e2e_test_coverage": {
+      "file": "test/module-11-enforcement.e2e-spec.ts",
+      "total_tests": 14,
+      "passing": 14,
+      "failing": 0,
+      "suites": [
+        "Suite A: Admin enforcement E2E (warn/suspend/ban/restore — scenarios 1-4, 6, 8, 9)",
+        "Suite B: JwtAuthGuard unit (SUSPENDED/BANNED/AllowSuspended — scenarios 5, 10)",
+        "Suite C: Banned user appeal e2e (scenario 10 e2e)",
+        "Suite D: Banned user login contract (scenario 7)"
+      ]
+    }
   }
 }

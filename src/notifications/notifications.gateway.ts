@@ -7,11 +7,10 @@ import {
 import { Server, Socket } from "socket.io";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
-import { NotificationsService, INotificationsGateway } from "./notifications.service";
+import { INotificationsGateway, NotificationsService } from "./notifications.service";
 
 @WebSocketGateway({
   namespace: "notifications",
-  cors: { origin: true, credentials: true },
 })
 export class NotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect, INotificationsGateway
@@ -19,9 +18,9 @@ export class NotificationsGateway
   @WebSocketServer()
   private readonly server!: Server;
 
-  // userId → Set of socketIds
+  // userId -> Set of socketIds
   private readonly userSocketMap = new Map<string, Set<string>>();
-  // socketId → userId
+  // socketId -> userId
   private readonly socketUserMap = new Map<string, string>();
 
   constructor(
@@ -35,11 +34,10 @@ export class NotificationsGateway
   async handleConnection(socket: Socket): Promise<void> {
     try {
       const token =
-        (socket.handshake.headers.cookie
+        socket.handshake.headers.cookie
           ?.split(";")
           .find((c) => c.trim().startsWith("access_token="))
-          ?.split("=")[1]) ??
-        (socket.handshake.auth?.token as string | undefined);
+          ?.split("=")[1] ?? (socket.handshake.auth?.token as string | undefined);
 
       if (!token) throw new Error("No token");
 

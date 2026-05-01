@@ -1,22 +1,22 @@
 import {
-  Injectable,
   BadRequestException,
-  UnauthorizedException,
-  Logger,
+  Injectable,
   InternalServerErrorException,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
-import axios from 'axios';
-import { PrismaService } from '../prisma/prisma.service';
-import { AuthService } from '../auth/auth.service';
-import { AuthorizeDto, TokenDto, RevokeDto } from './dto';
-import { CallbackDto } from './dto/callback.dto';
+  Logger,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import axios from "axios";
+import { PrismaService } from "../prisma/prisma.service";
+import { AuthService } from "../auth/auth.service";
+import { AuthorizeDto, RevokeDto, TokenDto } from "./dto";
+import { CallbackDto } from "./dto/callback.dto";
 
 /**
  * OAuth2 Provider Service (RFC 6749, RFC 7009, RFC 7636 PKCE)
- * 
+ *
  * Implements authorization code flow with optional PKCE support for public clients.
  * Generates opaque access/refresh tokens (not JWTs) for third-party API access.
  * Also handles the native Google OAuth PKCE flow for mobile/desktop apps.
@@ -25,23 +25,26 @@ import { CallbackDto } from './dto/callback.dto';
 export class OAuthService {
   private readonly logger = new Logger(OAuthService.name);
   private readonly allowedNativeRedirectUris = new Set([
-    'soundclone://oauth/callback',
-    'http://127.0.0.1:8080/oauth/callback',
+    "soundclone://oauth/callback",
+    "http://127.0.0.1:8080/oauth/callback",
   ]);
   private readonly AUTHORIZATION_CODE_TTL_SECONDS = 60; // 1 minute
   private readonly ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
   private readonly REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
   // In-memory store for pending native OAuth codes.
-  // Maps internal code → { tokens, user, codeChallenge, expiresAt }
-  private readonly pendingNativeCodes = new Map<string, {
-    accessToken: string;
-    refreshToken: string;
-    user: any;
-    scope: string;
-    codeChallenge: string;
-    expiresAt: number;
-  }>();
+  // Maps internal code -> { tokens, user, codeChallenge, expiresAt }
+  private readonly pendingNativeCodes = new Map<
+    string,
+    {
+      accessToken: string;
+      refreshToken: string;
+      user: any;
+      scope: string;
+      codeChallenge: string;
+      expiresAt: number;
+    }
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -59,15 +62,15 @@ export class OAuthService {
   // ---------------------------------------------------------------------------
 
   isNativeClient(clientId: string): boolean {
-    const normalized = (clientId ?? '').trim().toLowerCase();
-    return normalized === 'soundclone-native-app';
+    const normalized = (clientId ?? "").trim().toLowerCase();
+    return normalized === "soundclone-native-app";
   }
 
   buildGoogleAuthorizeUrl(query: AuthorizeDto): string {
     const googleClientId =
-      this.config.get<string>('google.clientId') || 'fallback_google_client_id';
+      this.config.get<string>("google.clientId") || "fallback_google_client_id";
 
-    // Use the backend's own HTTPS callback URL for Google — NOT the native URI.
+    // Use the backend's own HTTPS callback URL for Google - NOT the native URI.
     // Google only accepts redirect URIs registered in Google Cloud Console.
     // The native redirect URI is stored in the state param and used later.
     const backendCallbackUrl = this.getNativeOAuthCallbackUrl();
@@ -76,24 +79,26 @@ export class OAuthService {
     // - nativeRedirectUri: where to redirect the app after Google auth
     // - codeChallenge/Method: for PKCE validation when the app exchanges the code
     // - originalState: the app's anti-CSRF state to return unchanged
-    const statePayload = Buffer.from(JSON.stringify({
-      nativeRedirectUri: query.redirect_uri,
-      codeChallenge: query.code_challenge,
-      codeChallengeMethod: query.code_challenge_method || 'S256',
-      originalState: query.state,
-    })).toString('base64url');
+    const statePayload = Buffer.from(
+      JSON.stringify({
+        nativeRedirectUri: query.redirect_uri,
+        codeChallenge: query.code_challenge,
+        codeChallengeMethod: query.code_challenge_method || "S256",
+        originalState: query.state,
+      }),
+    ).toString("base64url");
 
     const params = new URLSearchParams();
-    params.set('client_id', googleClientId);
-    params.set('redirect_uri', backendCallbackUrl);
-    params.set('response_type', 'code');
-    params.set('scope', 'openid email profile');
-    params.set('state', statePayload);
-    params.set('access_type', 'offline');
-    params.set('include_granted_scopes', 'true');
-    params.set('prompt', 'consent');
+    params.set("client_id", googleClientId);
+    params.set("redirect_uri", backendCallbackUrl);
+    params.set("response_type", "code");
+    params.set("scope", "openid email profile");
+    params.set("state", statePayload);
+    params.set("access_type", "offline");
+    params.set("include_granted_scopes", "true");
+    params.set("prompt", "consent");
 
-    // Note: PKCE code_challenge is NOT sent to Google — it's between the app and our backend.
+    // Note: PKCE code_challenge is NOT sent to Google - it's between the app and our backend.
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
@@ -103,18 +108,18 @@ export class OAuthService {
    */
   private getNativeOAuthCallbackUrl(): string {
     const googleCallbackUrl =
-      this.config.get<string>('GOOGLE_CALLBACK_URL') ??
-      this.config.get<string>('google.callbackUrl');
+      this.config.get<string>("GOOGLE_CALLBACK_URL") ??
+      this.config.get<string>("google.callbackUrl");
 
     if (!googleCallbackUrl) {
-      throw new InternalServerErrorException('GOOGLE_CALLBACK_URL is not configured.');
+      throw new InternalServerErrorException("GOOGLE_CALLBACK_URL is not configured.");
     }
 
-    return googleCallbackUrl.replace('/auth/google/callback', '/oauth/google/callback');
+    return googleCallbackUrl.replace("/auth/google/callback", "/oauth/google/callback");
   }
 
   // ---------------------------------------------------------------------------
-  // Native OAuth: Google redirects here → exchange code → redirect to app
+  // Native OAuth: Google redirects here -> exchange code -> redirect to app
   // ---------------------------------------------------------------------------
 
   async processGoogleNativeCallback(
@@ -131,52 +136,55 @@ export class OAuthService {
       originalState: string;
     };
     try {
-      state = JSON.parse(Buffer.from(encodedState, 'base64url').toString('utf8'));
+      state = JSON.parse(Buffer.from(encodedState, "base64url").toString("utf8"));
     } catch {
-      throw new BadRequestException('Invalid state parameter.');
+      throw new BadRequestException("Invalid state parameter.");
     }
 
     if (!this.allowedNativeRedirectUris.has(state.nativeRedirectUri)) {
-      throw new BadRequestException('invalid_redirect_uri');
+      throw new BadRequestException("invalid_redirect_uri");
     }
 
     // Exchange Google's authorization code for tokens
-    const googleClientId = this.config.get<string>('google.clientId') || '';
-    const googleClientSecret = this.config.get<string>('google.clientSecret') || '';
+    const googleClientId = this.config.get<string>("google.clientId") || "";
+    const googleClientSecret = this.config.get<string>("google.clientSecret") || "";
     const backendCallbackUrl = this.getNativeOAuthCallbackUrl();
 
     const tokenParams = new URLSearchParams();
-    tokenParams.set('grant_type', 'authorization_code');
-    tokenParams.set('client_id', googleClientId);
-    tokenParams.set('client_secret', googleClientSecret);
-    tokenParams.set('code', googleCode);
-    tokenParams.set('redirect_uri', backendCallbackUrl);
+    tokenParams.set("grant_type", "authorization_code");
+    tokenParams.set("client_id", googleClientId);
+    tokenParams.set("client_secret", googleClientSecret);
+    tokenParams.set("code", googleCode);
+    tokenParams.set("redirect_uri", backendCallbackUrl);
 
     let idToken: string;
     try {
       const response = await axios.post(
-        'https://oauth2.googleapis.com/token',
+        "https://oauth2.googleapis.com/token",
         tokenParams.toString(),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10_000 },
+        {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 10_000,
+        },
       );
       idToken = response.data?.id_token;
     } catch (err) {
-      this.logger.error('Google token exchange failed', err);
-      throw new BadRequestException('Failed to exchange authorization code with Google.');
+      this.logger.error("Google token exchange failed", err);
+      throw new BadRequestException("Failed to exchange authorization code with Google.");
     }
 
     if (!idToken) {
-      throw new BadRequestException('Google token response did not include id_token.');
+      throw new BadRequestException("Google token response did not include id_token.");
     }
 
     const payload = this.decodeIdTokenPayload(idToken);
-    const email = String(payload.email || '').toLowerCase();
-    const displayName = String(payload.name || 'Google User');
-    const googleId = String(payload.sub || '');
+    const email = String(payload.email || "").toLowerCase();
+    const displayName = String(payload.name || "Google User");
+    const googleId = String(payload.sub || "");
     const avatarUrl = payload.picture ? String(payload.picture) : null;
 
     if (!email || !googleId) {
-      throw new BadRequestException('Google id_token is missing required fields.');
+      throw new BadRequestException("Google id_token is missing required fields.");
     }
 
     // Create local session via the existing auth flow
@@ -192,7 +200,7 @@ export class OAuthService {
     });
 
     // Generate a short-lived internal code for the app to exchange
-    const internalCode = randomBytes(32).toString('base64url');
+    const internalCode = randomBytes(32).toString("base64url");
 
     // Purge any expired codes before adding a new one
     this.purgeExpiredCodes();
@@ -205,20 +213,20 @@ export class OAuthService {
             id: user.id,
             email: user.email,
             display_name: user.profile?.displayName ?? displayName,
-            handle: user.profile?.handle ?? '',
+            handle: user.profile?.handle ?? "",
             avatar_url: user.profile?.avatarUrl ?? avatarUrl,
             is_verified: user.isVerified,
           }
         : { email, display_name: displayName, avatar_url: avatarUrl },
-      scope: 'read write',
+      scope: "read write",
       codeChallenge: state.codeChallenge,
       expiresAt: Date.now() + this.AUTHORIZATION_CODE_TTL_SECONDS * 1000,
     });
 
     // Redirect the browser (native WebView) to the app's custom scheme
     const redirectUrl = new URL(state.nativeRedirectUri);
-    redirectUrl.searchParams.set('code', internalCode);
-    redirectUrl.searchParams.set('state', state.originalState);
+    redirectUrl.searchParams.set("code", internalCode);
+    redirectUrl.searchParams.set("state", state.originalState);
 
     return { redirectUrl: redirectUrl.toString() };
   }
@@ -233,17 +241,17 @@ export class OAuthService {
 
     if (!pending || pending.expiresAt < Date.now()) {
       this.pendingNativeCodes.delete(dto.code);
-      throw new BadRequestException('Authorization code is invalid or expired.');
+      throw new BadRequestException("Authorization code is invalid or expired.");
     }
 
     // Validate PKCE: SHA256(code_verifier) must match stored code_challenge
-    const challengeFromVerifier = createHash('sha256')
+    const challengeFromVerifier = createHash("sha256")
       .update(dto.code_verifier)
-      .digest('base64url');
+      .digest("base64url");
 
     if (!this.timingSafeCompare(challengeFromVerifier, pending.codeChallenge)) {
       this.pendingNativeCodes.delete(dto.code);
-      throw new BadRequestException('invalid_pkce');
+      throw new BadRequestException("invalid_pkce");
     }
 
     // Consume code (single use)
@@ -266,16 +274,16 @@ export class OAuthService {
   }
 
   private decodeIdTokenPayload(idToken: string): Record<string, any> {
-    const parts = idToken.split('.');
+    const parts = idToken.split(".");
     if (parts.length < 2) {
-      throw new BadRequestException('Invalid id_token format.');
+      throw new BadRequestException("Invalid id_token format.");
     }
 
     try {
-      const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
+      const payload = Buffer.from(parts[1], "base64url").toString("utf-8");
       return JSON.parse(payload);
     } catch {
-      throw new BadRequestException('Unable to decode id_token payload.');
+      throw new BadRequestException("Unable to decode id_token payload.");
     }
   }
 
@@ -283,13 +291,13 @@ export class OAuthService {
     redirectUri: string | undefined,
     fallback: string,
   ): string {
-    const normalized = (redirectUri ?? '').trim();
+    const normalized = (redirectUri ?? "").trim();
     if (normalized && this.allowedNativeRedirectUris.has(normalized)) {
       return normalized;
     }
 
     if (normalized) {
-      throw new BadRequestException('invalid_redirect_uri');
+      throw new BadRequestException("invalid_redirect_uri");
     }
 
     return fallback;
@@ -304,7 +312,7 @@ export class OAuthService {
    * This prevents database breach attackers from getting raw tokens.
    */
   private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
+    return createHash("sha256").update(token).digest("hex");
   }
 
   /**
@@ -312,7 +320,7 @@ export class OAuthService {
    * 32 bytes = 256 bits, base64-encoded.
    */
   private generateRandomToken(bytes: number = 32): string {
-    return randomBytes(bytes).toString('base64url');
+    return randomBytes(bytes).toString("base64url");
   }
 
   /**
@@ -335,20 +343,17 @@ export class OAuthService {
    * Returns the client if valid; throws UnauthorizedException otherwise.
    * Uses timing-safe comparison to prevent secret enumeration attacks.
    */
-  async validateClientCredentials(
-    clientId: string,
-    clientSecret: string,
-  ): Promise<any> {
+  async validateClientCredentials(clientId: string, clientSecret: string): Promise<any> {
     const client = await this.getActiveClient(clientId);
 
     if (!clientSecret) {
-      throw new UnauthorizedException('Invalid client credentials');
+      throw new UnauthorizedException("Invalid client credentials");
     }
 
     // Constant-time comparison of secrets
     const secretHash = this.hashToken(clientSecret);
     if (!this.timingSafeCompare(secretHash, client.clientSecretHash)) {
-      throw new UnauthorizedException('Invalid client credentials');
+      throw new UnauthorizedException("Invalid client credentials");
     }
 
     return client;
@@ -362,8 +367,8 @@ export class OAuthService {
       where: { clientId },
     });
 
-    if (!client || !client.isActive) {
-      throw new UnauthorizedException('Invalid client credentials');
+    if (!client?.isActive) {
+      throw new UnauthorizedException("Invalid client credentials");
     }
 
     return client;
@@ -399,22 +404,20 @@ export class OAuthService {
       where: { clientId },
     });
 
-    if (!client || !client.isActive) {
-      throw new BadRequestException('invalid_client');
+    if (!client?.isActive) {
+      throw new BadRequestException("invalid_client");
     }
 
     // Check redirect URI is registered
     if (!client.redirectUris.some((uri: string) => uri === redirectUri)) {
-      throw new BadRequestException('invalid_redirect_uri');
+      throw new BadRequestException("invalid_redirect_uri");
     }
 
     // Validate scopes are within allowed for this client
-    const requestedScopes = scope.split(' ').filter((s: string) => s);
-    const validScopes = requestedScopes.every((s: string) =>
-      client.allowedScopes.includes(s),
-    );
+    const requestedScopes = scope.split(" ").filter((s: string) => s);
+    const validScopes = requestedScopes.every((s: string) => client.allowedScopes.includes(s));
     if (!validScopes) {
-      throw new BadRequestException('invalid_scope');
+      throw new BadRequestException("invalid_scope");
     }
 
     // Generate authorization code (one-time use, expires in 60 seconds)
@@ -438,7 +441,7 @@ export class OAuthService {
         },
       });
     } catch (error) {
-      throw new BadRequestException('Failed to generate authorization code');
+      throw new BadRequestException("Failed to generate authorization code");
     }
 
     // Return the raw code and state to the frontend (for redirect)
@@ -470,14 +473,14 @@ export class OAuthService {
     codeVerifier?: string,
   ): Promise<{
     access_token: string;
-    token_type: 'Bearer';
+    token_type: "Bearer";
     refresh_token: string;
     expires_in: number;
     scope: string;
     user?: any;
   }> {
-    if (!clientId || !clientId.trim() || !code || !code.trim() || !redirectUri || !redirectUri.trim()) {
-      throw new BadRequestException('invalid_request');
+    if (!clientId?.trim() || !code?.trim() || !redirectUri?.trim()) {
+      throw new BadRequestException("invalid_request");
     }
 
     this.purgeExpiredCodes();
@@ -488,44 +491,45 @@ export class OAuthService {
     // Native app flow: consume in-memory authorization code minted by processGoogleNativeCallback.
     if (pendingNativeCode) {
       if (!isNativeClient) {
-        throw new UnauthorizedException('Invalid client credentials');
+        throw new UnauthorizedException("Invalid client credentials");
       }
 
       if (pendingNativeCode.expiresAt < Date.now()) {
         this.pendingNativeCodes.delete(code);
-        throw new BadRequestException('invalid_grant');
+        throw new BadRequestException("invalid_grant");
       }
 
-      if (!codeVerifier || !codeVerifier.trim()) {
-        throw new BadRequestException('invalid_request');
+      if (!codeVerifier?.trim()) {
+        throw new BadRequestException("invalid_request");
       }
 
-      const calculatedChallenge = createHash('sha256')
-        .update(codeVerifier)
-        .digest('base64url');
+      const calculatedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
-      if (!pendingNativeCode.codeChallenge || !this.timingSafeCompare(calculatedChallenge, pendingNativeCode.codeChallenge)) {
+      if (
+        !pendingNativeCode.codeChallenge ||
+        !this.timingSafeCompare(calculatedChallenge, pendingNativeCode.codeChallenge)
+      ) {
         this.pendingNativeCodes.delete(code);
-        throw new BadRequestException('invalid_pkce');
+        throw new BadRequestException("invalid_pkce");
       }
 
       this.pendingNativeCodes.delete(code);
 
       return {
         access_token: pendingNativeCode.accessToken,
-        token_type: 'Bearer' as const,
+        token_type: "Bearer" as const,
         refresh_token: pendingNativeCode.refreshToken,
         expires_in: this.ACCESS_TOKEN_TTL_SECONDS,
-        scope: pendingNativeCode.scope || 'read write',
+        scope: pendingNativeCode.scope || "read write",
         user: pendingNativeCode.user,
       };
     }
 
     // 1. Validate client authentication.
     // Public clients are allowed only when PKCE is present.
-    const isPublicPkceRequest = !clientSecret && !!codeVerifier && !isNativeClient;
+    const isPublicPkceRequest = !clientSecret && Boolean(codeVerifier) && !isNativeClient;
     if (!clientSecret && !isPublicPkceRequest) {
-      throw new UnauthorizedException('Invalid client credentials');
+      throw new UnauthorizedException("Invalid client credentials");
     }
 
     const client = isPublicPkceRequest
@@ -540,39 +544,37 @@ export class OAuthService {
     });
 
     if (!authCode || !client || authCode.clientId !== client.id) {
-      throw new BadRequestException('invalid_grant');
+      throw new BadRequestException("invalid_grant");
     }
 
     if (authCode.consumedAt) {
-      throw new BadRequestException('invalid_grant'); // Code already used
+      throw new BadRequestException("invalid_grant"); // Code already used
     }
 
     if (authCode.expiresAt < new Date()) {
-      throw new BadRequestException('invalid_grant'); // Code expired
+      throw new BadRequestException("invalid_grant"); // Code expired
     }
 
     if (authCode.redirectUri !== redirectUri) {
-      throw new BadRequestException('invalid_grant'); // redirect_uri mismatch
+      throw new BadRequestException("invalid_grant"); // redirect_uri mismatch
     }
 
     // Public clients must use PKCE-protected codes.
     if (isPublicPkceRequest && !authCode.codeChallenge) {
-      throw new BadRequestException('invalid_request');
+      throw new BadRequestException("invalid_request");
     }
 
     // 3. Validate PKCE if it was used
     if (authCode.codeChallenge) {
       if (!codeVerifier) {
-        throw new BadRequestException('invalid_request'); // PKCE required but missing verifier
+        throw new BadRequestException("invalid_request"); // PKCE required but missing verifier
       }
 
       // Verify code_verifier: SHA256(code_verifier) should equal code_challenge
-      const calculatedChallenge = createHash('sha256')
-        .update(codeVerifier)
-        .digest('base64url');
+      const calculatedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
       if (!this.timingSafeCompare(calculatedChallenge, authCode.codeChallenge)) {
-        throw new BadRequestException('invalid_pkce');
+        throw new BadRequestException("invalid_pkce");
       }
     }
 
@@ -604,14 +606,14 @@ export class OAuthService {
         },
       });
     } catch (error) {
-      throw new BadRequestException('Failed to issue tokens');
+      throw new BadRequestException("Failed to issue tokens");
     }
 
     // 7. Return tokens
     // token_type: 'Bearer' is required by RFC 6749 section 5.1.
     return {
       access_token: accessToken,
-      token_type: 'Bearer' as const,
+      token_type: "Bearer" as const,
       refresh_token: refreshToken,
       expires_in: this.ACCESS_TOKEN_TTL_SECONDS,
       scope: authCode.scope,
@@ -641,7 +643,13 @@ export class OAuthService {
     clientId: string,
     clientSecret: string,
     refreshToken: string,
-  ): Promise<{ access_token: string; token_type: 'Bearer'; refresh_token: string; expires_in: number; scope: string }> {
+  ): Promise<{
+    access_token: string;
+    token_type: "Bearer";
+    refresh_token: string;
+    expires_in: number;
+    scope: string;
+  }> {
     // 1. Validate client credentials
     const client = await this.validateClientCredentials(clientId, clientSecret);
 
@@ -653,15 +661,15 @@ export class OAuthService {
     });
 
     if (!tokenRecord || tokenRecord.clientId !== client.id) {
-      throw new BadRequestException('invalid_grant');
+      throw new BadRequestException("invalid_grant");
     }
 
     if (tokenRecord.revokedAt) {
-      throw new BadRequestException('invalid_grant'); // Token revoked
+      throw new BadRequestException("invalid_grant"); // Token revoked
     }
 
     if (tokenRecord.refreshExpiresAt && tokenRecord.refreshExpiresAt < new Date()) {
-      throw new BadRequestException('invalid_grant'); // Refresh token expired
+      throw new BadRequestException("invalid_grant"); // Refresh token expired
     }
 
     // 3. Revoke the old token pair
@@ -692,14 +700,14 @@ export class OAuthService {
         },
       });
     } catch (error) {
-      throw new BadRequestException('Failed to refresh token');
+      throw new BadRequestException("Failed to refresh token");
     }
 
     // 6. Return new tokens
     // token_type: 'Bearer' is required by RFC 6749 section 5.1.
     return {
       access_token: newAccessToken,
-      token_type: 'Bearer' as const,
+      token_type: "Bearer" as const,
       refresh_token: newRefreshToken,
       expires_in: this.ACCESS_TOKEN_TTL_SECONDS,
       scope: tokenRecord.scope,
@@ -743,10 +751,7 @@ export class OAuthService {
     const tokenRecord = await this.db.apiAccessToken.findFirst({
       where: {
         clientId: client.id,
-        OR: [
-          { accessTokenHash: tokenHash },
-          { refreshTokenHash: tokenHash },
-        ],
+        OR: [{ accessTokenHash: tokenHash }, { refreshTokenHash: tokenHash }],
       },
     });
 
@@ -758,6 +763,6 @@ export class OAuthService {
     }
 
     // 4. Always return success (RFC 7009 compliance)
-    return { message: 'Token revoked successfully' };
+    return { message: "Token revoked successfully" };
   }
 }

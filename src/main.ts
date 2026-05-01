@@ -1,11 +1,15 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { SocketIoAdapter } from "./common/adapters/socket-io.adapter";
+import { ConfigService } from "@nestjs/config";
+import * as jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import * as path from "path";
 import { AppModule } from "./app.module";
 import { GlobalHttpExceptionFilter } from "./common/filters/global-http-exception.filter";
+import { PrismaService } from "./prisma/prisma.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -34,7 +38,7 @@ async function bootstrap() {
   // ── Global prefix ────────────────────────────────────────────────────────────
   app.setGlobalPrefix("api/v1");
 
-  // ── Helmet — Relaxed for development/MVP ──────────────────────────────────────
+  // ── Helmet - Relaxed for development/MVP ──────────────────────────────────────
   // Security headers are less strict to allow frontend integration.
   app.use(
     helmet({
@@ -55,10 +59,10 @@ async function bootstrap() {
         },
       },
 
-      // X-Frame-Options: DENY — belt-and-suspenders alongside frameAncestors.
+      // X-Frame-Options: DENY - belt-and-suspenders alongside frameAncestors.
       frameguard: { action: "deny" },
 
-      // HTTP Strict Transport Security — only in production where TLS is used.
+      // HTTP Strict Transport Security - only in production where TLS is used.
       // Tells browsers to always use HTTPS for this domain for 1 year.
       hsts: isProduction
         ? {
@@ -91,10 +95,10 @@ async function bootstrap() {
 
       // Cross-Origin-Embedder-Policy: credentialless
       // Prevents documents from loading cross-origin resources that do not grant
-      // permission — defence-in-depth for Spectre-style attacks.
-      crossOriginEmbedderPolicy: false, // keep off — breaks some OAuth redirects
+      // permission - defence-in-depth for Spectre-style attacks.
+      crossOriginEmbedderPolicy: false, // keep off - breaks some OAuth redirects
 
-      // Permissions-Policy — revoke access to sensitive browser APIs.
+      // Permissions-Policy - revoke access to sensitive browser APIs.
       // helmet does not set this natively; we add it as a custom header below.
     }),
   );
@@ -120,7 +124,7 @@ async function bootstrap() {
     next();
   });
 
-  // ── Request body size limit — OWASP A05 / DoS prevention ────────────────────
+  // ── Request body size limit - OWASP A05 / DoS prevention ────────────────────
   // Since we disabled NestJS's default body parser (bodyParser: false above),
   // these are now the ONLY JSON/urlencoded parsers on the Express stack.
   // Reject large payloads before they reach any controller.
@@ -129,8 +133,8 @@ async function bootstrap() {
   // Stripe webhook requires the raw body for HMAC signature verification.
   // This middleware captures raw bytes before JSON parsing, for the webhook route.
   app.use(
-    '/api/v1/subscriptions/webhook',
-    require('express').raw({ type: 'application/json', limit: '64kb' }),
+    "/api/v1/subscriptions/webhook",
+    require("express").raw({ type: "application/json", limit: "64kb" }),
     (req: any, _res: any, next: any) => {
       req.rawBody = req.body; // preserve Buffer for signature check
       next();
@@ -145,21 +149,98 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // ── Local static file serving ────────────────────────────────────────────────
-  // Serves uploaded images from /uploads directory when using local storage.
-  // Placed before CORS so paths remain /uploads/… (not wrapped in global prefix).
-  if (process.env.STORAGE_PROVIDER !== 's3') {
-    const uploadDir = path.resolve(
-      process.env.LOCAL_UPLOAD_DIR ?? './uploads',
-    );
-    app.use('/uploads', require('express').static(uploadDir));
+  // Serves uploaded images and audio from /uploads when using local storage.
+  // Placed before CORS so paths remain /uploads/... (not wrapped in global prefix).
+  //
+  // SECURITY: Audio track files are private content — they must only be served
+  // to authenticated users. Public image assets (avatars, cover art) can remain
+  // unauthenticated since they are intended to be publicly visible.
+  if (process.env.STORAGE_PROVIDER !== "s3") {
+    const uploadDir = path.resolve(process.env.LOCAL_UPLOAD_DIR ?? "./uploads");
+
+    // Retrieve config values from the NestJS DI container so we reuse the same
+    // JWT settings as the strategy (avoids duplicating env variable names).
+    const configService = app.get(ConfigService);
+    const prismaService = app.get(PrismaService);
+    const jwtSecret =
+      configService.get<string>("security.jwtSecret") ?? process.env.JWT_SECRET ?? "";
+    const jwtIssuer = configService.get<string>("security.jwtIssuer") ?? "spotly-api";
+    const jwtAudience = configService.get<string>("security.jwtAudience") ?? "spotly-client";
+
+    // Public image assets — avatars and cover art are not sensitive.
+    app.use("/uploads/avatar", require("express").static(path.join(uploadDir, "avatar")));
+    app.use("/uploads/cover", require("express").static(path.join(uploadDir, "cover")));
+
+    // Public preview clips — short 30-second clips intentionally accessible to all
+    // users (free-tier preview). No auth required; these are not full tracks.
+    app.use("/uploads/previews", require("express").static(path.join(uploadDir, "previews")));
+
+    // Protected audio assets — require a valid, non-revoked JWT.
+    // Note: cookieParser() is registered above so req.cookies is available here.
+    app.use("/uploads/tracks", async (req: any, res: any, next: any) => {
+      // Extract token from httpOnly cookie (browser) or Authorization header
+      // (non-browser clients such as mobile apps).
+      const token: string | undefined =
+        req.cookies?.access_token ?? req.headers?.authorization?.replace(/^Bearer\s+/i, "");
+
+      if (!token) {
+        return res.status(401).json({
+          statusCode: 401,
+          code: "NOT_AUTHENTICATED",
+          message: "Authentication is required to stream audio.",
+        });
+      }
+
+      let payload: any;
+      try {
+        payload = jwt.verify(token, jwtSecret, {
+          issuer: jwtIssuer,
+          audience: jwtAudience,
+        });
+      } catch {
+        return res.status(401).json({
+          statusCode: 401,
+          code: "NOT_AUTHENTICATED",
+          message: "Invalid or expired token.",
+        });
+      }
+
+      // If the token carries a session ID (jti), verify the session is still
+      // active in the database. This enforces immediate revocation after logout.
+      if (payload?.jti) {
+        try {
+          const session = await prismaService.userSession.findUnique({
+            where: { id: payload.jti },
+            select: { revokedAt: true, expiresAt: true },
+          });
+          if (session?.revokedAt !== null || session.expiresAt < new Date()) {
+            return res.status(401).json({
+              statusCode: 401,
+              code: "SESSION_REVOKED",
+              message: "Session has been revoked. Please log in again.",
+            });
+          }
+        } catch {
+          // Treat DB errors conservatively — deny access rather than fail open.
+          return res.status(503).json({
+            statusCode: 503,
+            code: "SERVICE_UNAVAILABLE",
+            message: "Unable to verify session. Please try again.",
+          });
+        }
+      }
+
+      next();
+    });
+    app.use("/uploads/tracks", require("express").static(path.join(uploadDir, "tracks")));
   }
 
   // ── CORS ─────────────────────────────────────────────────────────────────────
-  // CORS is a browser security mechanism. It only affects web browsers — mobile
+  // CORS is a browser security mechanism. It only affects web browsers - mobile
   // apps and server-to-server calls are NOT restricted by CORS at all.
   //
   // For browsers, we need to explicitly allow each frontend origin.
-  // Since our auth uses httpOnly cookies, we MUST restrict to known origins —
+  // Since our auth uses httpOnly cookies, we MUST restrict to known origins -
   // otherwise any website could silently trigger authenticated requests on
   // behalf of your users (CSRF via cookie attachment).
   //
@@ -177,13 +258,16 @@ async function bootstrap() {
   ];
 
   const rawOrigins = process.env.ALLOWED_ORIGINS ?? process.env.CLIENT_URL ?? "";
-  const envOrigins = rawOrigins.split(",").map((o) => o.trim()).filter(Boolean);
+  const envOrigins = rawOrigins
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   // Merge env-configured origins with the hardcoded dev defaults (deduplicated)
   const allowedOrigins = [...new Set([...defaultDevOrigins, ...envOrigins])];
 
   app.enableCors({
-    // Pass the array to Express — it will match the incoming Origin header
+    // Pass the array to Express - it will match the incoming Origin header
     // against this list and reflect back only the matched one.
     // If the origin is not in the list the browser gets no CORS headers
     // and blocks the request.
@@ -194,11 +278,11 @@ async function bootstrap() {
     maxAge: 600,
   });
 
-  // ── Global ValidationPipe — OWASP A03 (Injection) ───────────────────────────
-  // • whitelist         : strips properties not defined in the DTO class.
-  // • forbidNonWhitelisted : rejects requests that include extra properties.
-  // • transform         : auto-converts query strings to their DTO types.
-  // • transformOptions  : enables implicit type conversion (e.g. "true" → true).
+  // ── Global ValidationPipe - OWASP A03 (Injection) ───────────────────────────
+  // - whitelist         : strips properties not defined in the DTO class.
+  // - forbidNonWhitelisted : rejects requests that include extra properties.
+  // - transform         : auto-converts query strings to their DTO types.
+  // - transformOptions  : enables implicit type conversion (e.g. "true" -> true).
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -211,7 +295,7 @@ async function bootstrap() {
     }),
   );
 
-  // ── Global exception filter — OWASP A05 ─────────────────────────────────────
+  // ── Global exception filter - OWASP A05 ─────────────────────────────────────
   // Ensures every error response follows the same { statusCode, error, message,
   // timestamp, path } shape.  Never leaks stack traces or internal details.
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
@@ -223,16 +307,13 @@ async function bootstrap() {
   // By default Swagger is ON in development and OFF in production.
   // You can override this by setting SWAGGER_ENABLED=true in .env
   // (useful for team/staging servers where NODE_ENV=production but you
-  // still need the docs — e.g. for Postman import or cross-team integration).
-  const swaggerEnabled =
-    process.env.SWAGGER_ENABLED === "true" || !isProduction;
+  // still need the docs - e.g. for Postman import or cross-team integration).
+  const swaggerEnabled = process.env.SWAGGER_ENABLED === "true" || !isProduction;
 
   if (swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle("IQA3 API")
-      .setDescription(
-        "Social Streaming Platform backend API documentation.",
-      )
+      .setDescription("Social Streaming Platform backend API documentation.")
       .setVersion("1.0")
       .addCookieAuth("access_token", {
         type: "apiKey",
@@ -244,6 +325,11 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api/docs", app, document);
   }
+
+  // Use a single shared socket.io Server for all gateways so multiple
+  // @WebSocketGateway decorators don't each spin up their own Server on the
+  // same HTTP port (which causes upgrade-event conflicts and silent failures).
+  app.useWebSocketAdapter(new SocketIoAdapter(app));
 
   await app.listen(port);
 

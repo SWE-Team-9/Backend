@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -9,11 +8,12 @@ import {
 import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { MailService } from "../mail/mail.service";
 import {
-  WarnUserDto,
-  SuspendUserDto,
   BanUserDto,
   RestoreUserDto,
+  SuspendUserDto,
+  WarnUserDto,
 } from "./dto/user-enforcement.dto";
 
 @Injectable()
@@ -21,6 +21,7 @@ export class UserEnforcementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
   ) {}
 
   // ─── Re-auth helpers ─────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ export class UserEnforcementService {
       where: { id: adminId },
       select: { systemRole: true },
     });
-    if (!admin || admin.systemRole !== "ADMIN") {
+    if (admin?.systemRole !== "ADMIN") {
       throw new ForbiddenException({
         code: "INSUFFICIENT_PERMISSIONS",
         message: "Admin role verification failed.",
@@ -44,11 +45,17 @@ export class UserEnforcementService {
       select: { passwordHash: true },
     });
     if (!admin?.passwordHash) {
-      throw new UnauthorizedException({ code: "INCORRECT_PASSWORD", message: "Cannot verify password." });
+      throw new UnauthorizedException({
+        code: "INCORRECT_PASSWORD",
+        message: "Cannot verify password.",
+      });
     }
     const valid = await argon2.verify(admin.passwordHash, password);
     if (!valid) {
-      throw new UnauthorizedException({ code: "INCORRECT_PASSWORD", message: "Incorrect password." });
+      throw new UnauthorizedException({
+        code: "INCORRECT_PASSWORD",
+        message: "Incorrect password.",
+      });
     }
   }
 
@@ -57,13 +64,17 @@ export class UserEnforcementService {
       where: { id: userId },
       select: {
         id: true,
+        email: true,
         accountStatus: true,
         systemRole: true,
         profile: { select: { displayName: true, handle: true } },
       },
     });
     if (!user || user.accountStatus === "DELETED") {
-      throw new NotFoundException({ code: "USER_NOT_FOUND", message: "User not found." });
+      throw new NotFoundException({
+        code: "USER_NOT_FOUND",
+        message: "User not found.",
+      });
     }
     return user;
   }
@@ -71,10 +82,27 @@ export class UserEnforcementService {
   // ─── Warn ────────────────────────────────────────────────────────────────────
 
   async warnUser(adminId: string, targetUserId: string, dto: WarnUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
+    if (target.systemRole === "ADMIN") {
+      throw new ForbiddenException({
+        code: "CANNOT_WARN_ADMIN",
+        message: "Cannot warn an admin.",
+      });
+    }
+
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -95,7 +123,13 @@ export class UserEnforcementService {
       actorId: adminId,
       entityType: "USER",
       eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "WARN_USER", message: dto.reason },
+      metadata: { actionType: "WARN_USER", reason: dto.reason },
+    });
+
+    void this.mailService.sendAccountWarnedEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
+      reason: dto.reason,
     });
 
     return {
@@ -115,13 +149,26 @@ export class UserEnforcementService {
   // ─── Suspend ─────────────────────────────────────────────────────────────────
 
   async suspendUser(adminId: string, targetUserId: string, dto: SuspendUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
-    if (target.systemRole === "ADMIN" || target.systemRole === "MODERATOR") {
-      throw new ForbiddenException({ code: "CANNOT_SUSPEND_ADMIN", message: "Cannot suspend an admin or moderator." });
+    if (target.systemRole === "ADMIN") {
+      throw new ForbiddenException({
+        code: "CANNOT_SUSPEND_ADMIN",
+        message: "Cannot suspend an admin.",
+      });
     }
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -135,8 +182,11 @@ export class UserEnforcementService {
         where: { id: targetUserId },
         data: { accountStatus: "SUSPENDED", suspendedUntil },
       }),
-      // Revoke all active sessions
-      this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
+      // Revoke all active sessions (preserve records for audit trail)
+      this.prisma.userSession.updateMany({
+        where: { userId: targetUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
 
     const action = await this.prisma.moderationAction.create({
@@ -153,8 +203,15 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "SUSPEND_USER", suspendedUntil },
+      eventType: "ACCOUNT_SUSPENDED",
+      metadata: { reason: dto.reason, suspendedUntil: suspendedUntil.toISOString() },
+    });
+
+    void this.mailService.sendAccountSuspendedEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
+      reason: dto.reason,
+      suspendedUntil,
     });
 
     return {
@@ -176,13 +233,26 @@ export class UserEnforcementService {
   // ─── Ban ─────────────────────────────────────────────────────────────────────
 
   async banUser(adminId: string, targetUserId: string, dto: BanUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.systemRole === "ADMIN") {
-      throw new ForbiddenException({ code: "CANNOT_BAN_ADMIN", message: "Cannot ban an admin." });
+      throw new ForbiddenException({
+        code: "CANNOT_BAN_ADMIN",
+        message: "Cannot ban an admin.",
+      });
     }
     if (target.accountStatus === "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_BANNED", message: "User is already banned." });
+      throw new ConflictException({
+        code: "USER_ALREADY_BANNED",
+        message: "User is already banned.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -202,10 +272,14 @@ export class UserEnforcementService {
         where: { id: targetUserId },
         data: { accountStatus: "BANNED" },
       }),
-      this.prisma.userSession.deleteMany({ where: { userId: targetUserId } }),
+      // Revoke all active sessions (preserve records for audit trail)
+      this.prisma.userSession.updateMany({
+        where: { userId: targetUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
-    const tracksResult = txResults[0] as { count: number };
-    const playlistsResult = txResults[1] as { count: number };
+    const tracksResult = txResults[0];
+    const playlistsResult = txResults[1];
     void playlistsResult;
 
     const action = await this.prisma.moderationAction.create({
@@ -222,8 +296,14 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "BAN_USER" },
+      eventType: "ACCOUNT_BANNED",
+      metadata: { reason: dto.reason },
+    });
+
+    void this.mailService.sendAccountBannedEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
+      reason: dto.reason,
     });
 
     return {
@@ -245,10 +325,20 @@ export class UserEnforcementService {
   // ─── Restore ─────────────────────────────────────────────────────────────────
 
   async restoreUser(adminId: string, targetUserId: string, dto: RestoreUserDto) {
+    if (adminId === targetUserId) {
+      throw new ForbiddenException({
+        code: "CANNOT_SELF_ENFORCE",
+        message: "Admins cannot perform enforcement actions on themselves.",
+      });
+    }
+
     const target = await this.ensureTargetUser(targetUserId);
 
     if (target.accountStatus !== "SUSPENDED" && target.accountStatus !== "BANNED") {
-      throw new ConflictException({ code: "USER_ALREADY_ACTIVE", message: "User is already active." });
+      throw new ConflictException({
+        code: "USER_ALREADY_ACTIVE",
+        message: "User is already active.",
+      });
     }
 
     await this.reVerifyAdminRole(adminId);
@@ -289,8 +379,13 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "RESTORE_CONTENT" },
+      eventType: "ACCOUNT_RESTORED",
+      metadata: {},
+    });
+
+    void this.mailService.sendAccountRestoredEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
     });
 
     return {

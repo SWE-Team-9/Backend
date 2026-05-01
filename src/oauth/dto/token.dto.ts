@@ -1,9 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * OAuth2 Token Request DTO (RFC 6749)
  * POST /api/v1/oauth/token body
- * 
+ *
  * Supports two grant types:
  * 1. grant_type=authorization_code (exchange code for tokens)
  * 2. grant_type=refresh_token (exchange refresh token for new access token)
@@ -14,6 +15,7 @@ export class TokenDto {
    * - "authorization_code" (RFC 6749, section 1.3.1)
    * - "refresh_token" (RFC 6749, section 6)
    */
+  @ApiProperty({ enum: ['authorization_code', 'refresh_token'], example: 'authorization_code', description: 'OAuth2 grant type' })
   @IsString()
   @IsNotEmpty()
   @IsIn(['authorization_code', 'refresh_token'])
@@ -22,25 +24,28 @@ export class TokenDto {
   /**
    * REQUIRED. Client identifier (issued during client registration).
    */
+  @ApiProperty({ example: 'client_abc123', description: 'Client identifier issued during registration' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(128)
   client_id!: string;
 
   /**
-    * OPTIONAL for public clients using PKCE authorization code flow.
-    * REQUIRED for confidential clients and refresh token grant.
+   * OPTIONAL for public clients using PKCE authorization code flow.
+   * REQUIRED for confidential clients and refresh token grant.
    */
-    @IsOptional()
+  @ApiPropertyOptional({ example: 'client_secret_xyz', description: 'Client secret (required for confidential clients and refresh_token grant)' })
+  @IsOptional()
   @IsString()
   @MaxLength(512)
-    client_secret?: string;
+  client_secret?: string;
 
   /**
    * REQUIRED for grant_type=authorization_code.
    * The authorization code previously issued by the authorization endpoint.
    * Base64url tokens are ~43 chars; allow up to 256 for future-proofing.
    */
+  @ApiPropertyOptional({ example: 'auth_code_abc123', description: 'Authorization code from /oauth/authorize (required for authorization_code grant)' })
   @IsOptional()
   @IsString()
   @MaxLength(256)
@@ -50,6 +55,7 @@ export class TokenDto {
    * REQUIRED for grant_type=authorization_code.
    * Must match the redirect_uri from the authorization request.
    */
+  @ApiPropertyOptional({ example: 'https://example.com/callback', description: 'Must match the redirect_uri from the authorization request' })
   @IsOptional()
   @IsString()
   @MaxLength(2048)
@@ -60,6 +66,7 @@ export class TokenDto {
    * The original code_verifier (server verifies SHA256(code_verifier) matches code_challenge).
    * RFC 7636 specifies 43-128 characters.
    */
+  @ApiPropertyOptional({ example: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk', description: 'PKCE code verifier (required if code_challenge was used)' })
   @IsOptional()
   @IsString()
   @MaxLength(128)
@@ -69,6 +76,7 @@ export class TokenDto {
    * REQUIRED for grant_type=refresh_token.
    * The refresh token issued by the authorization server.
    */
+  @ApiPropertyOptional({ example: 'refresh_token_xyz789', description: 'Refresh token (required for refresh_token grant)' })
   @IsOptional()
   @IsString()
   @MaxLength(512)

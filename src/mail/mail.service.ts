@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 type MailTransporter = {
@@ -119,6 +115,114 @@ export class MailService {
     });
   }
 
+  async sendAccountSuspendedEmail(params: {
+    to: string;
+    displayName?: string;
+    reason: string;
+    suspendedUntil: Date;
+  }): Promise<void> {
+    const until = params.suspendedUntil.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 account has been suspended",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "Your IQA3 account has been temporarily suspended.",
+        `Reason: ${params.reason}`,
+        `Suspension ends: ${until}`,
+        "",
+        "If you believe this is a mistake, please contact our support team.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>Your IQA3 account has been temporarily suspended.</p>",
+        `<p><strong>Reason:</strong> ${this.escapeHtml(params.reason)}</p>`,
+        `<p><strong>Suspension ends:</strong> ${this.escapeHtml(until)}</p>`,
+        "<p>If you believe this is a mistake, please contact our support team.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendAccountBannedEmail(params: {
+    to: string;
+    displayName?: string;
+    reason: string;
+  }): Promise<void> {
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 account has been permanently banned",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "Your IQA3 account has been permanently banned.",
+        `Reason: ${params.reason}`,
+        "",
+        "If you believe this is a mistake, please contact our support team.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>Your IQA3 account has been permanently banned.</p>",
+        `<p><strong>Reason:</strong> ${this.escapeHtml(params.reason)}</p>`,
+        "<p>If you believe this is a mistake, please contact our support team.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendAccountRestoredEmail(params: {
+    to: string;
+    displayName?: string;
+  }): Promise<void> {
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 account has been restored",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "Your IQA3 account has been restored. You can now log in and access your content.",
+        "",
+        "Thank you for your patience.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>Your IQA3 account has been restored. You can now log in and access your content.</p>",
+        "<p>Thank you for your patience.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendAccountWarnedEmail(params: {
+    to: string;
+    displayName?: string;
+    reason: string;
+  }): Promise<void> {
+    await this.sendMail({
+      to: params.to,
+      subject: "Warning: Policy violation on your IQA3 account",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "You have received a formal warning on your IQA3 account.",
+        `Reason: ${params.reason}`,
+        "",
+        "Further violations may result in suspension or a permanent ban.",
+        "If you believe this is a mistake, please contact our support team.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>You have received a formal warning on your IQA3 account.</p>",
+        `<p><strong>Reason:</strong> ${this.escapeHtml(params.reason)}</p>`,
+        "<p>Further violations may result in suspension or a permanent ban.</p>",
+        "<p>If you believe this is a mistake, please contact our support team.</p>",
+      ].join(""),
+    });
+  }
+
   async sendPaymentFailedEmail(params: {
     to: string;
     displayName?: string;
@@ -166,7 +270,7 @@ export class MailService {
         `Your free trial for ${params.planName} ends on ${endsOn}.`,
         `After that, you will be automatically charged ${priceDisplay}.`,
         "",
-        "No action is needed — your subscription will renew automatically.",
+        "No action is needed - your subscription will renew automatically.",
         "If you'd like to cancel before your trial ends, go to Settings > Subscription in the app.",
         "",
         "Thanks for being part of IQA3!",
@@ -175,7 +279,7 @@ export class MailService {
         `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
         `<p>Your free trial for <strong>${this.escapeHtml(params.planName)}</strong> ends on <strong>${this.escapeHtml(endsOn)}</strong>.</p>`,
         `<p>After that, you will be automatically charged <strong>${this.escapeHtml(priceDisplay)}</strong>.</p>`,
-        "<p>No action is needed — your subscription will renew automatically.</p>",
+        "<p>No action is needed - your subscription will renew automatically.</p>",
         "<p>If you'd like to cancel before your trial ends, go to <strong>Settings &gt; Subscription</strong> in the app.</p>",
         "<p>Thanks for being part of IQA3!</p>",
       ].join(""),
@@ -203,7 +307,7 @@ export class MailService {
         `Hi ${params.displayName ?? "there"},`,
         "",
         `Welcome to your free ${params.planName} trial!`,
-        `You have full access until ${endsOn} — completely free.`,
+        `You have full access until ${endsOn} - completely free.`,
         "",
         `After your trial ends, you will be automatically charged ${priceDisplay}.`,
         "We will send you a reminder email approximately 48 hours before that happens.",
@@ -215,7 +319,7 @@ export class MailService {
       html: [
         `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
         `<p>Welcome to your free <strong>${this.escapeHtml(params.planName)}</strong> trial!</p>`,
-        `<p>You have full access until <strong>${this.escapeHtml(endsOn)}</strong> — completely free.</p>`,
+        `<p>You have full access until <strong>${this.escapeHtml(endsOn)}</strong> - completely free.</p>`,
         `<p>After your trial ends, you will be automatically charged <strong>${this.escapeHtml(priceDisplay)}</strong>.</p>`,
         "<p>We will send you a reminder email approximately 48 hours before that happens.</p>",
         "<p>To cancel at any time before the trial ends, go to <strong>Settings &gt; Subscription</strong> in the app.</p>",
@@ -301,7 +405,7 @@ export class MailService {
   }): Promise<void> {
     await this.sendMail({
       to: params.to,
-      subject: "Your IQA3 payment failed — subscription paused",
+      subject: "Your IQA3 payment failed - subscription paused",
       text: [
         `Hi ${params.displayName ?? "there"},`,
         "",
@@ -413,6 +517,39 @@ export class MailService {
     });
   }
 
+  async sendDowngradeScheduledEmail(params: {
+    to: string;
+    displayName?: string;
+    currentPlanName: string;
+    newPlanName: string;
+    effectiveAt: Date;
+  }): Promise<void> {
+    const effectiveDateStr = params.effectiveAt.toISOString().slice(0, 10);
+    await this.sendMail({
+      to: params.to,
+      subject: `Your IQA3 plan will change to ${params.newPlanName} on ${effectiveDateStr}`,
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        `You've requested a plan downgrade from ${params.currentPlanName} to ${params.newPlanName}.`,
+        "",
+        `Your current ${params.currentPlanName} plan remains active until ${effectiveDateStr}.`,
+        `On ${effectiveDateStr} your plan will automatically switch to ${params.newPlanName}.`,
+        "",
+        "You keep all your current benefits until the switch date.",
+        "If you change your mind, you can cancel this downgrade in Settings > Subscription.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        `<p>You've requested a plan downgrade from <strong>${this.escapeHtml(params.currentPlanName)}</strong> to <strong>${this.escapeHtml(params.newPlanName)}</strong>.</p>`,
+        `<p>Your current <strong>${this.escapeHtml(params.currentPlanName)}</strong> plan remains active until <strong>${effectiveDateStr}</strong>.</p>`,
+        `<p>On <strong>${effectiveDateStr}</strong> your plan will automatically switch to <strong>${this.escapeHtml(params.newPlanName)}</strong>.</p>`,
+        "<p>You keep all your current benefits until the switch date.</p>",
+        "<p>If you change your mind, you can cancel this downgrade in <strong>Settings &gt; Subscription</strong>.</p>",
+      ].join(""),
+    });
+  }
+
   async sendPaymentMethodUpdatedEmail(params: {
     to: string;
     displayName?: string;
@@ -421,8 +558,7 @@ export class MailService {
     expiryMonth: number;
     expiryYear: number;
   }): Promise<void> {
-    const brandDisplay =
-      params.brand.charAt(0).toUpperCase() + params.brand.slice(1).toLowerCase();
+    const brandDisplay = params.brand.charAt(0).toUpperCase() + params.brand.slice(1).toLowerCase();
     const expiryDisplay = `${String(params.expiryMonth).padStart(2, "0")}/${params.expiryYear}`;
     const cardDisplay = `${brandDisplay} ending in ${params.last4}`;
 
@@ -460,8 +596,7 @@ export class MailService {
 
     try {
       const fromAddress =
-        this.configService.get<string>("mail.from") ??
-        "Spotly <noreply@spotly.app>";
+        this.configService.get<string>("mail.from") ?? "Spotly <noreply@spotly.app>";
 
       await transporter.sendMail({
         from: fromAddress,
@@ -489,8 +624,7 @@ export class MailService {
     const user = this.configService.get<string>("mail.user") ?? "";
     const pass = this.configService.get<string>("mail.pass") ?? "";
 
-    const hasConfig =
-      host.trim() !== "" && user.trim() !== "" && pass.trim() !== "";
+    const hasConfig = host.trim() !== "" && user.trim() !== "" && pass.trim() !== "";
     if (!hasConfig) {
       if (!this.warnedMissingConfig) {
         this.warnedMissingConfig = true;
@@ -521,9 +655,7 @@ export class MailService {
     path: "verify-email" | "reset-password" | "confirm-email-change",
     token: string,
   ): string {
-    const clientUrl =
-      this.configService.get<string>("app.clientUrl") ??
-      "http://localhost:5173";
+    const clientUrl = this.configService.get<string>("app.clientUrl") ?? "http://localhost:5173";
     const base = clientUrl.replace(/\/+$/, "");
     const encodedToken = encodeURIComponent(token);
     return `${base}/${path}?token=${encodedToken}`;

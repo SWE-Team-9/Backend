@@ -6,10 +6,12 @@
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
-  S3Client,
-  PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -53,36 +55,21 @@ export class StorageService {
   private readonly cdnUrl: string;
 
   constructor(private readonly config: ConfigService) {
-    this.provider = this.config.get<"local" | "s3">(
-      "storage.provider",
-      "local",
-    );
-    this.localUploadDir = this.config.get<string>(
-      "storage.localUploadDir",
-      "./uploads",
-    );
+    this.provider = this.config.get<"local" | "s3">("storage.provider", "local");
+    this.localUploadDir = this.config.get<string>("storage.localUploadDir", "./uploads");
     this.localUploadUrl = this.config.get<string>(
       "storage.localUploadUrl",
       "http://localhost:3000/uploads",
     );
-    this.maxAvatarBytes = this.config.get<number>(
-      "storage.maxAvatarBytes",
-      5 * 1024 * 1024,
-    );
-    this.maxCoverBytes = this.config.get<number>(
-      "storage.maxCoverBytes",
-      15 * 1024 * 1024,
-    );
+    this.maxAvatarBytes = this.config.get<number>("storage.maxAvatarBytes", 5 * 1024 * 1024);
+    this.maxCoverBytes = this.config.get<number>("storage.maxCoverBytes", 15 * 1024 * 1024);
     this.s3Bucket = this.config.get<string>("storage.s3Bucket", "");
     this.s3Region = this.config.get<string>("storage.s3Region", "us-east-1");
     this.cdnUrl = this.config.get<string>("storage.cdnUrl", "");
 
     if (this.provider === "s3") {
       const accessKeyId = this.config.get<string>("storage.awsAccessKeyId", "");
-      const secretAccessKey = this.config.get<string>(
-        "storage.awsSecretAccessKey",
-        "",
-      );
+      const secretAccessKey = this.config.get<string>("storage.awsSecretAccessKey", "");
       this.s3Client = new S3Client({
         region: this.s3Region,
         ...(accessKeyId && secretAccessKey
@@ -126,11 +113,31 @@ export class StorageService {
     }
   }
 
-  private async uploadToS3(
-    file: Buffer,
-    key: string,
-    mimeType: string,
-  ): Promise<UploadResult> {
+  /**
+   * Generate a short-lived presigned GET URL for an S3 object.
+   * Only valid when the storage provider is 's3'.
+   *
+   * Use this for audio/track assets so the URL expires and cannot be shared
+   * indefinitely. For local storage the caller should use the authenticated
+   * /uploads/tracks route instead.
+   *
+   * @param key        Storage key (e.g. "tracks/uuid.mp3")
+   * @param ttlSeconds URL validity in seconds (default: 3600 = 1 hour)
+   */
+  async getPresignedUrl(key: string, ttlSeconds = 3600): Promise<string> {
+    if (this.provider !== "s3" || !this.s3Client) {
+      throw new InternalServerErrorException("getPresignedUrl requires the s3 storage provider.");
+    }
+    const command = new GetObjectCommand({ Bucket: this.s3Bucket, Key: key });
+    return getSignedUrl(this.s3Client, command, { expiresIn: ttlSeconds });
+  }
+
+  /** Returns true when S3 storage is active (presigned URLs are available). */
+  get isS3(): boolean {
+    return this.provider === "s3";
+  }
+
+  private async uploadToS3(file: Buffer, key: string, mimeType: string): Promise<UploadResult> {
     if (!this.s3Client) {
       throw new InternalServerErrorException("S3 client not initialised.");
     }
@@ -152,24 +159,17 @@ export class StorageService {
   private async deleteFromS3(key: string): Promise<void> {
     if (!this.s3Client) return;
 
-    await this.s3Client.send(
-      new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: key }),
-    );
+    await this.s3Client.send(new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: key }));
   }
 
-  private async uploadToLocal(
-    file: Buffer,
-    key: string,
-  ): Promise<UploadResult> {
+  private async uploadToLocal(file: Buffer, key: string): Promise<UploadResult> {
     const fullPath = path.join(this.localUploadDir, key);
     const resolvedUploadDir = path.resolve(this.localUploadDir);
     const resolvedFilePath = path.resolve(fullPath);
 
     // Prevent path traversal attacks (e.g., key = "../../etc/passwd")
     if (!resolvedFilePath.startsWith(resolvedUploadDir)) {
-      throw new BadRequestException(
-        "Invalid file path. Path traversal is not allowed.",
-      );
+      throw new BadRequestException("Invalid file path. Path traversal is not allowed.");
     }
 
     const dir = path.dirname(resolvedFilePath);
@@ -209,9 +209,7 @@ export class StorageService {
     const limit = type === "avatar" ? this.maxAvatarBytes : this.maxCoverBytes;
     if (bytes > limit) {
       const limitMb = (limit / (1024 * 1024)).toFixed(0);
-      throw new BadRequestException(
-        `File exceeds the ${limitMb} MB limit for ${type} images.`,
-      );
+      throw new BadRequestException(`File exceeds the ${limitMb} MB limit for ${type} images.`);
     }
   }
 }

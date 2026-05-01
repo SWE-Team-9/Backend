@@ -1,5 +1,5 @@
 /**
- * Payment Methods Management — service-level tests.
+ * Payment Methods Management - service-level tests.
  *
  * Covers:
  *  - createBillingPortal() response shape (portalSessionId, portalUrl, capabilities,
@@ -18,7 +18,7 @@
  *  - payment_method.updated webhook: fires email (fire-and-forget)
  *  - payment_method.updated webhook: idempotent (duplicate event ID skipped at top)
  *  - payment_method.updated webhook: no-op when customer ID not found
- *  - User not found → NotFoundException on portal creation
+ *  - User not found -> NotFoundException on portal creation
  */
 
 import { NotFoundException } from '@nestjs/common';
@@ -99,14 +99,42 @@ function makeActiveSub(overrides: Record<string, unknown> = {}) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 const mockPrisma = {
-  track: { count: jest.fn().mockResolvedValue(0), findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
+  track: {
+    count: jest.fn().mockResolvedValue(0),
+    findFirst: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   user: { findUnique: jest.fn() },
-  userSubscription: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}), create: jest.fn().mockResolvedValue({ id: 'new-sub' }), findMany: jest.fn().mockResolvedValue([]) },
-  subscriptionPlan: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-  billingInvoice: { create: jest.fn().mockResolvedValue({ id: 'inv-id' }), findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
-  paymentEvent: { create: jest.fn().mockResolvedValue({ id: 'evt-id' }), findUnique: jest.fn().mockResolvedValue(null) },
-  trialRedemption: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
-  offlineDownload: { upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  userSubscription: {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
+    create: jest.fn().mockResolvedValue({ id: 'new-sub' }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  subscriptionPlan: {
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  billingInvoice: {
+    create: jest.fn().mockResolvedValue({ id: 'inv-id' }),
+    findUnique: jest.fn().mockResolvedValue(null),
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  paymentEvent: {
+    create: jest.fn().mockResolvedValue({ id: 'evt-id' }),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
+  trialRedemption: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+  },
+  offlineDownload: {
+    upsert: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const mockBillingProvider = {
@@ -226,7 +254,11 @@ describe('Payment Methods Management (service)', () => {
 
     it('returns paymentMethodSummary from DB (stored value) when present', async () => {
       const storedPM: PaymentMethodSummary = {
-        brand: 'mastercard', last4: '9999', expiryMonth: 6, expiryYear: 2028, isDefault: true,
+        brand: 'mastercard',
+        last4: '9999',
+        expiryMonth: 6,
+        expiryYear: 2028,
+        isDefault: true,
       };
       mockPrisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub({ paymentMethod: storedPM }),
@@ -256,7 +288,7 @@ describe('Payment Methods Management (service)', () => {
     it('never exposes full card number in response', async () => {
       const result = await service.createBillingPortal(USER_ID);
       const json = JSON.stringify(result);
-      // A full Visa number has 16 digits — 4242424242424242 should never appear
+      // A full Visa number has 16 digits - 4242424242424242 should never appear
       expect(json).not.toMatch(/\b\d{15,16}\b/);
     });
 
@@ -268,9 +300,13 @@ describe('Payment Methods Management (service)', () => {
     });
 
     it('forwards returnUrl to the billing provider', async () => {
-      await service.createBillingPortal(USER_ID, { returnUrl: 'https://app.example.com/billing' });
+      await service.createBillingPortal(USER_ID, {
+        returnUrl: 'https://app.example.com/billing',
+      });
       expect(mockBillingProvider.createBillingPortalSession).toHaveBeenCalledWith(
-        expect.objectContaining({ returnUrl: 'https://app.example.com/billing' }),
+        expect.objectContaining({
+          returnUrl: 'https://app.example.com/billing',
+        }),
       );
     });
 
@@ -301,7 +337,12 @@ describe('Payment Methods Management (service)', () => {
   describe('getMySubscription() with payment method data', () => {
     function makeSubWithPM(pm: PaymentMethodSummary | null) {
       return {
-        ...makeActiveSub({ paymentMethod: pm, paymentMethodSummary: pm ? `${pm.brand.charAt(0).toUpperCase() + pm.brand.slice(1)} ending in ${pm.last4}` : null }),
+        ...makeActiveSub({
+          paymentMethod: pm,
+          paymentMethodSummary: pm
+            ? `${pm.brand.charAt(0).toUpperCase() + pm.brand.slice(1)} ending in ${pm.last4}`
+            : null,
+        }),
         plan: {
           tier: SubscriptionTier.PRO,
           uploadLimit: 100,
@@ -380,12 +421,15 @@ describe('Payment Methods Management (service)', () => {
     });
 
     it('updates paymentMethod JSON and paymentMethodSummary string in DB', async () => {
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: SUB_ID },
           data: expect.objectContaining({
-            paymentMethod: expect.objectContaining({ brand: 'mastercard', last4: '5678' }),
+            paymentMethod: expect.objectContaining({
+              brand: 'mastercard',
+              last4: '5678',
+            }),
             paymentMethodSummary: expect.stringContaining('5678'),
           }),
         }),
@@ -393,7 +437,7 @@ describe('Payment Methods Management (service)', () => {
     });
 
     it('creates a PaymentEvent record for idempotency', async () => {
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       expect(mockPrisma.paymentEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -407,13 +451,15 @@ describe('Payment Methods Management (service)', () => {
 
     it('is idempotent: duplicate event ID is skipped', async () => {
       // Simulate the idempotency guard finding the event on re-delivery
-      mockPrisma.paymentEvent.findUnique.mockResolvedValue({ id: 'existing-evt' });
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      mockPrisma.paymentEvent.findUnique.mockResolvedValue({
+        id: 'existing-evt',
+      });
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       expect(mockPrisma.userSubscription.update).not.toHaveBeenCalled();
     });
 
     it('queues payment method updated email (fire-and-forget)', async () => {
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       // Allow the fire-and-forget promise chain to resolve
       await Promise.resolve();
       await Promise.resolve();
@@ -426,10 +472,20 @@ describe('Payment Methods Management (service)', () => {
     it('is a no-op when customer ID is not found in DB', async () => {
       mockBillingProvider.constructWebhookEvent.mockReturnValue({
         ...makeWebhookEvent(),
-        data: { object: { customer: 'cus_unknown_99999', card: { brand: 'visa', last4: '1111', exp_month: 1, exp_year: 2030 } } },
+        data: {
+          object: {
+            customer: 'cus_unknown_99999',
+            card: {
+              brand: 'visa',
+              last4: '1111',
+              exp_month: 1,
+              exp_year: 2030,
+            },
+          },
+        },
       });
       mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       expect(mockPrisma.userSubscription.update).not.toHaveBeenCalled();
       expect(mockPrisma.paymentEvent.create).not.toHaveBeenCalled();
     });
@@ -448,11 +504,14 @@ describe('Payment Methods Management (service)', () => {
           },
         },
       });
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            paymentMethod: expect.objectContaining({ brand: 'amex', last4: '0007' }),
+            paymentMethod: expect.objectContaining({
+              brand: 'amex',
+              last4: '0007',
+            }),
           }),
         }),
       );
@@ -464,7 +523,7 @@ describe('Payment Methods Management (service)', () => {
         capturedData = args.data ?? {};
         return Promise.resolve({});
       });
-      await service.handleStripeWebhook('raw-body', STRIPE_SIG);
+      await service.handleStripeWebhook(Buffer.from('raw-body'), STRIPE_SIG);
       const json = JSON.stringify(capturedData).toLowerCase();
       expect(json).not.toMatch(/\b\d{15,16}\b/);
       expect(json).not.toContain('cvc');

@@ -1,5 +1,5 @@
 /**
- * IBillingProvider — billing abstraction for Module 12: Premium Subscriptions.
+ * IBillingProvider - billing abstraction for Module 12: Premium Subscriptions.
  *
  * Currently backed by MockStripeBillingProvider (deterministic mock IDs, no
  * real network calls). Switch to RealStripeBillingProvider by changing
@@ -11,7 +11,7 @@
  */
 
 export interface CheckoutSessionResult {
-  /** Provider-scoped checkout session ID (e.g. cs_mock_…) */
+  /** Provider-scoped checkout session ID (e.g. cs_mock_...) */
   checkoutSessionId: string;
   /** Redirect URL the client should open in a browser/WebView */
   checkoutUrl: string;
@@ -30,8 +30,8 @@ export interface CheckoutSessionResult {
 }
 
 /**
- * Safe payment method summary — never exposes full card number, CVC, or raw tokens.
- * Suitable for displaying as "Visa ending in 4242 · expires 12/2030".
+ * Safe payment method summary - never exposes full card number, CVC, or raw tokens.
+ * Suitable for displaying as "Visa ending in 4242 - expires 12/2030".
  */
 export interface PaymentMethodSummary {
   brand: string;
@@ -42,7 +42,7 @@ export interface PaymentMethodSummary {
 }
 
 export interface BillingPortalResult {
-  /** Provider-scoped portal session ID (e.g. bps_mock_…) */
+  /** Provider-scoped portal session ID (e.g. bps_mock_...) */
   portalSessionId: string;
   /** URL to redirect the user to for billing management */
   portalUrl: string;
@@ -53,7 +53,7 @@ export interface BillingPortalResult {
     canCancel: boolean;
     canChangePlan: boolean;
     canViewReceipts: boolean;
-    // Payment method–specific capabilities
+    // Payment method-specific capabilities
     canViewPaymentMethods: boolean;
     canAddPaymentMethod: boolean;
     canRemovePaymentMethod: boolean;
@@ -75,7 +75,7 @@ export interface ProviderSubscriptionResult {
 }
 
 export interface WebhookEvent {
-  /** Unique provider event ID — used for idempotency checks */
+  /** Unique provider event ID - used for idempotency checks */
   id: string;
   /** Event type string (e.g. 'invoice.paid', 'customer.subscription.deleted') */
   type: string;
@@ -122,9 +122,7 @@ export interface IBillingProvider {
    * Resume a subscription that was set to cancel_at_period_end.
    * For real Stripe: stripe.subscriptions.update cancel_at_period_end=false
    */
-  resumeSubscription(params: {
-    providerSubscriptionId: string;
-  }): Promise<void>;
+  resumeSubscription(params: { providerSubscriptionId: string }): Promise<void>;
 
   /**
    * Change the plan on an active subscription (e.g. PRO ↔ GO+).
@@ -140,9 +138,7 @@ export interface IBillingProvider {
    * Retrieve current subscription state from the provider.
    * For real Stripe: stripe.subscriptions.retrieve
    */
-  retrieveSubscription(
-    providerSubscriptionId: string,
-  ): Promise<ProviderSubscriptionResult>;
+  retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionResult>;
 
   /**
    * Verify and parse an inbound webhook payload.
@@ -154,12 +150,8 @@ export interface IBillingProvider {
    * Create or retrieve a provider customer ID for a user.
    * For real Stripe: stripe.customers.create / stripe.customers.retrieve
    */
-  getOrCreateCustomer(params: {
-    userId: string;
-    email: string;
-    name?: string;
-  }): Promise<string>;
+  getOrCreateCustomer(params: { userId: string; email: string; name?: string }): Promise<string>;
 }
 
 /** NestJS injection token for the billing provider */
-export const BILLING_PROVIDER = 'BILLING_PROVIDER';
+export const BILLING_PROVIDER = "BILLING_PROVIDER";

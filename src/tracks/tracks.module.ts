@@ -8,8 +8,7 @@ import { InteractionsService } from "./interactions.service";
 import { TracksController } from "./tracks.controller";
 import { TracksService } from "./tracks.service";
 import { TranscodingService } from "./transcoding.service";
-import { UserTracksController } from './user-tracks.controller';
-
+import { UserTracksController } from "./user-tracks.controller";
 
 @Module({
   imports: [PrismaModule, SubscriptionsModule],

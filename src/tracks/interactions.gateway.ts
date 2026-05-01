@@ -10,12 +10,7 @@ type TrackInteractionEvent = {
   timestampAt?: number;
 };
 
-@WebSocketGateway({
-  cors: {
-    origin: true,
-    credentials: true,
-  },
-})
+@WebSocketGateway()
 export class InteractionsGateway {
   @WebSocketServer()
   private readonly server!: Server;

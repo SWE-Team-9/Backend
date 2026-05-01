@@ -1,9 +1,4 @@
-﻿import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from "@nestjs/common";
+﻿import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService, UploadType } from "../common/storage/storage.service";
@@ -78,7 +73,7 @@ export class UsersService {
         is_private: true,
       };
     }
-//Menna
+    //Menna
     const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
       this.prisma.userFavoriteGenre.findMany({
         where: { userId: profile.userId },
@@ -100,7 +95,7 @@ export class UsersService {
         where: { followerId: profile.userId },
       }),
     ]);
-//Menna
+    //Menna
     return this.formatFullProfile(
       profile,
       genres,
@@ -120,7 +115,7 @@ export class UsersService {
     if (!profile) {
       throw new NotFoundException("Profile not found.");
     }
-//Menna
+    //Menna
     const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
       this.prisma.userFavoriteGenre.findMany({
         where: { userId },
@@ -135,7 +130,7 @@ export class UsersService {
             where: { uploaderId: userId, deletedAt: null },
           })
         : Promise.resolve(0),
-        // Menna
+      // Menna
       this.prisma.userFollow.count({
         where: { followingId: userId },
       }),
@@ -197,7 +192,7 @@ export class UsersService {
     // playlists, play events, sessions, etc.) is removed automatically via
     // the onDelete: Cascade constraints defined in schema.prisma.
     await this.prisma.user.delete({ where: { id: userId } });
-    return { message: 'Account deleted successfully.' };
+    return { message: "Account deleted successfully." };
   }
 
   async checkHandleAvailability(handle: string) {
@@ -226,9 +221,7 @@ export class UsersService {
   async updateExternalLinks(userId: string, dto: UpdateExternalLinksDto) {
     for (const link of dto.links) {
       if (!isSafeExternalUrl(link.url)) {
-        throw new BadRequestException(
-          `URL for platform "${link.platform}" is not allowed.`,
-        );
+        throw new BadRequestException(`URL for platform "${link.platform}" is not allowed.`);
       }
     }
 
@@ -254,11 +247,7 @@ export class UsersService {
     });
   }
 
-  async uploadProfileImage(
-    userId: string,
-    type: UploadType,
-    file: Express.Multer.File,
-  ) {
+  async uploadProfileImage(userId: string, type: UploadType, file: Express.Multer.File) {
     const profile = await this.prisma.userProfile.findUnique({
       where: { userId },
       select: { avatarUrl: true, coverPhotoUrl: true },
@@ -281,8 +270,7 @@ export class UsersService {
       data: { [column]: result.url },
     });
 
-    const oldUrl =
-      type === "avatar" ? profile.avatarUrl : profile.coverPhotoUrl;
+    const oldUrl = type === "avatar" ? profile.avatarUrl : profile.coverPhotoUrl;
     if (oldUrl) {
       const oldKey = this.extractKeyFromUrl(oldUrl);
       if (oldKey) {
@@ -305,9 +293,7 @@ export class UsersService {
     if (genres.length !== slugs.length) {
       const found = new Set(genres.map((g: any) => g.slug));
       const invalid = slugs.filter((s) => !found.has(s));
-      throw new BadRequestException(
-        `Invalid genre slugs: ${invalid.join(", ")}`,
-      );
+      throw new BadRequestException(`Invalid genre slugs: ${invalid.join(", ")}`);
     }
 
     return genres;

@@ -7,7 +7,10 @@ export enum ChangePlanCodeEnum {
 }
 
 export class ChangePlanDto {
-  @ApiProperty({ enum: ChangePlanCodeEnum, description: 'Target plan to switch to' })
+  @ApiProperty({
+    enum: ChangePlanCodeEnum,
+    description: 'Target plan to switch to',
+  })
   @IsEnum(ChangePlanCodeEnum)
   planCode!: ChangePlanCodeEnum;
 }

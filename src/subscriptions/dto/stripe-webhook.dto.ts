@@ -3,13 +3,13 @@ import { IsOptional, IsString } from 'class-validator';
 
 /**
  * Mirrors the shape of a Stripe webhook event object.
- * Used for the mock webhook endpoint — no real Stripe signature verification.
+ * Used for the mock webhook endpoint - no real Stripe signature verification.
  *
  * Supported event types:
- *   invoice.payment_succeeded  — renews/activates the subscription
- *   invoice.payment_failed     — marks subscription PAST_DUE
- *   customer.subscription.updated  — syncs plan / status changes
- *   customer.subscription.deleted  — cancels the subscription
+ *   invoice.payment_succeeded  - renews/activates the subscription
+ *   invoice.payment_failed     - marks subscription PAST_DUE
+ *   customer.subscription.updated  - syncs plan / status changes
+ *   customer.subscription.deleted  - cancels the subscription
  */
 export class StripeWebhookDto {
   @ApiProperty({

@@ -1,6 +1,5 @@
-import { IsString, IsEnum, IsOptional, IsArray, IsNumber } from 'class-validator';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { TrackStatus } from '@prisma/client';
 
 export class TranscodingCallbackDto {
   @ApiProperty({ description: 'Track ID', example: 'trk_001' })
@@ -16,8 +15,10 @@ export class TranscodingCallbackDto {
   status!: 'FINISHED' | 'FAILED';
 
   @ApiPropertyOptional({
-    description: 'Generated file URLs',
-    example: { mp3: 'https://...', wav: 'https://...' },
+    description: 'Generated file URLs keyed by format (e.g. mp3, wav)',
+    type: 'object',
+    additionalProperties: { type: 'string' },
+    example: { mp3: 'https://cdn.example.com/track.mp3', wav: 'https://cdn.example.com/track.wav' },
   })
   @IsOptional()
   fileUrls?: Record<string, string>;

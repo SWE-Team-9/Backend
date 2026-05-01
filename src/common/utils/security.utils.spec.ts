@@ -1,27 +1,27 @@
 import { Request } from "express";
 import {
-  extractClientIp,
-  sanitizeHandle,
-  isValidHandle,
-  isSafeExternalUrl,
-  timingSafeStringEqual,
-  normalizeUserAgent,
   assertTokenEntropy,
+  extractClientIp,
+  isSafeExternalUrl,
+  isValidHandle,
+  normalizeUserAgent,
+  sanitizeHandle,
+  timingSafeStringEqual,
 } from "./security.utils";
 
 // =============================================================================
-// Security Utils — Unit Tests
+// Security Utils - Unit Tests
 // Member 1 (Backend Lead + Security Owner)
 //
 // OWASP coverage:
-//   A01 — Broken Access Control    : IP extraction for audit / rate-limit keys
-//   A03 — Injection                : handle sanitisation, URL allow-list
-//   A07 — Auth Failures            : timing-safe comparison
-//   A10 — SSRF                     : isSafeExternalUrl
+//   A01 - Broken Access Control    : IP extraction for audit / rate-limit keys
+//   A03 - Injection                : handle sanitisation, URL allow-list
+//   A07 - Auth Failures            : timing-safe comparison
+//   A10 - SSRF                     : isSafeExternalUrl
 // =============================================================================
 
 // ---------------------------------------------------------------------------
-// Helper — build a minimal Express-like Request object
+// Helper - build a minimal Express-like Request object
 // ---------------------------------------------------------------------------
 
 function buildRequest(
@@ -72,7 +72,7 @@ describe("extractClientIp", () => {
         headers: { "x-forwarded-for": "not-an-ip" },
         ip: "10.0.0.1",
       });
-      // Garbage first entry — should fall through to req.ip
+      // Garbage first entry - should fall through to req.ip
       const ip = extractClientIp(req);
       expect(ip).toBeTruthy();
       expect(typeof ip).toBe("string");
@@ -203,9 +203,7 @@ describe("sanitizeHandle", () => {
   });
 
   it("should handle a typical display name correctly", () => {
-    expect(sanitizeHandle("The Chemical Brothers")).toBe(
-      "the_chemical_brothers",
-    );
+    expect(sanitizeHandle("The Chemical Brothers")).toBe("the_chemical_brothers");
   });
 
   it("should handle numbers in the input", () => {
@@ -303,7 +301,7 @@ describe("isValidHandle", () => {
 });
 
 // =============================================================================
-// isSafeExternalUrl  (OWASP A10 — SSRF prevention)
+// isSafeExternalUrl  (OWASP A10 - SSRF prevention)
 // =============================================================================
 
 describe("isSafeExternalUrl", () => {
@@ -367,9 +365,9 @@ describe("isSafeExternalUrl", () => {
     });
   });
 
-  // ── SSRF — internal / private hostnames ──────────────────────────────────────
+  // ── SSRF - internal / private hostnames ──────────────────────────────────────
 
-  describe("SSRF — blocked internal hostnames", () => {
+  describe("SSRF - blocked internal hostnames", () => {
     it("should return false for localhost", () => {
       expect(isSafeExternalUrl("https://localhost/admin")).toBe(false);
     });
@@ -387,17 +385,11 @@ describe("isSafeExternalUrl", () => {
     });
 
     it("should return false for the AWS IMDS metadata endpoint", () => {
-      expect(
-        isSafeExternalUrl("https://169.254.169.254/latest/meta-data/"),
-      ).toBe(false);
+      expect(isSafeExternalUrl("https://169.254.169.254/latest/meta-data/")).toBe(false);
     });
 
     it("should return false for the GCP metadata endpoint", () => {
-      expect(
-        isSafeExternalUrl(
-          "https://metadata.google.internal/computeMetadata/v1/",
-        ),
-      ).toBe(false);
+      expect(isSafeExternalUrl("https://metadata.google.internal/computeMetadata/v1/")).toBe(false);
     });
 
     it("should return false for an RFC-1918 10.x.x.x address", () => {
@@ -454,7 +446,7 @@ describe("isSafeExternalUrl", () => {
 });
 
 // =============================================================================
-// timingSafeStringEqual  (OWASP A07 — timing attack prevention)
+// timingSafeStringEqual  (OWASP A07 - timing attack prevention)
 // =============================================================================
 
 describe("timingSafeStringEqual", () => {
@@ -520,22 +512,18 @@ describe("timingSafeStringEqual", () => {
 
   describe("realistic token comparison scenarios", () => {
     it("should correctly compare two identical SHA-256 hashes", () => {
-      const hash =
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+      const hash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
       expect(timingSafeStringEqual(hash, hash)).toBe(true);
     });
 
     it("should correctly reject two different SHA-256 hashes", () => {
-      const hash1 =
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
-      const hash2 =
-        "b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576b4f4bf0f2a1d9e9c";
+      const hash1 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+      const hash2 = "b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576b4f4bf0f2a1d9e9c";
       expect(timingSafeStringEqual(hash1, hash2)).toBe(false);
     });
 
     it("should correctly compare JWT-like token strings", () => {
-      const token =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.SIGNATURE";
+      const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.SIGNATURE";
       expect(timingSafeStringEqual(token, token)).toBe(true);
     });
   });
@@ -607,8 +595,7 @@ describe("assertTokenEntropy", () => {
     });
 
     it("should not throw for a 64-char SHA-256 hex digest", () => {
-      const hash =
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+      const hash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
       expect(() => assertTokenEntropy(hash)).not.toThrow();
     });
 

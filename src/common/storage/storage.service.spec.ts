@@ -16,12 +16,8 @@ const mockS3Send = jest.fn();
 jest.mock("@aws-sdk/client-s3", () => {
   return {
     S3Client: jest.fn().mockImplementation(() => ({ send: mockS3Send })),
-    PutObjectCommand: jest
-      .fn()
-      .mockImplementation((params) => ({ _type: "Put", ...params })),
-    DeleteObjectCommand: jest
-      .fn()
-      .mockImplementation((params) => ({ _type: "Delete", ...params })),
+    PutObjectCommand: jest.fn().mockImplementation((params) => ({ _type: "Put", ...params })),
+    DeleteObjectCommand: jest.fn().mockImplementation((params) => ({ _type: "Delete", ...params })),
   };
 });
 
@@ -51,14 +47,9 @@ function makeConfigService(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function buildService(
-  overrides?: Record<string, unknown>,
-): Promise<StorageService> {
+async function buildService(overrides?: Record<string, unknown>): Promise<StorageService> {
   const module: TestingModule = await Test.createTestingModule({
-    providers: [
-      StorageService,
-      { provide: ConfigService, useValue: makeConfigService(overrides) },
-    ],
+    providers: [StorageService, { provide: ConfigService, useValue: makeConfigService(overrides) }],
   }).compile();
 
   return module.get(StorageService);
@@ -135,9 +126,7 @@ describe("StorageService (local)", () => {
 
     it("throws BadRequestException when cover exceeds the 15 MB limit", async () => {
       const bigFile = Buffer.alloc(16 * 1024 * 1024);
-      await expect(service.upload(bigFile, metadata("cover"))).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.upload(bigFile, metadata("cover"))).rejects.toThrow(BadRequestException);
     });
 
     it("never uses the original filename in the storage key (SSRF / path-traversal guard)", async () => {
@@ -159,9 +148,7 @@ describe("StorageService (local)", () => {
     });
 
     it("does not throw when key does not exist", async () => {
-      await expect(
-        service.delete("avatar/nonexistent.jpg"),
-      ).resolves.not.toThrow();
+      await expect(service.delete("avatar/nonexistent.jpg")).resolves.not.toThrow();
     });
 
     it("does not throw when key is empty string", async () => {
@@ -218,9 +205,7 @@ describe("StorageService (S3)", () => {
         "storage.cdnUrl": "",
       });
       const result = await svc.upload(validJpeg, metadata());
-      expect(result.url).toMatch(
-        /^https:\/\/my-bucket\.s3\.amazonaws\.com\/avatar\//,
-      );
+      expect(result.url).toMatch(/^https:\/\/my-bucket\.s3\.amazonaws\.com\/avatar\//);
     });
 
     it("still rejects disallowed mime types on the S3 path", async () => {

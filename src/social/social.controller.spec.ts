@@ -131,10 +131,10 @@ describe("SocialController", () => {
         .expect(200);
 
       expect(res.body).toHaveProperty("followers");
-      expect(svc.getFollowers).toHaveBeenCalledWith(
-        TARGET_USER_ID,
-        { page: 1, limit: 20 },
-      );
+      expect(svc.getFollowers).toHaveBeenCalledWith(TARGET_USER_ID, {
+        page: 1,
+        limit: 20,
+      });
     });
 
     it("returns 400 for invalid pagination", async () => {
@@ -152,10 +152,10 @@ describe("SocialController", () => {
         .expect(200);
 
       expect(res.body).toHaveProperty("following");
-      expect(svc.getFollowing).toHaveBeenCalledWith(
-        TARGET_USER_ID,
-        { page: 2, limit: 10 },
-      );
+      expect(svc.getFollowing).toHaveBeenCalledWith(TARGET_USER_ID, {
+        page: 2,
+        limit: 10,
+      });
     });
   });
 
@@ -166,13 +166,13 @@ describe("SocialController", () => {
         .expect(200);
 
       expect(res.body).toHaveProperty("suggestions");
-      expect(svc.getSuggestions).toHaveBeenCalledWith("usr_requester", { limit: 10 });
+      expect(svc.getSuggestions).toHaveBeenCalledWith("usr_requester", {
+        limit: 10,
+      });
     });
 
     it("returns 400 when limit exceeds maximum", async () => {
-      await request(app.getHttpServer())
-        .get("/social/suggestions?limit=999")
-        .expect(400);
+      await request(app.getHttpServer()).get("/social/suggestions?limit=999").expect(400);
       expect(svc.getSuggestions).not.toHaveBeenCalled();
     });
   });
@@ -213,9 +213,7 @@ describe("SocialController", () => {
     });
 
     it("returns 400 for invalid limit", async () => {
-      await request(app.getHttpServer())
-        .get("/social/blocked-users?page=1&limit=0")
-        .expect(400);
+      await request(app.getHttpServer()).get("/social/blocked-users?page=1&limit=0").expect(400);
       expect(svc.getBlockedUsers).not.toHaveBeenCalled();
     });
   });

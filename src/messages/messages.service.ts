@@ -1,10 +1,7 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import { MessageType, TrackVisibility, PlaylistVisibility } from "@prisma/client";
-import { PrismaService } from "../prisma/prisma.service";
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { MessageType, PlaylistVisibility, Prisma, TrackVisibility } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { PrismaService } from '../prisma/prisma.service';
 
 // Injected lazily to avoid circular dependency
 // MessagesGateway is set via setGateway() from MessagesModule
@@ -16,11 +13,24 @@ export interface IMessagesGateway {
   emitConversationUpdated(userId: string, conversationId: string): void;
 }
 
+export interface MessageSentEvent {
+  messageId: string;
+  conversationId: string;
+  senderId: string;
+  receiverId: string;
+  senderName: string | null;
+  messagePreview: string | null;
+  messageType: MessageType;
+}
+
 @Injectable()
 export class MessagesService {
   private gateway?: IMessagesGateway;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   setGateway(gateway: IMessagesGateway): void {
     this.gateway = gateway;
@@ -40,8 +50,8 @@ export class MessagesService {
     });
     if (block) {
       throw new ForbiddenException({
-        code: "MESSAGING_BLOCKED",
-        message: "Messaging is blocked between these users.",
+        code: 'MESSAGING_BLOCKED',
+        message: 'Messaging is blocked between these users.',
       });
     }
   }
@@ -49,14 +59,23 @@ export class MessagesService {
   private async getBlockFlags(
     userId: string,
     otherUserId: string,
-  ): Promise<{ isBlockedByMe: boolean; hasBlockedMe: boolean; canMessage: boolean; blockReason: string | null }> {
+  ): Promise<{
+    isBlockedByMe: boolean;
+    hasBlockedMe: boolean;
+    canMessage: boolean;
+    blockReason: string | null;
+  }> {
     const [blockedByMe, blockedMe] = await Promise.all([
       this.prisma.userBlock.findUnique({
-        where: { blockerId_blockedId: { blockerId: userId, blockedId: otherUserId } },
+        where: {
+          blockerId_blockedId: { blockerId: userId, blockedId: otherUserId },
+        },
         select: { blockerId: true },
       }),
       this.prisma.userBlock.findUnique({
-        where: { blockerId_blockedId: { blockerId: otherUserId, blockedId: userId } },
+        where: {
+          blockerId_blockedId: { blockerId: otherUserId, blockedId: userId },
+        },
         select: { blockerId: true },
       }),
     ]);
@@ -66,20 +85,21 @@ export class MessagesService {
       isBlockedByMe,
       hasBlockedMe,
       canMessage: !isBlockedByMe && !hasBlockedMe,
-      blockReason: isBlockedByMe ? "You have blocked this user" : hasBlockedMe ? "This user has blocked you" : null,
+      blockReason: isBlockedByMe
+        ? 'You have blocked this user'
+        : hasBlockedMe
+          ? 'This user has blocked you'
+          : null,
     };
   }
 
   // ─── Find or create direct conversation ─────────────────────────────────────
 
-  private async findOrCreateConversation(
-    userAId: string,
-    userBId: string,
-  ): Promise<string> {
+  private async findOrCreateConversation(userAId: string, userBId: string): Promise<string> {
     // Find existing DIRECT conversation with exactly these two participants
     const existing = await this.prisma.conversation.findFirst({
       where: {
-        kind: "DIRECT",
+        kind: 'DIRECT',
         participants: {
           every: { userId: { in: [userAId, userBId] } },
         },
@@ -95,12 +115,9 @@ export class MessagesService {
 
     const created = await this.prisma.conversation.create({
       data: {
-        kind: "DIRECT",
+        kind: 'DIRECT',
         participants: {
-          create: [
-            { userId: userAId },
-            { userId: userBId },
-          ],
+          create: [{ userId: userAId }, { userId: userBId }],
         },
       },
       select: { id: true },
@@ -123,8 +140,14 @@ export class MessagesService {
   ): Promise<{ likedTrackIds: Set<string>; repostedTrackIds: Set<string> }> {
     if (!trackIds.length) return { likedTrackIds: new Set(), repostedTrackIds: new Set() };
     const [likes, reposts] = await Promise.all([
-      this.prisma.like.findMany({ where: { userId, trackId: { in: trackIds } }, select: { trackId: true } }),
-      this.prisma.repost.findMany({ where: { userId, trackId: { in: trackIds } }, select: { trackId: true } }),
+      this.prisma.like.findMany({
+        where: { userId, trackId: { in: trackIds } },
+        select: { trackId: true },
+      }),
+      this.prisma.repost.findMany({
+        where: { userId, trackId: { in: trackIds } },
+        select: { trackId: true },
+      }),
     ]);
     return {
       likedTrackIds: new Set(likes.map((l) => l.trackId)),
@@ -151,8 +174,20 @@ export class MessagesService {
           durationMs: number | null;
           waveformData: number[];
           createdAt: Date;
-          _count: { likes: number; reposts: number; comments: number; playEvents: number };
-          uploader: { id: string; profile: { displayName: string; handle: string; avatarUrl: string | null } | null };
+          _count: {
+            likes: number;
+            reposts: number;
+            comments: number;
+            playEvents: number;
+          };
+          uploader: {
+            id: string;
+            profile: {
+              displayName: string;
+              handle: string;
+              avatarUrl: string | null;
+            } | null;
+          };
         } | null;
         playlist: {
           id: string;
@@ -160,7 +195,14 @@ export class MessagesService {
           slug: string;
           coverArtUrl: string | null;
           ownerId: string;
-          owner: { id: string; profile: { displayName: string; handle: string; avatarUrl: string | null } | null };
+          owner: {
+            id: string;
+            profile: {
+              displayName: string;
+              handle: string;
+              avatarUrl: string | null;
+            } | null;
+          };
           _count: { tracks: number };
           tracks: {
             track: {
@@ -170,7 +212,10 @@ export class MessagesService {
               coverArtUrl: string | null;
               durationMs: number | null;
               _count: { playEvents: number };
-              uploader: { id: string; profile: { displayName: string; handle: string } | null };
+              uploader: {
+                id: string;
+                profile: { displayName: string; handle: string } | null;
+              };
             };
           }[];
         } | null;
@@ -178,19 +223,24 @@ export class MessagesService {
       conversation: { participants: { userId: string }[] };
     },
     viewerId: string,
-    interactions?: { likedTrackIds: Set<string>; repostedTrackIds: Set<string> },
+    interactions?: {
+      likedTrackIds: Set<string>;
+      repostedTrackIds: Set<string>;
+    },
   ) {
     if (msg.deletedAt) {
       return {
         id: msg.id,
         senderId: msg.senderId,
-        receiverId: msg.conversation.participants.find((p) => p.userId !== msg.senderId)?.userId ?? null,
+        receiverId:
+          msg.conversation.participants.find((p) => p.userId !== msg.senderId)?.userId ?? null,
         type: msg.messageType,
         isDeleted: true,
         createdAt: msg.createdAt,
       };
     }
-    const receiverId = msg.conversation.participants.find((p) => p.userId !== msg.senderId)?.userId ?? null;
+    const receiverId =
+      msg.conversation.participants.find((p) => p.userId !== msg.senderId)?.userId ?? null;
     const base = {
       id: msg.id,
       senderId: msg.senderId,
@@ -202,7 +252,7 @@ export class MessagesService {
       createdAt: msg.createdAt,
     };
 
-    if (msg.messageType === "TRACK_SHARE" && msg.share?.track) {
+    if (msg.messageType === 'TRACK_SHARE' && msg.share?.track) {
       const t = msg.share.track;
       return {
         ...base,
@@ -230,7 +280,7 @@ export class MessagesService {
       };
     }
 
-    if (msg.messageType === "PLAYLIST_SHARE" && msg.share?.playlist) {
+    if (msg.messageType === 'PLAYLIST_SHARE' && msg.share?.playlist) {
       const pl = msg.share.playlist;
       return {
         ...base,
@@ -290,10 +340,19 @@ export class MessagesService {
             uploader: {
               select: {
                 id: true,
-                profile: { select: { displayName: true, handle: true, avatarUrl: true } },
+                profile: {
+                  select: { displayName: true, handle: true, avatarUrl: true },
+                },
               },
             },
-            _count: { select: { likes: true, reposts: true, comments: true, playEvents: true } },
+            _count: {
+              select: {
+                likes: true,
+                reposts: true,
+                comments: true,
+                playEvents: true,
+              },
+            },
           },
         },
         playlist: {
@@ -306,13 +365,15 @@ export class MessagesService {
             owner: {
               select: {
                 id: true,
-                profile: { select: { displayName: true, handle: true, avatarUrl: true } },
+                profile: {
+                  select: { displayName: true, handle: true, avatarUrl: true },
+                },
               },
             },
             _count: { select: { tracks: true } },
             tracks: {
               take: 5,
-              orderBy: { position: "asc" as const },
+              orderBy: { position: 'asc' as const },
               select: {
                 track: {
                   select: {
@@ -325,7 +386,9 @@ export class MessagesService {
                     uploader: {
                       select: {
                         id: true,
-                        profile: { select: { displayName: true, handle: true } },
+                        profile: {
+                          select: { displayName: true, handle: true },
+                        },
                       },
                     },
                   },
@@ -338,14 +401,82 @@ export class MessagesService {
     },
   } as const;
 
+  // ─── Build conversation preview (used after send) ────────────────────────────
+
+  private async buildConversationPreview(conversationId: string, userId: string) {
+    const [participant, lastMsg, unreadCount] = await Promise.all([
+      this.prisma.conversationParticipant.findFirst({
+        where: { conversationId, userId: { not: userId } },
+        select: {
+          isArchived: true,
+          user: {
+            select: {
+              id: true,
+              profile: {
+                select: { displayName: true, handle: true, avatarUrl: true },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.message.findFirst({
+        where: { conversationId, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          messageType: true,
+          body: true,
+          createdAt: true,
+          senderId: true,
+        },
+      }),
+      this.prisma.message.count({
+        where: { conversationId, senderId: { not: userId }, deletedAt: null },
+      }),
+    ]);
+
+    const blockFlags = participant
+      ? await this.getBlockFlags(userId, participant.user.id)
+      : {
+          isBlockedByMe: false,
+          hasBlockedMe: false,
+          canMessage: true,
+          blockReason: null,
+        };
+
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { updatedAt: true },
+    });
+
+    return {
+      conversationId,
+      participant: participant
+        ? {
+            id: participant.user.id,
+            display_name: participant.user.profile?.displayName ?? null,
+            handle: participant.user.profile?.handle ?? null,
+            avatar_url: participant.user.profile?.avatarUrl ?? null,
+          }
+        : null,
+      lastMessage: lastMsg
+        ? {
+            id: lastMsg.id,
+            type: lastMsg.messageType,
+            text: lastMsg.body,
+            createdAt: lastMsg.createdAt,
+          }
+        : null,
+      unreadCount,
+      updatedAt: conv?.updatedAt ?? new Date(),
+      isArchived: false,
+      ...blockFlags,
+    };
+  }
+
   // ─── Get conversations ───────────────────────────────────────────────────────
 
-  async getConversations(
-    userId: string,
-    archived: boolean,
-    page: number,
-    limit: number,
-  ) {
+  async getConversations(userId: string, archived: boolean, page: number, limit: number) {
     const skip = (page - 1) * limit;
 
     const [total, participants] = await Promise.all([
@@ -354,7 +485,7 @@ export class MessagesService {
       }),
       this.prisma.conversationParticipant.findMany({
         where: { userId, isArchived: archived },
-        orderBy: { conversation: { updatedAt: "desc" } },
+        orderBy: { conversation: { updatedAt: 'desc' } },
         skip,
         take: limit,
         select: {
@@ -374,14 +505,20 @@ export class MessagesService {
                   user: {
                     select: {
                       id: true,
-                      profile: { select: { displayName: true, handle: true, avatarUrl: true } },
+                      profile: {
+                        select: {
+                          displayName: true,
+                          handle: true,
+                          avatarUrl: true,
+                        },
+                      },
                     },
                   },
                 },
               },
               messages: {
                 where: { deletedAt: null },
-                orderBy: { createdAt: "desc" },
+                orderBy: { createdAt: 'desc' },
                 take: 1,
                 select: {
                   id: true,
@@ -397,50 +534,100 @@ export class MessagesService {
       }),
     ]);
 
-    const conversations = await Promise.all(
-      participants.map(async (p) => {
-        const other = p.conversation.participants[0];
-        const lastMsg = p.conversation.messages[0];
+    if (!participants.length) {
+      return { page, limit, total, conversations: [] };
+    }
 
-        // Unread count: messages after lastReadAt that weren't sent by me
-        const unreadCount = await this.prisma.message.count({
-          where: {
-            conversationId: p.conversationId,
-            senderId: { not: userId },
-            deletedAt: null,
-            createdAt: p.lastReadAt ? { gt: p.lastReadAt } : undefined,
-          },
-        });
+    const conversationIds = participants.map((p) => p.conversationId);
+    const otherUserIds = [
+      ...new Set(
+        participants
+          .map((p) => p.conversation.participants[0]?.userId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
 
-        const blockFlags = other
-          ? await this.getBlockFlags(userId, other.userId)
-          : { isBlockedByMe: false, hasBlockedMe: false, canMessage: true, blockReason: null };
-
-        return {
-          conversationId: p.conversationId,
-          participant: other
-            ? {
-                id: other.user.id,
-                display_name: other.user.profile?.displayName ?? null,
-                handle: other.user.profile?.handle ?? null,
-                avatar_url: other.user.profile?.avatarUrl ?? null,
-              }
-            : null,
-          lastMessage: lastMsg
-            ? {
-                id: lastMsg.id,
-                type: lastMsg.messageType,
-                text: lastMsg.body,
-                createdAt: lastMsg.createdAt,
-              }
-            : null,
-          unreadCount,
-          updatedAt: p.conversation.updatedAt,
-          isArchived: p.isArchived,
-          ...blockFlags,
-        };
-      }),
+    // Batch 1: all unread counts in one query instead of N individual counts
+    type UnreadRow = { conversationId: string; count: bigint };
+    const unreadRows = await this.prisma.$queryRaw<UnreadRow[]>(
+      Prisma.sql`
+        SELECT m.conversation_id AS "conversationId", COUNT(*) AS count
+        FROM messages m
+        JOIN conversation_participants cp
+          ON cp.conversation_id = m.conversation_id
+          AND cp.user_id = ${userId}::uuid
+        WHERE m.sender_id != ${userId}::uuid
+          AND m.deleted_at IS NULL
+          AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+          AND m.conversation_id IN (${Prisma.join(conversationIds.map((id) => Prisma.sql`${id}::uuid`))})
+        GROUP BY m.conversation_id
+      `,
     );
+    const unreadByConvId = new Map(unreadRows.map((r) => [r.conversationId, Number(r.count)]));
+
+    // Batch 2: all block relationships in one query instead of N*2 lookups
+    const allBlocks =
+      otherUserIds.length > 0
+        ? await this.prisma.userBlock.findMany({
+            where: {
+              OR: [
+                { blockerId: userId, blockedId: { in: otherUserIds } },
+                { blockerId: { in: otherUserIds }, blockedId: userId },
+              ],
+            },
+            select: { blockerId: true, blockedId: true },
+          })
+        : [];
+    const blockedByMeSet = new Set(
+      allBlocks.filter((b) => b.blockerId === userId).map((b) => b.blockedId),
+    );
+    const blockedMeSet = new Set(
+      allBlocks.filter((b) => b.blockedId === userId).map((b) => b.blockerId),
+    );
+
+    // Map to response — synchronous, no more per-conversation DB calls
+    const conversations = participants.map((p) => {
+      const other = p.conversation.participants[0];
+      const lastMsg = p.conversation.messages[0];
+
+      const unreadCount = unreadByConvId.get(p.conversationId) ?? 0;
+      const isBlockedByMe = other ? blockedByMeSet.has(other.userId) : false;
+      const hasBlockedMe = other ? blockedMeSet.has(other.userId) : false;
+      const blockFlags = {
+        isBlockedByMe,
+        hasBlockedMe,
+        canMessage: !isBlockedByMe && !hasBlockedMe,
+        blockReason: isBlockedByMe
+          ? 'You have blocked this user'
+          : hasBlockedMe
+            ? 'This user has blocked you'
+            : null,
+      };
+
+      return {
+        conversationId: p.conversationId,
+        participant: other
+          ? {
+              id: other.user.id,
+              display_name: other.user.profile?.displayName ?? null,
+              handle: other.user.profile?.handle ?? null,
+              avatar_url: other.user.profile?.avatarUrl ?? null,
+            }
+          : null,
+        lastMessage: lastMsg
+          ? {
+              id: lastMsg.id,
+              type: lastMsg.messageType,
+              text: lastMsg.body,
+              createdAt: lastMsg.createdAt,
+            }
+          : null,
+        unreadCount,
+        updatedAt: p.conversation.updatedAt,
+        isArchived: p.isArchived,
+        ...blockFlags,
+      };
+    });
 
     return { page, limit, total, conversations };
   }
@@ -460,8 +647,8 @@ export class MessagesService {
 
     if (!participant) {
       throw new NotFoundException({
-        code: "CONVERSATION_NOT_FOUND",
-        message: "Conversation not found or you are not a participant.",
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'Conversation not found or you are not a participant.',
       });
     }
 
@@ -473,7 +660,9 @@ export class MessagesService {
         user: {
           select: {
             id: true,
-            profile: { select: { displayName: true, handle: true, avatarUrl: true } },
+            profile: {
+              select: { displayName: true, handle: true, avatarUrl: true },
+            },
           },
         },
       },
@@ -486,7 +675,7 @@ export class MessagesService {
       this.prisma.message.count({ where: { conversationId } }),
       this.prisma.message.findMany({
         where: { conversationId },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
         select: this.MESSAGE_SELECT,
@@ -495,7 +684,7 @@ export class MessagesService {
 
     // Batch-fetch viewer's like/repost state for all shared tracks in this page
     const trackIds = messages
-      .filter((m) => m.messageType === "TRACK_SHARE" && (m as any).share?.track?.id)
+      .filter((m) => m.messageType === 'TRACK_SHARE' && (m as any).share?.track?.id)
       .map((m) => (m as any).share.track.id as string);
     const interactions = await this.getTrackInteractions(userId, trackIds);
 
@@ -513,7 +702,7 @@ export class MessagesService {
       limit,
       total,
       hasMore: skip + messages.length < total,
-      messages: messages.map((m) => this.mapMessage(m as Parameters<typeof this.mapMessage>[0], userId, interactions)),
+      messages: messages.map((m) => this.mapMessage(m, userId, interactions)),
       ...(blockFlags ?? {}),
     };
   }
@@ -526,52 +715,67 @@ export class MessagesService {
     const conversationId = await this.findOrCreateConversation(senderId, receiverId);
     await this.unarchiveForBoth(conversationId);
 
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId,
-        senderId,
-        messageType: "TEXT",
-        body: text,
-      },
-      select: this.MESSAGE_SELECT,
-    });
+    const [message, senderProfile] = await Promise.all([
+      this.prisma.message.create({
+        data: { conversationId, senderId, messageType: 'TEXT', body: text },
+        select: this.MESSAGE_SELECT,
+      }),
+      this.prisma.userProfile.findUnique({
+        where: { userId: senderId },
+        select: { displayName: true },
+      }),
+    ]);
 
     const unreadCount = await this.getUnreadCount(senderId);
-    const mappedMsg = this.mapMessage(message as Parameters<typeof this.mapMessage>[0], senderId);
+    const mappedMsg = this.mapMessage(message, senderId);
 
     this.gateway?.emitNewMessage(conversationId, receiverId, {
-      type: "NEW_MESSAGE",
+      type: 'NEW_MESSAGE',
       conversationId,
       message: mappedMsg,
       currentUnreadCount: unreadCount,
     });
 
-    return { message: mappedMsg, conversationId, currentUnreadCount: unreadCount };
+    this.eventEmitter.emit('message.sent', {
+      messageId: message.id,
+      conversationId,
+      senderId,
+      receiverId,
+      senderName: senderProfile?.displayName ?? null,
+      messagePreview: text.length > 100 ? text.slice(0, 97) + '...' : text,
+      messageType: 'TEXT',
+    } satisfies MessageSentEvent);
+
+    const conversation = await this.buildConversationPreview(conversationId, senderId);
+
+    return {
+      message: mappedMsg,
+      conversation,
+      currentUnreadCount: unreadCount,
+    };
   }
 
   // ─── Share track ─────────────────────────────────────────────────────────────
 
-  async shareTrack(
-    senderId: string,
-    receiverId: string,
-    trackId: string,
-    text?: string,
-  ) {
+  async shareTrack(senderId: string, receiverId: string, trackId: string, text?: string) {
     await this.checkBlock(senderId, receiverId);
 
     const track = await this.prisma.track.findUnique({
       where: { id: trackId },
-      select: { id: true, uploaderId: true, visibility: true },
+      select: { id: true, title: true, uploaderId: true, visibility: true },
     });
 
     if (!track) {
-      throw new NotFoundException({ code: "TRACK_NOT_FOUND", message: "Track not found." });
+      throw new NotFoundException({
+        code: 'TRACK_NOT_FOUND',
+        message: 'Track not found.',
+      });
     }
 
     if (track.visibility === TrackVisibility.PRIVATE && track.uploaderId !== senderId) {
       throw new ForbiddenException({
-        code: "TRACK_NOT_ACCESSIBLE",
-        message: "You cannot share a private track that you do not own.",
+        code: 'TRACK_NOT_ACCESSIBLE',
+        message: 'You cannot share a private track that you do not own.',
       });
     }
 
@@ -582,7 +786,7 @@ export class MessagesService {
       data: {
         conversationId,
         senderId,
-        messageType: "TRACK_SHARE",
+        messageType: 'TRACK_SHARE',
         body: text ?? null,
         share: { create: { trackId } },
       },
@@ -591,41 +795,66 @@ export class MessagesService {
 
     const interactions = await this.getTrackInteractions(senderId, [trackId]);
     const unreadCount = await this.getUnreadCount(senderId);
-    const mappedMsg = this.mapMessage(message as Parameters<typeof this.mapMessage>[0], senderId, interactions);
+    const mappedMsg = this.mapMessage(message, senderId, interactions);
 
     this.gateway?.emitNewMessage(conversationId, receiverId, {
-      type: "NEW_MESSAGE",
+      type: 'NEW_MESSAGE',
       conversationId,
       message: mappedMsg,
       currentUnreadCount: unreadCount,
     });
 
-    return { message: mappedMsg, conversationId, currentUnreadCount: unreadCount };
+    const senderProfile = await this.prisma.userProfile.findUnique({
+      where: { userId: senderId },
+      select: { displayName: true },
+    });
+
+    this.eventEmitter.emit('message.sent', {
+      messageId: message.id,
+      conversationId,
+      senderId,
+      receiverId,
+      senderName: senderProfile?.displayName ?? null,
+      messagePreview: track
+        ? `shared a track: ${track.title}`
+        : text
+          ? text.length > 100
+            ? text.slice(0, 97) + '...'
+            : text
+          : null,
+      messageType: 'TRACK_SHARE',
+    } satisfies MessageSentEvent);
+
+    const conversation = await this.buildConversationPreview(conversationId, senderId);
+
+    return {
+      message: mappedMsg,
+      conversation,
+      currentUnreadCount: unreadCount,
+    };
   }
 
-  // ─── Share playlist ──────────────────────────────────────────────────────────
+  // ─── Share playlist ───────────────────────────────────────────────────────────
 
-  async sharePlaylist(
-    senderId: string,
-    receiverId: string,
-    playlistId: string,
-    text?: string,
-  ) {
+  async sharePlaylist(senderId: string, receiverId: string, playlistId: string, text?: string) {
     await this.checkBlock(senderId, receiverId);
 
     const playlist = await this.prisma.playlist.findUnique({
       where: { id: playlistId },
-      select: { id: true, ownerId: true, visibility: true },
+      select: { id: true, title: true, ownerId: true, visibility: true },
     });
 
     if (!playlist) {
-      throw new NotFoundException({ code: "PLAYLIST_NOT_FOUND", message: "Playlist not found." });
+      throw new NotFoundException({
+        code: 'PLAYLIST_NOT_FOUND',
+        message: 'Playlist not found.',
+      });
     }
 
     if (playlist.visibility === PlaylistVisibility.SECRET && playlist.ownerId !== senderId) {
       throw new ForbiddenException({
-        code: "PLAYLIST_NOT_ACCESSIBLE",
-        message: "You cannot share a private playlist that you do not own.",
+        code: 'PLAYLIST_NOT_ACCESSIBLE',
+        message: 'You cannot share a private playlist that you do not own.',
       });
     }
 
@@ -636,7 +865,7 @@ export class MessagesService {
       data: {
         conversationId,
         senderId,
-        messageType: "PLAYLIST_SHARE",
+        messageType: 'PLAYLIST_SHARE',
         body: text ?? null,
         share: { create: { playlistId } },
       },
@@ -644,16 +873,43 @@ export class MessagesService {
     });
 
     const unreadCount = await this.getUnreadCount(senderId);
-    const mappedMsg = this.mapMessage(message as Parameters<typeof this.mapMessage>[0], senderId);
+    const mappedMsg = this.mapMessage(message, senderId);
 
     this.gateway?.emitNewMessage(conversationId, receiverId, {
-      type: "NEW_MESSAGE",
+      type: 'NEW_MESSAGE',
       conversationId,
       message: mappedMsg,
       currentUnreadCount: unreadCount,
     });
 
-    return { message: mappedMsg, conversationId, currentUnreadCount: unreadCount };
+    const senderProfile = await this.prisma.userProfile.findUnique({
+      where: { userId: senderId },
+      select: { displayName: true },
+    });
+
+    this.eventEmitter.emit('message.sent', {
+      messageId: message.id,
+      conversationId,
+      senderId,
+      receiverId,
+      senderName: senderProfile?.displayName ?? null,
+      messagePreview: playlist
+        ? `shared a playlist: ${playlist.title}`
+        : text
+          ? text.length > 100
+            ? text.slice(0, 97) + '...'
+            : text
+          : null,
+      messageType: 'PLAYLIST_SHARE',
+    } satisfies MessageSentEvent);
+
+    const conversation = await this.buildConversationPreview(conversationId, senderId);
+
+    return {
+      message: mappedMsg,
+      conversation,
+      currentUnreadCount: unreadCount,
+    };
   }
 
   // ─── Unread count ────────────────────────────────────────────────────────────
@@ -688,12 +944,15 @@ export class MessagesService {
     });
 
     if (!participant) {
-      throw new NotFoundException({ code: "CONVERSATION_NOT_FOUND", message: "Conversation not found." });
+      throw new NotFoundException({
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'Conversation not found.',
+      });
     }
 
     const lastMessage = await this.prisma.message.findFirst({
       where: { conversationId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       select: { id: true, createdAt: true },
     });
 
@@ -709,7 +968,7 @@ export class MessagesService {
     this.gateway?.emitConversationRead(conversationId, userId);
     this.gateway?.emitUnreadCountUpdated(userId, unreadCount);
 
-    return { message: "Conversation marked as read" };
+    return { message: 'Conversation marked as read' };
   }
 
   // ─── Mark as unread ──────────────────────────────────────────────────────────
@@ -721,7 +980,10 @@ export class MessagesService {
     });
 
     if (!participant) {
-      throw new NotFoundException({ code: "CONVERSATION_NOT_FOUND", message: "Conversation not found." });
+      throw new NotFoundException({
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'Conversation not found.',
+      });
     }
 
     // Idempotent: if already unread (no lastReadAt), do nothing
@@ -730,7 +992,11 @@ export class MessagesService {
         where: { conversationId, senderId: { not: userId }, deletedAt: null },
       });
       const unreadCount = await this.getUnreadCount(userId);
-      return { message: "Conversation marked as unread", conversationUnreadCount, unreadCount };
+      return {
+        message: 'Conversation marked as unread',
+        conversationUnreadCount,
+        unreadCount,
+      };
     }
 
     await this.prisma.conversationParticipant.update({
@@ -744,7 +1010,11 @@ export class MessagesService {
     const unreadCount = await this.getUnreadCount(userId);
     this.gateway?.emitUnreadCountUpdated(userId, unreadCount);
 
-    return { message: "Conversation marked as unread", conversationUnreadCount, unreadCount };
+    return {
+      message: 'Conversation marked as unread',
+      conversationUnreadCount,
+      unreadCount,
+    };
   }
 
   // ─── Archive / Unarchive ─────────────────────────────────────────────────────
@@ -756,7 +1026,10 @@ export class MessagesService {
     });
 
     if (!participant) {
-      throw new NotFoundException({ code: "CONVERSATION_NOT_FOUND", message: "Conversation not found." });
+      throw new NotFoundException({
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'Conversation not found.',
+      });
     }
 
     await this.prisma.conversationParticipant.update({
@@ -765,7 +1038,7 @@ export class MessagesService {
     });
 
     this.gateway?.emitConversationUpdated(userId, conversationId);
-    return { message: "Conversation archived successfully" };
+    return { message: 'Conversation archived successfully' };
   }
 
   async unarchiveConversation(userId: string, conversationId: string) {
@@ -775,7 +1048,10 @@ export class MessagesService {
     });
 
     if (!participant) {
-      throw new NotFoundException({ code: "CONVERSATION_NOT_FOUND", message: "Conversation not found." });
+      throw new NotFoundException({
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'Conversation not found.',
+      });
     }
 
     await this.prisma.conversationParticipant.update({
@@ -784,7 +1060,7 @@ export class MessagesService {
     });
 
     this.gateway?.emitConversationUpdated(userId, conversationId);
-    return { message: "Conversation unarchived successfully" };
+    return { message: 'Conversation unarchived successfully' };
   }
 
   // ─── Delete message ──────────────────────────────────────────────────────────
@@ -792,17 +1068,25 @@ export class MessagesService {
   async deleteMessage(userId: string, messageId: string) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
-      select: { id: true, senderId: true, conversationId: true, deletedAt: true },
+      select: {
+        id: true,
+        senderId: true,
+        conversationId: true,
+        deletedAt: true,
+      },
     });
 
     if (!message) {
-      throw new NotFoundException({ code: "MESSAGE_NOT_FOUND", message: "Message not found." });
+      throw new NotFoundException({
+        code: 'MESSAGE_NOT_FOUND',
+        message: 'Message not found.',
+      });
     }
 
     if (message.senderId !== userId) {
       throw new ForbiddenException({
-        code: "MESSAGE_DELETE_FORBIDDEN",
-        message: "You can only delete your own messages.",
+        code: 'MESSAGE_DELETE_FORBIDDEN',
+        message: 'You can only delete your own messages.',
       });
     }
 
@@ -814,7 +1098,7 @@ export class MessagesService {
     }
 
     this.gateway?.emitMessageDeleted(message.conversationId, messageId);
-    return { message: "Message deleted successfully" };
+    return { message: 'Message deleted successfully' };
   }
 
   // ─── Get or create direct conversation ──────────────────────────────────────
@@ -822,11 +1106,20 @@ export class MessagesService {
   async getOrCreateDirectConversation(userId: string, receiverId: string) {
     const receiver = await this.prisma.user.findUnique({
       where: { id: receiverId },
-      select: { id: true, deletedAt: true, profile: { select: { displayName: true, handle: true, avatarUrl: true } } },
+      select: {
+        id: true,
+        deletedAt: true,
+        profile: {
+          select: { displayName: true, handle: true, avatarUrl: true },
+        },
+      },
     });
 
     if (!receiver || receiver.deletedAt) {
-      throw new NotFoundException({ code: "RECEIVER_NOT_FOUND", message: "Receiver not found." });
+      throw new NotFoundException({
+        code: 'RECEIVER_NOT_FOUND',
+        message: 'Receiver not found.',
+      });
     }
 
     const conversationId = await this.findOrCreateConversation(userId, receiverId);
@@ -840,7 +1133,7 @@ export class MessagesService {
 
     const lastMessage = await this.prisma.message.findFirst({
       where: { conversationId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       select: { id: true, messageType: true, body: true, createdAt: true },
     });
 
@@ -867,7 +1160,12 @@ export class MessagesService {
         avatar_url: receiver.profile?.avatarUrl ?? null,
       },
       lastMessage: lastMessage
-        ? { id: lastMessage.id, type: lastMessage.messageType, text: lastMessage.body, createdAt: lastMessage.createdAt }
+        ? {
+            id: lastMessage.id,
+            type: lastMessage.messageType,
+            text: lastMessage.body,
+            createdAt: lastMessage.createdAt,
+          }
         : null,
       unreadCount,
       updatedAt: conversation?.updatedAt ?? null,

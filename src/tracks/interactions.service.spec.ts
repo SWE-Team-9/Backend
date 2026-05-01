@@ -158,14 +158,9 @@ describe("InteractionsService", () => {
   describe("getInteractionStatus", () => {
     it("should return isLiked and isReposted flags", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
-        { userId: "listener-uuid" },
-        null,
-      ]);
+      (prismaMock.$transaction as jest.Mock).mockResolvedValue([{ userId: "listener-uuid" }, null]);
 
-      await expect(
-        service.getInteractionStatus("listener-uuid", "track-uuid"),
-      ).resolves.toEqual({
+      await expect(service.getInteractionStatus("listener-uuid", "track-uuid")).resolves.toEqual({
         isLiked: true,
         isReposted: false,
       });
@@ -188,12 +183,7 @@ describe("InteractionsService", () => {
         },
       });
 
-      const result = await service.createComment(
-        "listener-uuid",
-        "track-uuid",
-        "Great track",
-        42,
-      );
+      const result = await service.createComment("listener-uuid", "track-uuid", "Great track", 42);
 
       expect(result).toEqual({
         id: "comment-uuid",
@@ -264,18 +254,18 @@ describe("InteractionsService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.unlikeTrack("listener-uuid", "missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unlikeTrack("listener-uuid", "missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it("should throw NotFoundException when like does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
       (prismaMock.like.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.unlikeTrack("listener-uuid", "track-uuid"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unlikeTrack("listener-uuid", "track-uuid")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -306,9 +296,9 @@ describe("InteractionsService", () => {
         uploaderId: "listener-uuid",
       });
 
-      await expect(
-        service.repostTrack("listener-uuid", "track-uuid"),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.repostTrack("listener-uuid", "track-uuid")).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
 
     it("should throw ConflictException when track is not FINISHED", async () => {
@@ -317,9 +307,9 @@ describe("InteractionsService", () => {
         status: TrackStatus.PROCESSING,
       });
 
-      await expect(
-        service.repostTrack("listener-uuid", "track-uuid"),
-      ).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.repostTrack("listener-uuid", "track-uuid")).rejects.toBeInstanceOf(
+        ConflictException,
+      );
     });
 
     it("should throw ConflictException when already reposted", async () => {
@@ -328,17 +318,17 @@ describe("InteractionsService", () => {
         userId: "listener-uuid",
       });
 
-      await expect(
-        service.repostTrack("listener-uuid", "track-uuid"),
-      ).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.repostTrack("listener-uuid", "track-uuid")).rejects.toBeInstanceOf(
+        ConflictException,
+      );
     });
 
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.repostTrack("listener-uuid", "missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.repostTrack("listener-uuid", "missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it("should reflect incremented global reposts count in engagement lists", async () => {
@@ -362,7 +352,9 @@ describe("InteractionsService", () => {
   describe("unrepostTrack", () => {
     it("should unrepost a track successfully", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
-      (prismaMock.repost.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prismaMock.repost.deleteMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
 
       await service.unrepostTrack("listener-uuid", "track-uuid");
 
@@ -374,18 +366,20 @@ describe("InteractionsService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.unrepostTrack("listener-uuid", "missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unrepostTrack("listener-uuid", "missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it("should throw NotFoundException when repost does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
-      (prismaMock.repost.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prismaMock.repost.deleteMany as jest.Mock).mockResolvedValue({
+        count: 0,
+      });
 
-      await expect(
-        service.unrepostTrack("listener-uuid", "track-uuid"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unrepostTrack("listener-uuid", "track-uuid")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -498,9 +492,9 @@ describe("InteractionsService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.getTrackLikers("missing", 1, 20),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getTrackLikers("missing", 1, 20)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it("should handle user with null profile", async () => {
@@ -562,7 +556,10 @@ describe("InteractionsService", () => {
             createdAt: new Date("2026-04-01"),
             user: {
               id: "reposter-1",
-              profile: { displayName: "Fan Two", avatarUrl: "https://cdn.example.com/av.jpg" },
+              profile: {
+                displayName: "Fan Two",
+                avatarUrl: "https://cdn.example.com/av.jpg",
+              },
             },
           },
         ],
@@ -578,9 +575,9 @@ describe("InteractionsService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.getTrackReposters("missing", 1, 20),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getTrackReposters("missing", 1, 20)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it("should fetch reposters with pagination", async () => {
@@ -639,7 +636,10 @@ describe("InteractionsService", () => {
           timestampAt: 42,
           user: {
             id: "u-2",
-            profile: { displayName: "User B", avatarUrl: "https://cdn.example.com/b.jpg" },
+            profile: {
+              displayName: "User B",
+              avatarUrl: "https://cdn.example.com/b.jpg",
+            },
           },
         },
       ]);
@@ -663,9 +663,7 @@ describe("InteractionsService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.getTrackComments("missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getTrackComments("missing")).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -700,9 +698,9 @@ describe("InteractionsService", () => {
         userId: "other-user-uuid",
       });
 
-      await expect(
-        service.deleteComment("listener-uuid", "comment-uuid"),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.deleteComment("listener-uuid", "comment-uuid")).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       expect(prismaMock.comment.delete).not.toHaveBeenCalled();
     });
   });
@@ -711,14 +709,9 @@ describe("InteractionsService", () => {
   describe("getInteractionStatus", () => {
     it("should return isLiked and isReposted flags", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
-      (prismaMock.$transaction as jest.Mock).mockResolvedValue([
-        { userId: "listener-uuid" },
-        null,
-      ]);
+      (prismaMock.$transaction as jest.Mock).mockResolvedValue([{ userId: "listener-uuid" }, null]);
 
-      await expect(
-        service.getInteractionStatus("listener-uuid", "track-uuid"),
-      ).resolves.toEqual({
+      await expect(service.getInteractionStatus("listener-uuid", "track-uuid")).resolves.toEqual({
         isLiked: true,
         isReposted: false,
       });
@@ -735,30 +728,30 @@ describe("InteractionsService", () => {
     it("should throw NotFoundException when track does not exist", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.getInteractionStatus("listener-uuid", "missing"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getInteractionStatus("listener-uuid", "missing")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
   // ── pagination edge cases ────────────────────────────────────────────────
   describe("pagination edge cases", () => {
     it("should throw BadRequestException for page < 1", async () => {
-      await expect(
-        service.getMyLikedTracks("user-1", 0, 20),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.getMyLikedTracks("user-1", 0, 20)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it("should throw BadRequestException for non-integer page", async () => {
-      await expect(
-        service.getMyLikedTracks("user-1", 1.5, 20),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.getMyLikedTracks("user-1", 1.5, 20)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it("should throw BadRequestException for limit < 1", async () => {
-      await expect(
-        service.getMyLikedTracks("user-1", 1, 0),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.getMyLikedTracks("user-1", 1, 0)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it("should compute hasNextPage and hasPreviousPage correctly", async () => {
@@ -776,13 +769,11 @@ describe("InteractionsService", () => {
     it("should re-throw non-Prisma errors from create", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
       (prismaMock.like.findUnique as jest.Mock).mockResolvedValue(null);
-      (prismaMock.like.create as jest.Mock).mockRejectedValue(
-        new Error("connection lost"),
-      );
+      (prismaMock.like.create as jest.Mock).mockRejectedValue(new Error("connection lost"));
 
-      await expect(
-        service.likeTrack("listener-uuid", "track-uuid"),
-      ).rejects.toThrow("connection lost");
+      await expect(service.likeTrack("listener-uuid", "track-uuid")).rejects.toThrow(
+        "connection lost",
+      );
     });
   });
 });
