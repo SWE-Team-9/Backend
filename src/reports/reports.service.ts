@@ -153,44 +153,76 @@ export class ReportsService {
   }) {
     let targetTitle: string | null = null;
     let targetOwnerHandle: string | null = null;
+    let offenderId: string | null = null;
+    let offenderAccountStatus: string | null = null;
 
     if (report.targetType === ReportTargetType.TRACK) {
       const track = await this.prisma.track.findUnique({
         where: { id: report.targetId },
         select: {
           title: true,
-          uploader: { select: { profile: { select: { handle: true } } } },
+          uploader: {
+            select: {
+              id: true,
+              accountStatus: true,
+              profile: { select: { handle: true } },
+            },
+          },
         },
       });
       targetTitle = track?.title ?? null;
       targetOwnerHandle = track?.uploader?.profile?.handle ?? null;
+      offenderId = track?.uploader?.id ?? null;
+      offenderAccountStatus = track?.uploader?.accountStatus ?? null;
     } else if (report.targetType === ReportTargetType.USER) {
       const user = await this.prisma.user.findUnique({
         where: { id: report.targetId },
-        select: { profile: { select: { displayName: true, handle: true } } },
+        select: {
+          id: true,
+          accountStatus: true,
+          profile: { select: { displayName: true, handle: true } },
+        },
       });
       targetTitle = user?.profile?.displayName ?? null;
       targetOwnerHandle = user?.profile?.handle ?? null;
+      offenderId = user?.id ?? null;
+      offenderAccountStatus = user?.accountStatus ?? null;
     } else if (report.targetType === ReportTargetType.PLAYLIST) {
       const playlist = await this.prisma.playlist.findUnique({
         where: { id: report.targetId },
         select: {
           title: true,
-          owner: { select: { profile: { select: { handle: true } } } },
+          owner: {
+            select: {
+              id: true,
+              accountStatus: true,
+              profile: { select: { handle: true } },
+            },
+          },
         },
       });
       targetTitle = playlist?.title ?? null;
       targetOwnerHandle = playlist?.owner?.profile?.handle ?? null;
+      offenderId = playlist?.owner?.id ?? null;
+      offenderAccountStatus = playlist?.owner?.accountStatus ?? null;
     } else if (report.targetType === ReportTargetType.COMMENT) {
       const comment = await this.prisma.comment.findUnique({
         where: { id: report.targetId },
         select: {
           content: true,
-          user: { select: { profile: { select: { handle: true } } } },
+          user: {
+            select: {
+              id: true,
+              accountStatus: true,
+              profile: { select: { handle: true } },
+            },
+          },
         },
       });
       targetTitle = comment?.content ? comment.content.slice(0, 80) : null;
       targetOwnerHandle = comment?.user?.profile?.handle ?? null;
+      offenderId = comment?.user?.id ?? null;
+      offenderAccountStatus = comment?.user?.accountStatus ?? null;
     }
 
     return {
@@ -210,6 +242,9 @@ export class ReportsService {
         title: targetTitle,
         owner_handle: targetOwnerHandle,
       },
+      offender: offenderId
+        ? { id: offenderId, account_status: offenderAccountStatus }
+        : null,
       status: report.status,
       description: report.description,
       created_at: report.createdAt,
