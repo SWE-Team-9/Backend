@@ -36,14 +36,13 @@ export class PaymentMethodsController {
   @ApiOperation({
     summary: 'Step 1 of adding a card — create a Stripe SetupIntent',
     description:
-      'Returns a Stripe `clientSecret` that the frontend passes to `stripe.confirmCardSetup()` ' +
-      '(Stripe.js). The user's card number is collected directly by Stripe and never ' +
+      '(Stripe.js). The user\'s card number is collected directly by Stripe and never ' +
       'passes through this server.\n\n' +
       '**Full card-add flow:**\n' +
       '1. Call `POST /payment-methods/setup-intent` → get `clientSecret`\n' +
       '2. Mount a Stripe Elements card form; call `stripe.confirmCardSetup(clientSecret)`\n' +
-      '3. On success Stripe returns `setupIntent.payment_method` or a `pm_xxx` ID\n' +
-      '4. Call `POST /payment-methods/attach` with that ID to persist the card metadata',
+      '3. On success Stripe returns `setupIntent.payment_method` (a `pm_xxx` ID)\n' +
+      '4. Call `POST /payment-methods/attach` with that ID to persist the card',
   })
   @ApiResponse({
     status: 200,
@@ -66,11 +65,11 @@ export class PaymentMethodsController {
   @ApiOperation({
     summary: 'Step 2 of adding a card — attach a confirmed payment method',
     description:
-      'Attaches a Stripe `pm_xxx` payment method returned by Stripe.js confirmation ' +
-      'to the user's Stripe customer and persists display metadata only: brand, last4, and expiry.\n\n' +
+      'Attaches a Stripe `pm_xxx` payment method (returned by `stripe.confirmCardSetup`) ' +
+      'to the user\'s account and persists display metadata (brand, last4, expiry).\n\n' +
       '**Auto-default rule:** the very first card added is always made the default. ' +
       'For subsequent cards pass `setAsDefault: true` to override.\n\n' +
-      'Returns the saved card object, same shape as `GET /payment-methods` entries.',
+      'Returns the saved card object (same shape as `GET /payment-methods` entries).',
   })
   @ApiResponse({
     status: 200,
