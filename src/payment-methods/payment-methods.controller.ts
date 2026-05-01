@@ -36,7 +36,7 @@ export class PaymentMethodsController {
   @ApiOperation({
     summary: 'Step 1 of adding a card — create a Stripe SetupIntent',
     description:
-      '(Stripe.js). The user\'s card number is collected directly by Stripe and never ' +
+      "(Stripe.js). The user's card number is collected directly by Stripe and never " +
       'passes through this server.\n\n' +
       '**Full card-add flow:**\n' +
       '1. Call `POST /payment-methods/setup-intent` → get `clientSecret`\n' +
@@ -53,9 +53,7 @@ export class PaymentMethodsController {
   })
   @ApiResponse({ status: 400, description: 'Failed to create Setup Intent' })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
-  async createSetupIntent(
-    @CurrentUser() user: { id: string },
-  ): Promise<{ clientSecret: string }> {
+  async createSetupIntent(@CurrentUser() user: { id: string }): Promise<{ clientSecret: string }> {
     return this.service.createSetupIntent(user.id);
   }
 
@@ -66,7 +64,7 @@ export class PaymentMethodsController {
     summary: 'Step 2 of adding a card — attach a confirmed payment method',
     description:
       'Attaches a Stripe `pm_xxx` payment method (returned by `stripe.confirmCardSetup`) ' +
-      'to the user\'s account and persists display metadata (brand, last4, expiry).\n\n' +
+      "to the user's account and persists display metadata (brand, last4, expiry).\n\n" +
       '**Auto-default rule:** the very first card added is always made the default. ' +
       'For subsequent cards pass `setAsDefault: true` to override.\n\n' +
       'Returns the saved card object (same shape as `GET /payment-methods` entries).',
@@ -143,9 +141,7 @@ export class PaymentMethodsController {
     },
   })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
-  async listPaymentMethods(
-    @CurrentUser() user: { id: string },
-  ): Promise<object[]> {
+  async listPaymentMethods(@CurrentUser() user: { id: string }): Promise<object[]> {
     return this.service.listPaymentMethods(user.id);
   }
 

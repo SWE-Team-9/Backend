@@ -3,34 +3,29 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { Test, TestingModule } from "@nestjs/testing";
-import {
-  FileRole,
-  InvoiceStatus,
-  SubscriptionStatus,
-  SubscriptionTier,
-} from "@prisma/client";
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import { FileRole, InvoiceStatus, SubscriptionStatus, SubscriptionTier } from '@prisma/client';
 
-import { PrismaService } from "../prisma/prisma.service";
-import { MailService } from "../mail/mail.service";
-import { BILLING_PROVIDER } from "../billing/billing-provider.interface";
+import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { BILLING_PROVIDER } from '../billing/billing-provider.interface';
 import {
   FREE_UPLOAD_LIMIT,
   GRACE_PERIOD_DAYS,
   PLAN_CONFIG,
   SubscriptionsService,
-} from "./subscriptions.service";
-import { PlanCodeEnum } from "./dto/checkout.dto";
-import { ChangePlanCodeEnum } from "./dto/change-plan.dto";
-import { CancelSubscriptionDto } from "./dto/cancel-subscription.dto";
+} from './subscriptions.service';
+import { PlanCodeEnum } from './dto/checkout.dto';
+import { ChangePlanCodeEnum } from './dto/change-plan.dto';
+import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 
-const USER_ID = "user-uuid-1111";
-const TRACK_ID = "track-uuid-2222";
-const NOW = new Date("2026-05-01T12:00:00.000Z");
-const FUTURE = new Date("2026-05-31T12:00:00.000Z");
-const PAST = new Date("2026-04-01T12:00:00.000Z");
+const USER_ID = 'user-uuid-1111';
+const TRACK_ID = 'track-uuid-2222';
+const NOW = new Date('2026-05-01T12:00:00.000Z');
+const FUTURE = new Date('2026-05-31T12:00:00.000Z');
+const PAST = new Date('2026-04-01T12:00:00.000Z');
 
 function makePlan(
   tier: SubscriptionTier,
@@ -45,31 +40,26 @@ function makePlan(
     id,
     code:
       tier === SubscriptionTier.GO_PLUS
-        ? "go-plus-monthly"
+        ? 'go-plus-monthly'
         : tier === SubscriptionTier.PRO
-          ? "pro-monthly"
-          : "free",
+          ? 'pro-monthly'
+          : 'free',
     name:
       tier === SubscriptionTier.GO_PLUS
-        ? "Go+ Monthly"
+        ? 'Go+ Monthly'
         : tier === SubscriptionTier.PRO
-          ? "Pro Monthly"
-          : "Free",
+          ? 'Pro Monthly'
+          : 'Free',
     tier,
-    priceCents:
-      tier === SubscriptionTier.GO_PLUS
-        ? 1999
-        : tier === SubscriptionTier.PRO
-          ? 999
-          : 0,
-    billingInterval: tier === SubscriptionTier.FREE ? null : "MONTH",
+    priceCents: tier === SubscriptionTier.GO_PLUS ? 1999 : tier === SubscriptionTier.PRO ? 999 : 0,
+    billingInterval: tier === SubscriptionTier.FREE ? null : 'MONTH',
     uploadLimit,
     isActive: true,
     stripePriceId:
       tier === SubscriptionTier.GO_PLUS
-        ? "price_go_plus"
+        ? 'price_go_plus'
         : tier === SubscriptionTier.PRO
-          ? "price_pro"
+          ? 'price_pro'
           : null,
     features: {
       adFree: tier !== SubscriptionTier.FREE,
@@ -85,10 +75,10 @@ function makeActiveSub(
   uploadLimit = tier === SubscriptionTier.GO_PLUS ? 1000 : 100,
   overrides: Record<string, unknown> = {},
 ) {
-  const plan = makePlan(tier, uploadLimit, "plan-current");
+  const plan = makePlan(tier, uploadLimit, 'plan-current');
 
   return {
-    id: "sub-uuid-3333",
+    id: 'sub-uuid-3333',
     userId: USER_ID,
     planId: plan.id,
     status: SubscriptionStatus.ACTIVE,
@@ -100,8 +90,8 @@ function makeActiveSub(
     trialStart: null,
     trialEnd: null,
     paymentFailureGraceEndsAt: null,
-    stripeCustomerId: "cus_mock_test",
-    stripeSubscriptionId: "sub_mock_test",
+    stripeCustomerId: 'cus_mock_test',
+    stripeSubscriptionId: 'sub_mock_test',
     paymentMethod: null,
     createdAt: NOW,
     updatedAt: NOW,
@@ -113,9 +103,9 @@ function makeActiveSub(
 function makeUser(overrides: Record<string, unknown> = {}) {
   return {
     id: USER_ID,
-    email: "test@example.com",
+    email: 'test@example.com',
     isVerified: true,
-    profile: { displayName: "Test User" },
+    profile: { displayName: 'Test User' },
     ...overrides,
   };
 }
@@ -129,22 +119,20 @@ function makeTrack(
 ) {
   return {
     id: TRACK_ID,
-    title: "Test Track",
+    title: 'Test Track',
     durationMs: 180000,
     coverArtUrl: null,
-    files:
-      overrides.files ??
-      [
-        {
-          storageKey: "tracks/stream.mp3",
-          fileRole: FileRole.STREAM,
-          fileSizeBytes: BigInt(1024),
-        },
-      ],
+    files: overrides.files ?? [
+      {
+        storageKey: 'tracks/stream.mp3',
+        fileRole: FileRole.STREAM,
+        fileSizeBytes: BigInt(1024),
+      },
+    ],
     uploader: {
       profile: {
-        displayName: overrides.uploaderDisplayName ?? "Test Artist",
-        handle: overrides.handle ?? "test-artist",
+        displayName: overrides.uploaderDisplayName ?? 'Test Artist',
+        handle: overrides.handle ?? 'test-artist',
       },
     },
   };
@@ -165,36 +153,38 @@ function makePrismaMock() {
       findFirst: jest.fn().mockResolvedValue(null),
       findUnique: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockResolvedValue({ id: "new-sub-id" }),
-      update: jest.fn().mockResolvedValue({ id: "updated-sub-id" }),
+      create: jest.fn().mockResolvedValue({ id: 'new-sub-id' }),
+      update: jest.fn().mockResolvedValue({ id: 'updated-sub-id' }),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     subscriptionPlan: {
-      findFirst: jest.fn().mockResolvedValue(makePlan(SubscriptionTier.PRO, 100, "plan-pro")),
-      findMany: jest.fn().mockResolvedValue([
-        makePlan(SubscriptionTier.FREE, FREE_UPLOAD_LIMIT, "plan-free"),
-        makePlan(SubscriptionTier.PRO, 100, "plan-pro"),
-        makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-go-plus"),
-      ]),
+      findFirst: jest.fn().mockResolvedValue(makePlan(SubscriptionTier.PRO, 100, 'plan-pro')),
+      findMany: jest
+        .fn()
+        .mockResolvedValue([
+          makePlan(SubscriptionTier.FREE, FREE_UPLOAD_LIMIT, 'plan-free'),
+          makePlan(SubscriptionTier.PRO, 100, 'plan-pro'),
+          makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
+        ]),
     },
     billingInvoice: {
-      create: jest.fn().mockResolvedValue({ id: "invoice-id" }),
+      create: jest.fn().mockResolvedValue({ id: 'invoice-id' }),
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
-      update: jest.fn().mockResolvedValue({ id: "invoice-id" }),
-      upsert: jest.fn().mockResolvedValue({ id: "invoice-id" }),
+      update: jest.fn().mockResolvedValue({ id: 'invoice-id' }),
+      upsert: jest.fn().mockResolvedValue({ id: 'invoice-id' }),
     },
     paymentEvent: {
-      create: jest.fn().mockResolvedValue({ id: "event-id" }),
+      create: jest.fn().mockResolvedValue({ id: 'event-id' }),
       findUnique: jest.fn().mockResolvedValue(null),
     },
     trialRedemption: {
       findUnique: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockResolvedValue({ id: "trial-redemption-id" }),
+      create: jest.fn().mockResolvedValue({ id: 'trial-redemption-id' }),
     },
     offlineDownload: {
-      upsert: jest.fn().mockResolvedValue({ id: "download-id" }),
+      upsert: jest.fn().mockResolvedValue({ id: 'download-id' }),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     $transaction: jest.fn().mockImplementation(async (arg: unknown) => {
@@ -202,7 +192,7 @@ function makePrismaMock() {
         return Promise.all(arg);
       }
 
-      if (typeof arg === "function") {
+      if (typeof arg === 'function') {
         return (arg as (txClient: typeof prisma) => unknown | Promise<unknown>)(prisma);
       }
 
@@ -215,20 +205,20 @@ function makePrismaMock() {
 
 function makeBillingProviderMock() {
   return {
-    getOrCreateCustomer: jest.fn().mockResolvedValue("cus_mock_test"),
+    getOrCreateCustomer: jest.fn().mockResolvedValue('cus_mock_test'),
     createCheckoutSession: jest.fn().mockResolvedValue({
-      checkoutSessionId: "cs_mock_test",
-      checkoutUrl: "https://mock-checkout.example.com/pay?session=cs_mock_test",
-      planCode: "PRO",
+      checkoutSessionId: 'cs_mock_test',
+      checkoutUrl: 'https://mock-checkout.example.com/pay?session=cs_mock_test',
+      planCode: 'PRO',
       trialEligible: true,
       trialDays: 7,
       amountDueNowCents: 0,
       renewsAt: FUTURE.toISOString(),
-      trialEndsAt: new Date("2026-05-08T12:00:00.000Z").toISOString(),
+      trialEndsAt: new Date('2026-05-08T12:00:00.000Z').toISOString(),
     }),
     createBillingPortalSession: jest.fn().mockResolvedValue({
-      portalSessionId: "bps_mock_test",
-      portalUrl: "https://mock-portal.example.com/billing",
+      portalSessionId: 'bps_mock_test',
+      portalUrl: 'https://mock-portal.example.com/billing',
       capabilities: {
         canUpdatePaymentMethod: true,
         canCancel: true,
@@ -243,17 +233,17 @@ function makeBillingProviderMock() {
     cancelSubscription: jest.fn().mockResolvedValue(undefined),
     resumeSubscription: jest.fn().mockResolvedValue(undefined),
     changePlan: jest.fn().mockResolvedValue({
-      providerSubscriptionId: "sub_mock_test",
-      providerCustomerId: "cus_mock_test",
-      status: "active",
+      providerSubscriptionId: 'sub_mock_test',
+      providerCustomerId: 'cus_mock_test',
+      status: 'active',
       currentPeriodStart: NOW,
       currentPeriodEnd: FUTURE,
       cancelAtPeriodEnd: false,
     }),
     retrieveSubscription: jest.fn().mockResolvedValue({
-      providerSubscriptionId: "sub_mock_test",
-      providerCustomerId: "cus_mock_test",
-      status: "active",
+      providerSubscriptionId: 'sub_mock_test',
+      providerCustomerId: 'cus_mock_test',
+      status: 'active',
       currentPeriodStart: NOW,
       currentPeriodEnd: FUTURE,
       cancelAtPeriodEnd: false,
@@ -276,7 +266,7 @@ function makeMailMock() {
   };
 }
 
-describe("SubscriptionsService", () => {
+describe('SubscriptionsService', () => {
   let service: SubscriptionsService;
   let prisma: ReturnType<typeof makePrismaMock>;
   let billing: ReturnType<typeof makeBillingProviderMock>;
@@ -298,14 +288,14 @@ describe("SubscriptionsService", () => {
           useValue: {
             get: jest.fn((key: string, fallback?: unknown) => {
               const cfg: Record<string, unknown> = {
-                "billing.provider": "mock_stripe",
-                BILLING_PROVIDER: "mock_stripe",
-                "storage.provider": "local",
-                "storage.localUploadUrl": "http://localhost:3000/uploads",
-                "storage.s3Bucket": "",
-                "storage.s3Region": "us-east-1",
-                "storage.awsAccessKeyId": "",
-                "storage.awsSecretAccessKey": "",
+                'billing.provider': 'mock_stripe',
+                BILLING_PROVIDER: 'mock_stripe',
+                'storage.provider': 'local',
+                'storage.localUploadUrl': 'http://localhost:3000/uploads',
+                'storage.s3Bucket': '',
+                'storage.s3Region': 'us-east-1',
+                'storage.awsAccessKeyId': '',
+                'storage.awsSecretAccessKey': '',
               };
               return cfg[key] ?? fallback;
             }),
@@ -318,18 +308,18 @@ describe("SubscriptionsService", () => {
     jest.clearAllMocks();
   });
 
-  describe("PLAN_CONFIG contract", () => {
-    it("keeps exactly FREE, PRO, and GO_PLUS plans", () => {
-      expect(Object.keys(PLAN_CONFIG).sort()).toEqual(["FREE", "GO_PLUS", "PRO"]);
+  describe('PLAN_CONFIG contract', () => {
+    it('keeps exactly FREE, PRO, and GO_PLUS plans', () => {
+      expect(Object.keys(PLAN_CONFIG).sort()).toEqual(['FREE', 'GO_PLUS', 'PRO']);
     });
 
-    it("keeps PRO as the only free-trial plan", () => {
+    it('keeps PRO as the only free-trial plan', () => {
       expect(PLAN_CONFIG.FREE.trialDays).toBe(0);
       expect(PLAN_CONFIG.PRO.trialDays).toBe(7);
       expect(PLAN_CONFIG.GO_PLUS.trialDays).toBe(0);
     });
 
-    it("keeps expected upload limits and grace period", () => {
+    it('keeps expected upload limits and grace period', () => {
       expect(FREE_UPLOAD_LIMIT).toBe(3);
       expect(PLAN_CONFIG.PRO.uploadLimit).toBe(100);
       expect(PLAN_CONFIG.GO_PLUS.uploadLimit).toBe(1000);
@@ -337,8 +327,8 @@ describe("SubscriptionsService", () => {
     });
   });
 
-  describe("getPlans()", () => {
-    it("returns active plans with display fields and feature flags", async () => {
+  describe('getPlans()', () => {
+    it('returns active plans with display fields and feature flags', async () => {
       const result = await service.getPlans();
 
       expect(prisma.subscriptionPlan.findMany).toHaveBeenCalledWith(
@@ -348,15 +338,15 @@ describe("SubscriptionsService", () => {
       );
 
       expect(result).toHaveLength(3);
-      expect(result.find((p: any) => p.tier === "FREE")?.uploadLimitDisplay).toBe("3");
-      expect(result.find((p: any) => p.tier === "PRO")?.canDownload).toBe(true);
-      expect(result.find((p: any) => p.tier === "GO_PLUS")?.adsEnabled).toBe(false);
-      expect(result.find((p: any) => p.tier === "GO_PLUS")?.trialDays).toBe(0);
+      expect(result.find((p: any) => p.tier === 'FREE')?.uploadLimitDisplay).toBe('3');
+      expect(result.find((p: any) => p.tier === 'PRO')?.canDownload).toBe(true);
+      expect(result.find((p: any) => p.tier === 'GO_PLUS')?.adsEnabled).toBe(false);
+      expect(result.find((p: any) => p.tier === 'GO_PLUS')?.trialDays).toBe(0);
     });
   });
 
-  describe("getMySubscription()", () => {
-    it("returns FREE defaults when there is no active subscription", async () => {
+  describe('getMySubscription()', () => {
+    it('returns FREE defaults when there is no active subscription', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
       prisma.track.count.mockResolvedValue(1);
 
@@ -364,7 +354,7 @@ describe("SubscriptionsService", () => {
 
       expect(result).toMatchObject({
         userId: USER_ID,
-        planCode: "FREE",
+        planCode: 'FREE',
         uploadLimit: FREE_UPLOAD_LIMIT,
         uploadedTracks: 1,
         remainingUploads: FREE_UPLOAD_LIMIT - 1,
@@ -375,7 +365,7 @@ describe("SubscriptionsService", () => {
       });
     });
 
-    it("returns PRO subscription details for active PRO user", async () => {
+    it('returns PRO subscription details for active PRO user', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.track.count.mockResolvedValue(5);
 
@@ -383,7 +373,7 @@ describe("SubscriptionsService", () => {
 
       expect(result).toMatchObject({
         userId: USER_ID,
-        planCode: "PRO",
+        planCode: 'PRO',
         uploadLimit: 100,
         uploadedTracks: 5,
         remainingUploads: 95,
@@ -395,7 +385,7 @@ describe("SubscriptionsService", () => {
       expect(result.expiresAt).toBeNull();
     });
 
-    it("uses expiresAt instead of renewalDate when cancelAtPeriodEnd=true", async () => {
+    it('uses expiresAt instead of renewalDate when cancelAtPeriodEnd=true', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true }),
       );
@@ -407,7 +397,7 @@ describe("SubscriptionsService", () => {
       expect(result.renewalDate).toBeNull();
     });
 
-    it("returns remainingUploads=null when DB plan limit is unlimited", async () => {
+    it('returns remainingUploads=null when DB plan limit is unlimited', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.GO_PLUS, -1),
       );
@@ -419,30 +409,32 @@ describe("SubscriptionsService", () => {
       expect(result.remainingUploads).toBeNull();
     });
 
-    it("does not leak provider IDs in response", async () => {
+    it('does not leak provider IDs in response', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, {
-          stripeCustomerId: "cus_secret",
-          stripeSubscriptionId: "sub_secret",
+          stripeCustomerId: 'cus_secret',
+          stripeSubscriptionId: 'sub_secret',
         }),
       );
 
       const result = await service.getMySubscription(USER_ID);
       const json = JSON.stringify(result);
 
-      expect(json).not.toContain("cus_secret");
-      expect(json).not.toContain("sub_secret");
+      expect(json).not.toContain('cus_secret');
+      expect(json).not.toContain('sub_secret');
     });
   });
 
-  describe("checkout()", () => {
+  describe('checkout()', () => {
     beforeEach(() => {
-      prisma.subscriptionPlan.findFirst.mockResolvedValue(makePlan(SubscriptionTier.PRO, 100, "plan-pro"));
+      prisma.subscriptionPlan.findFirst.mockResolvedValue(
+        makePlan(SubscriptionTier.PRO, 100, 'plan-pro'),
+      );
       prisma.userSubscription.findFirst.mockResolvedValue(null);
       prisma.trialRedemption.findUnique.mockResolvedValue(null);
     });
 
-    it("throws NotFoundException when user does not exist", async () => {
+    it('throws NotFoundException when user does not exist', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toThrow(
@@ -450,15 +442,17 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("throws EMAIL_NOT_VERIFIED for unverified users", async () => {
+    it('throws EMAIL_NOT_VERIFIED for unverified users', async () => {
       prisma.user.findUnique.mockResolvedValue(makeUser({ isVerified: false }));
 
-      await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "EMAIL_NOT_VERIFIED" }),
-      });
+      await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toMatchObject(
+        {
+          response: expect.objectContaining({ code: 'EMAIL_NOT_VERIFIED' }),
+        },
+      );
     });
 
-    it("throws BadRequestException when no active target plan exists", async () => {
+    it('throws BadRequestException when no active target plan exists', async () => {
       prisma.subscriptionPlan.findFirst.mockResolvedValue(null);
 
       await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toThrow(
@@ -466,30 +460,30 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("passes trialDays=7 for first-time PRO checkout", async () => {
+    it('passes trialDays=7 for first-time PRO checkout', async () => {
       await service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO });
 
       expect(billing.createCheckoutSession).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: USER_ID,
-          planCode: "PRO",
+          planCode: 'PRO',
           trialDays: 7,
           metadata: expect.objectContaining({
             userId: USER_ID,
-            planId: "plan-pro",
-            stripePriceId: "price_pro",
+            planId: 'plan-pro',
+            stripePriceId: 'price_pro',
           }),
         }),
       );
       expect(prisma.trialRedemption.create).toHaveBeenCalledTimes(1);
     });
 
-    it("passes trialDays=0 for PRO when trial was already redeemed", async () => {
-      prisma.trialRedemption.findUnique.mockResolvedValue({ id: "prior-redemption" });
+    it('passes trialDays=0 for PRO when trial was already redeemed', async () => {
+      prisma.trialRedemption.findUnique.mockResolvedValue({ id: 'prior-redemption' });
       billing.createCheckoutSession.mockResolvedValue({
-        checkoutSessionId: "cs_paid",
-        checkoutUrl: "https://mock-checkout.example.com/pay?session=cs_paid",
-        planCode: "PRO",
+        checkoutSessionId: 'cs_paid',
+        checkoutUrl: 'https://mock-checkout.example.com/pay?session=cs_paid',
+        planCode: 'PRO',
         trialEligible: false,
         trialDays: 0,
         amountDueNowCents: 999,
@@ -504,22 +498,22 @@ describe("SubscriptionsService", () => {
       expect(prisma.trialRedemption.create).not.toHaveBeenCalled();
     });
 
-    it("passes trialDays=0 for GO_PLUS because GO_PLUS has no trial", async () => {
+    it('passes trialDays=0 for GO_PLUS because GO_PLUS has no trial', async () => {
       prisma.subscriptionPlan.findFirst.mockResolvedValue(
-        makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-go-plus"),
+        makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
       );
 
       await service.checkout(USER_ID, { planCode: PlanCodeEnum.GO_PLUS });
 
       expect(billing.createCheckoutSession).toHaveBeenCalledWith(
         expect.objectContaining({
-          planCode: "GO_PLUS",
+          planCode: 'GO_PLUS',
           trialDays: 0,
         }),
       );
     });
 
-    it("reactivates a same-plan subscription already scheduled to cancel", async () => {
+    it('reactivates a same-plan subscription already scheduled to cancel', async () => {
       const sub = makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true });
       prisma.userSubscription.findFirst.mockResolvedValue(sub);
       prisma.subscriptionPlan.findFirst.mockResolvedValue(sub.plan);
@@ -541,38 +535,40 @@ describe("SubscriptionsService", () => {
         }),
       );
       expect(billing.createCheckoutSession).not.toHaveBeenCalled();
-      expect(result.planCode).toBe("PRO");
+      expect(result.planCode).toBe('PRO');
     });
 
-    it("throws SUBSCRIPTION_ALREADY_ACTIVE for duplicate active same-plan checkout", async () => {
+    it('throws SUBSCRIPTION_ALREADY_ACTIVE for duplicate active same-plan checkout', async () => {
       const sub = makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: false });
       prisma.userSubscription.findFirst.mockResolvedValue(sub);
       prisma.subscriptionPlan.findFirst.mockResolvedValue(sub.plan);
 
-      await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "SUBSCRIPTION_ALREADY_ACTIVE" }),
-      });
+      await expect(service.checkout(USER_ID, { planCode: PlanCodeEnum.PRO })).rejects.toMatchObject(
+        {
+          response: expect.objectContaining({ code: 'SUBSCRIPTION_ALREADY_ACTIVE' }),
+        },
+      );
     });
 
-    it("schedules plan change instead of creating immediate checkout when switching plan", async () => {
+    it('schedules plan change instead of creating immediate checkout when switching plan', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.subscriptionPlan.findFirst.mockResolvedValue(
-        makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-go-plus"),
+        makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
       );
 
       const result: any = await service.checkout(USER_ID, { planCode: PlanCodeEnum.GO_PLUS });
 
       expect(result.scheduled).toBe(true);
-      expect(result.currentPlan).toBe("PRO");
-      expect(result.newPlan).toBe("GO_PLUS");
+      expect(result.currentPlan).toBe('PRO');
+      expect(result.newPlan).toBe('GO_PLUS');
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             cancelAtPeriodEnd: true,
             paymentMethod: expect.objectContaining({
               pendingDowngrade: expect.objectContaining({
-                planCode: "GO_PLUS",
-                planId: "plan-go-plus",
+                planCode: 'GO_PLUS',
+                planId: 'plan-go-plus',
               }),
             }),
           }),
@@ -582,24 +578,24 @@ describe("SubscriptionsService", () => {
     });
   });
 
-  describe("cancelSubscription()", () => {
+  describe('cancelSubscription()', () => {
     const dto: CancelSubscriptionDto = {};
 
-    it("throws ConflictException when there is no active subscription", async () => {
+    it('throws ConflictException when there is no active subscription', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
 
       await expect(service.cancelSubscription(USER_ID, dto)).rejects.toThrow(ConflictException);
     });
 
-    it("schedules cancellation at period end and clears pendingDowngrade", async () => {
+    it('schedules cancellation at period end and clears pendingDowngrade', async () => {
       const sub = makeActiveSub(SubscriptionTier.PRO, 100, {
         paymentMethod: {
-          brand: "visa",
-          last4: "4242",
+          brand: 'visa',
+          last4: '4242',
           pendingDowngrade: {
-            planCode: "GO_PLUS",
-            planId: "plan-go-plus",
-            planName: "Go+",
+            planCode: 'GO_PLUS',
+            planId: 'plan-go-plus',
+            planName: 'Go+',
             effectiveAt: FUTURE.toISOString(),
           },
         },
@@ -626,38 +622,38 @@ describe("SubscriptionsService", () => {
         }),
       );
       expect(result.expiresAt).toBeDefined();
-      expect(result.message).toContain("full access");
+      expect(result.message).toContain('full access');
     });
 
-    it("throws SUBSCRIPTION_ALREADY_CANCELED if already canceling", async () => {
+    it('throws SUBSCRIPTION_ALREADY_CANCELED if already canceling', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true }),
       );
 
       await expect(service.cancelSubscription(USER_ID, dto)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "SUBSCRIPTION_ALREADY_CANCELED" }),
+        response: expect.objectContaining({ code: 'SUBSCRIPTION_ALREADY_CANCELED' }),
       });
     });
   });
 
-  describe("resumeSubscription()", () => {
-    it("throws NotFoundException when no active subscription exists", async () => {
+  describe('resumeSubscription()', () => {
+    it('throws NotFoundException when no active subscription exists', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
 
       await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it("throws SUBSCRIPTION_NOT_CANCELED when subscription is not scheduled to cancel", async () => {
+    it('throws SUBSCRIPTION_NOT_CANCELED when subscription is not scheduled to cancel', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: false }),
       );
 
       await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "SUBSCRIPTION_NOT_CANCELED" }),
+        response: expect.objectContaining({ code: 'SUBSCRIPTION_NOT_CANCELED' }),
       });
     });
 
-    it("calls billing.resumeSubscription and clears cancellation fields", async () => {
+    it('calls billing.resumeSubscription and clears cancellation fields', async () => {
       const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true });
 
       prisma.userSubscription.findFirst
@@ -683,12 +679,12 @@ describe("SubscriptionsService", () => {
           }),
         }),
       );
-      expect(result.planCode).toBe("PRO");
+      expect(result.planCode).toBe('PRO');
     });
   });
 
-  describe("changePlan()", () => {
-    it("throws NotFoundException when no active subscription exists", async () => {
+  describe('changePlan()', () => {
+    it('throws NotFoundException when no active subscription exists', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -696,31 +692,33 @@ describe("SubscriptionsService", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it("throws PLAN_ALREADY_ACTIVE when changing to current plan", async () => {
-      prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.GO_PLUS, 1000));
+    it('throws PLAN_ALREADY_ACTIVE when changing to current plan', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.GO_PLUS, 1000),
+      );
       prisma.subscriptionPlan.findFirst.mockResolvedValue(
-        makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-go-plus"),
+        makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
       );
 
       await expect(
         service.changePlan(USER_ID, { planCode: ChangePlanCodeEnum.GO_PLUS }),
       ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "PLAN_ALREADY_ACTIVE" }),
+        response: expect.objectContaining({ code: 'PLAN_ALREADY_ACTIVE' }),
       });
     });
 
-    it("throws BadRequestException for FREE as a change-plan target", async () => {
+    it('throws BadRequestException for FREE as a change-plan target', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
 
-      await expect(service.changePlan(USER_ID, { planCode: "FREE" as any })).rejects.toThrow(
+      await expect(service.changePlan(USER_ID, { planCode: 'FREE' as any })).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it("schedules PRO -> GO_PLUS change without immediate billing provider change", async () => {
+    it('schedules PRO -> GO_PLUS change without immediate billing provider change', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.subscriptionPlan.findFirst.mockResolvedValue(
-        makePlan(SubscriptionTier.GO_PLUS, 1000, "plan-go-plus"),
+        makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
       );
 
       const result: any = await service.changePlan(USER_ID, {
@@ -728,16 +726,16 @@ describe("SubscriptionsService", () => {
       });
 
       expect(result.scheduled).toBe(true);
-      expect(result.currentPlan).toBe("PRO");
-      expect(result.newPlan).toBe("GO_PLUS");
+      expect(result.currentPlan).toBe('PRO');
+      expect(result.newPlan).toBe('GO_PLUS');
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             cancelAtPeriodEnd: true,
             paymentMethod: expect.objectContaining({
               pendingDowngrade: expect.objectContaining({
-                planCode: "GO_PLUS",
-                planId: "plan-go-plus",
+                planCode: 'GO_PLUS',
+                planId: 'plan-go-plus',
               }),
             }),
           }),
@@ -746,10 +744,12 @@ describe("SubscriptionsService", () => {
       expect(billing.changePlan).not.toHaveBeenCalled();
     });
 
-    it("schedules GO_PLUS -> PRO and does not hide tracks immediately", async () => {
-      prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.GO_PLUS, 1000));
+    it('schedules GO_PLUS -> PRO and does not hide tracks immediately', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.GO_PLUS, 1000),
+      );
       prisma.subscriptionPlan.findFirst.mockResolvedValue(
-        makePlan(SubscriptionTier.PRO, 100, "plan-pro"),
+        makePlan(SubscriptionTier.PRO, 100, 'plan-pro'),
       );
 
       const result: any = await service.changePlan(USER_ID, {
@@ -757,23 +757,23 @@ describe("SubscriptionsService", () => {
       });
 
       expect(result.scheduled).toBe(true);
-      expect(result.newPlan).toBe("PRO");
+      expect(result.newPlan).toBe('PRO');
       expect(prisma.track.updateMany).not.toHaveBeenCalled();
       expect(billing.changePlan).not.toHaveBeenCalled();
     });
   });
 
-  describe("handleStripeWebhook()", () => {
+  describe('handleStripeWebhook()', () => {
     function makeWebhookBuffer(type: string, overrides: Record<string, unknown> = {}): Buffer {
       return Buffer.from(
         JSON.stringify({
-          id: `evt_${type.replace(/\./g, "_")}`,
+          id: `evt_${type.replace(/\./g, '_')}`,
           type,
           data: {
             object: {
-              id: "sub_mock_test",
-              subscription: "sub_mock_test",
-              customer: "cus_mock_test",
+              id: 'sub_mock_test',
+              subscription: 'sub_mock_test',
+              customer: 'cus_mock_test',
               ...overrides,
             },
           },
@@ -785,35 +785,35 @@ describe("SubscriptionsService", () => {
       prisma.paymentEvent.findUnique.mockResolvedValue(null);
       prisma.userSubscription.findFirst.mockResolvedValue({
         ...makeActiveSub(SubscriptionTier.PRO, 100),
-        stripeCustomerId: "cus_mock_test",
-        stripeSubscriptionId: "sub_mock_test",
+        stripeCustomerId: 'cus_mock_test',
+        stripeSubscriptionId: 'sub_mock_test',
       });
       prisma.user.findUnique.mockResolvedValue(makeUser());
     });
 
-    it("returns { received: true } for unknown events", async () => {
-      const result = await service.handleStripeWebhook(makeWebhookBuffer("unknown.event"), "");
+    it('returns { received: true } for unknown events', async () => {
+      const result = await service.handleStripeWebhook(makeWebhookBuffer('unknown.event'), '');
 
       expect(result).toEqual({ received: true });
     });
 
-    it("skips duplicate webhook events", async () => {
-      prisma.paymentEvent.findUnique.mockResolvedValue({ id: "existing-event" });
+    it('skips duplicate webhook events', async () => {
+      prisma.paymentEvent.findUnique.mockResolvedValue({ id: 'existing-event' });
 
-      await service.handleStripeWebhook(makeWebhookBuffer("invoice.payment_succeeded"), "");
+      await service.handleStripeWebhook(makeWebhookBuffer('invoice.payment_succeeded'), '');
 
       expect(prisma.paymentEvent.create).not.toHaveBeenCalled();
       expect(prisma.userSubscription.update).not.toHaveBeenCalled();
     });
 
-    it("marks subscription ACTIVE on invoice.payment_succeeded", async () => {
+    it('marks subscription ACTIVE on invoice.payment_succeeded', async () => {
       await service.handleStripeWebhook(
-        makeWebhookBuffer("invoice.payment_succeeded", {
-          invoice: "in_mock_1",
+        makeWebhookBuffer('invoice.payment_succeeded', {
+          invoice: 'in_mock_1',
           amount_paid: 999,
-          currency: "usd",
+          currency: 'usd',
         }),
-        "",
+        '',
       );
 
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
@@ -823,8 +823,8 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("marks subscription ACTIVE on invoice.paid", async () => {
-      await service.handleStripeWebhook(makeWebhookBuffer("invoice.paid"), "");
+    it('marks subscription ACTIVE on invoice.paid', async () => {
+      await service.handleStripeWebhook(makeWebhookBuffer('invoice.paid'), '');
 
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -833,8 +833,8 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("marks subscription PAST_DUE and sends grace email on invoice.payment_failed", async () => {
-      await service.handleStripeWebhook(makeWebhookBuffer("invoice.payment_failed"), "");
+    it('marks subscription PAST_DUE and sends grace email on invoice.payment_failed', async () => {
+      await service.handleStripeWebhook(makeWebhookBuffer('invoice.payment_failed'), '');
 
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -845,12 +845,12 @@ describe("SubscriptionsService", () => {
         }),
       );
       expect(mail.sendPaymentGracePeriodEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ to: "test@example.com" }),
+        expect.objectContaining({ to: 'test@example.com' }),
       );
     });
 
-    it("marks subscription CANCELED and revokes access on customer.subscription.deleted", async () => {
-      await service.handleStripeWebhook(makeWebhookBuffer("customer.subscription.deleted"), "");
+    it('marks subscription CANCELED and revokes access on customer.subscription.deleted', async () => {
+      await service.handleStripeWebhook(makeWebhookBuffer('customer.subscription.deleted'), '');
 
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -862,29 +862,29 @@ describe("SubscriptionsService", () => {
       );
     });
 
-    it("throws BadRequestException with WEBHOOK_INVALID_SIGNATURE on invalid webhook", async () => {
+    it('throws BadRequestException with WEBHOOK_INVALID_SIGNATURE on invalid webhook', async () => {
       billing.constructWebhookEvent.mockImplementation(() => {
-        throw new Error("WEBHOOK_INVALID_SIGNATURE");
+        throw new Error('WEBHOOK_INVALID_SIGNATURE');
       });
 
       await expect(
-        service.handleStripeWebhook(Buffer.from("bad payload"), "bad-signature"),
+        service.handleStripeWebhook(Buffer.from('bad payload'), 'bad-signature'),
       ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "WEBHOOK_INVALID_SIGNATURE" }),
+        response: expect.objectContaining({ code: 'WEBHOOK_INVALID_SIGNATURE' }),
       });
     });
   });
 
-  describe("getOfflineTrack()", () => {
-    it("throws DOWNLOAD_NOT_ALLOWED for FREE/no-subscription user", async () => {
+  describe('getOfflineTrack()', () => {
+    it('throws DOWNLOAD_NOT_ALLOWED for FREE/no-subscription user', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
 
       await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "DOWNLOAD_NOT_ALLOWED" }),
+        response: expect.objectContaining({ code: 'DOWNLOAD_NOT_ALLOWED' }),
       });
     });
 
-    it("returns local download URL for PRO users", async () => {
+    it('returns local download URL for PRO users', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.track.findFirst.mockResolvedValue(makeTrack());
 
@@ -892,17 +892,17 @@ describe("SubscriptionsService", () => {
 
       expect(result).toMatchObject({
         trackId: TRACK_ID,
-        title: "Test Track",
-        artist: "Test Artist",
-        handle: "test-artist",
-        planCode: "PRO",
+        title: 'Test Track',
+        artist: 'Test Artist',
+        handle: 'test-artist',
+        planCode: 'PRO',
       });
-      expect(result.downloadUrl).toContain("http://localhost:3000/uploads");
+      expect(result.downloadUrl).toContain('http://localhost:3000/uploads');
       expect(result.expiresAt).toBeDefined();
       expect(prisma.offlineDownload.upsert).toHaveBeenCalled();
     });
 
-    it("allows GO_PLUS users to download", async () => {
+    it('allows GO_PLUS users to download', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.GO_PLUS, 1000),
       );
@@ -910,29 +910,29 @@ describe("SubscriptionsService", () => {
 
       const result = await service.getOfflineTrack(USER_ID, TRACK_ID);
 
-      expect(result.planCode).toBe("GO_PLUS");
+      expect(result.planCode).toBe('GO_PLUS');
       expect(result.downloadUrl).toBeTruthy();
     });
 
-    it("throws NotFoundException when track does not exist", async () => {
+    it('throws NotFoundException when track does not exist', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.track.findFirst.mockResolvedValue(null);
 
       await expect(service.getOfflineTrack(USER_ID, TRACK_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it("prefers STREAM file over ORIGINAL file", async () => {
+    it('prefers STREAM file over ORIGINAL file', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.track.findFirst.mockResolvedValue(
         makeTrack({
           files: [
             {
-              storageKey: "tracks/original.wav",
+              storageKey: 'tracks/original.wav',
               fileRole: FileRole.ORIGINAL,
               fileSizeBytes: BigInt(2048),
             },
             {
-              storageKey: "tracks/stream.mp3",
+              storageKey: 'tracks/stream.mp3',
               fileRole: FileRole.STREAM,
               fileSizeBytes: BigInt(1024),
             },
@@ -942,12 +942,12 @@ describe("SubscriptionsService", () => {
 
       const result = await service.getOfflineTrack(USER_ID, TRACK_ID);
 
-      expect(result.downloadUrl).toContain("tracks/stream.mp3");
+      expect(result.downloadUrl).toContain('tracks/stream.mp3');
     });
   });
 
-  describe("getUploadQuota()", () => {
-    it("falls back to FREE upload limit when user has no subscription", async () => {
+  describe('getUploadQuota()', () => {
+    it('falls back to FREE upload limit when user has no subscription', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
       prisma.track.count.mockResolvedValue(1);
 
@@ -957,7 +957,7 @@ describe("SubscriptionsService", () => {
       });
     });
 
-    it("returns active plan limit for PRO subscription", async () => {
+    it('returns active plan limit for PRO subscription', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
       prisma.track.count.mockResolvedValue(10);
 
@@ -967,8 +967,10 @@ describe("SubscriptionsService", () => {
       });
     });
 
-    it("maps unlimited GO_PLUS DB value to PLAN_CONFIG limit for upload guard", async () => {
-      prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.GO_PLUS, -1));
+    it('maps unlimited GO_PLUS DB value to PLAN_CONFIG limit for upload guard', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.GO_PLUS, -1),
+      );
       prisma.track.count.mockResolvedValue(999);
 
       const result = await service.getUploadQuota(USER_ID);
@@ -978,8 +980,8 @@ describe("SubscriptionsService", () => {
     });
   });
 
-  describe("applyPlanLimitToTracks()", () => {
-    it("does nothing when user has no tracks", async () => {
+  describe('applyPlanLimitToTracks()', () => {
+    it('does nothing when user has no tracks', async () => {
       prisma.track.findMany.mockResolvedValue([]);
 
       await service.applyPlanLimitToTracks(USER_ID, 100);
@@ -987,44 +989,44 @@ describe("SubscriptionsService", () => {
       expect(prisma.track.updateMany).not.toHaveBeenCalled();
     });
 
-    it("hides over-limit tracks", async () => {
+    it('hides over-limit tracks', async () => {
       prisma.track.findMany.mockResolvedValue([
-        { id: "t1", hiddenByPlanLimit: false },
-        { id: "t2", hiddenByPlanLimit: false },
-        { id: "t3", hiddenByPlanLimit: false },
-        { id: "t4", hiddenByPlanLimit: false },
+        { id: 't1', hiddenByPlanLimit: false },
+        { id: 't2', hiddenByPlanLimit: false },
+        { id: 't3', hiddenByPlanLimit: false },
+        { id: 't4', hiddenByPlanLimit: false },
       ]);
 
       await service.applyPlanLimitToTracks(USER_ID, 2);
 
       expect(prisma.track.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: { in: ["t3", "t4"] } },
+          where: { id: { in: ['t3', 't4'] } },
           data: expect.objectContaining({ hiddenByPlanLimit: true }),
         }),
       );
     });
 
-    it("restores hidden tracks when they now fit within upgraded limit", async () => {
+    it('restores hidden tracks when they now fit within upgraded limit', async () => {
       prisma.track.findMany.mockResolvedValue([
-        { id: "t1", hiddenByPlanLimit: true },
-        { id: "t2", hiddenByPlanLimit: true },
-        { id: "t3", hiddenByPlanLimit: false },
+        { id: 't1', hiddenByPlanLimit: true },
+        { id: 't2', hiddenByPlanLimit: true },
+        { id: 't3', hiddenByPlanLimit: false },
       ]);
 
       await service.applyPlanLimitToTracks(USER_ID, 10);
 
       expect(prisma.track.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: { in: ["t1", "t2"] } },
+          where: { id: { in: ['t1', 't2'] } },
           data: expect.objectContaining({ hiddenByPlanLimit: false }),
         }),
       );
     });
   });
 
-  describe("revokeOfflineDownloads()", () => {
-    it("expires all user offline downloads immediately", async () => {
+  describe('revokeOfflineDownloads()', () => {
+    it('expires all user offline downloads immediately', async () => {
       await service.revokeOfflineDownloads(USER_ID);
 
       expect(prisma.offlineDownload.updateMany).toHaveBeenCalledWith({
@@ -1034,34 +1036,34 @@ describe("SubscriptionsService", () => {
     });
   });
 
-  describe("createBillingPortal()", () => {
-    it("throws NotFoundException when user is missing", async () => {
+  describe('createBillingPortal()', () => {
+    it('throws NotFoundException when user is missing', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(service.createBillingPortal(USER_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it("returns provider portal URL and FREE current plan when user has no subscription", async () => {
+    it('returns provider portal URL and FREE current plan when user has no subscription', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
 
       const result = await service.createBillingPortal(USER_ID);
 
-      expect(result.portalUrl).toContain("http");
-      expect(result.currentPlanCode).toBe("FREE");
+      expect(result.portalUrl).toContain('http');
+      expect(result.currentPlanCode).toBe('FREE');
       expect(billing.createBillingPortalSession).toHaveBeenCalled();
     });
 
-    it("returns PRO current plan when user has active PRO subscription", async () => {
+    it('returns PRO current plan when user has active PRO subscription', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
 
       const result = await service.createBillingPortal(USER_ID);
 
-      expect(result.currentPlanCode).toBe("PRO");
+      expect(result.currentPlanCode).toBe('PRO');
     });
   });
 
-  describe("getInvoices()", () => {
-    it("returns [] when user has no subscriptions", async () => {
+  describe('getInvoices()', () => {
+    it('returns [] when user has no subscriptions', async () => {
       prisma.userSubscription.findMany.mockResolvedValue([]);
 
       const result = await service.getInvoices(USER_ID);
@@ -1070,22 +1072,22 @@ describe("SubscriptionsService", () => {
       expect(prisma.billingInvoice.findMany).not.toHaveBeenCalled();
     });
 
-    it("returns mapped invoice list scoped to user subscriptions", async () => {
-      const paidAt = new Date("2026-05-01T10:00:00.000Z");
-      prisma.userSubscription.findMany.mockResolvedValue([{ id: "sub-1" }]);
+    it('returns mapped invoice list scoped to user subscriptions', async () => {
+      const paidAt = new Date('2026-05-01T10:00:00.000Z');
+      prisma.userSubscription.findMany.mockResolvedValue([{ id: 'sub-1' }]);
       prisma.billingInvoice.findMany.mockResolvedValue([
         {
-          id: "inv-1",
-          stripeInvoiceId: "in_mock_1",
+          id: 'inv-1',
+          stripeInvoiceId: 'in_mock_1',
           amountDueCents: 999,
           amountPaidCents: 999,
-          currency: "USD",
+          currency: 'USD',
           status: InvoiceStatus.PAID,
           dueAt: paidAt,
           paidAt,
           createdAt: paidAt,
           subscription: {
-            plan: { name: "Pro Monthly", tier: SubscriptionTier.PRO },
+            plan: { name: 'Pro Monthly', tier: SubscriptionTier.PRO },
           },
         },
       ]);
@@ -1099,12 +1101,12 @@ describe("SubscriptionsService", () => {
       );
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        id: "inv-1",
-        invoiceId: "in_mock_1",
+        id: 'inv-1',
+        invoiceId: 'in_mock_1',
         amountDueCents: 999,
         amountPaidCents: 999,
-        currency: "USD",
-        planName: "Pro Monthly",
+        currency: 'USD',
+        planName: 'Pro Monthly',
         planTier: SubscriptionTier.PRO,
       });
       expect(result[0].paidAt).toBe(paidAt.toISOString());
