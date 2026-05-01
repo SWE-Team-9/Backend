@@ -109,8 +109,7 @@ function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
-// Temporary QA override for expiry-flow testing.
-// Revert this constant after testing is completed.
+// Temporary QA override for short-window expiry testing.
 const PRO_TEST_EXPIRY_MINUTES = 2;
 
 function mockId(prefix: string): string {
@@ -608,20 +607,30 @@ export class SubscriptionsService {
         : {};
     const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
 
+    const expiresAtForCancel =
+      sub.plan.tier === SubscriptionTier.PRO
+        ? addMinutes(now, PRO_TEST_EXPIRY_MINUTES)
+        : sub.currentPeriodEnd;
+
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
-      data: { cancelAtPeriodEnd: true, canceledAt: now, paymentMethod: cleanPaymentMethod as any },
+      data: {
+        cancelAtPeriodEnd: true,
+        canceledAt: now,
+        currentPeriodEnd: expiresAtForCancel,
+        paymentMethod: cleanPaymentMethod as any,
+      },
     });
     await this.logPaymentEvent(sub.id, 'customer.subscription.updated', {
       cancelAtPeriodEnd: true,
-      currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
+      currentPeriodEnd: expiresAtForCancel.toISOString(),
     });
-    this.sendCancellationEmailAsync(userId, sub.plan.name, sub.currentPeriodEnd);
+    this.sendCancellationEmailAsync(userId, sub.plan.name, expiresAtForCancel);
     return {
       message:
         'Subscription will cancel at end of billing period. You keep full access until then.',
       cancelledAt: now.toISOString(),
-      expiresAt: sub.currentPeriodEnd.toISOString(),
+      expiresAt: expiresAtForCancel.toISOString(),
       cancelAtPeriodEnd: true,
     };
   }
