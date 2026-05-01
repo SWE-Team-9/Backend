@@ -36,6 +36,9 @@ export class PlaylistEntity {
   secretToken!: string | null;
 
   @Expose()
+  genre!: string | null;
+
+  @Expose()
   @Type(() => PlaylistOwnerEntity)
   owner!: PlaylistOwnerEntity;
 

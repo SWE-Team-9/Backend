@@ -233,6 +233,7 @@ export class PlaylistsService {
       visibility: PlaylistVisibility;
       secretToken: string | null;
       ownerId: string;
+      genre: { name: string } | null;
       owner: { id: string; profile: { displayName: string } | null };
       tracks: Array<{ track: { id: string; title: string } }>;
     },
@@ -246,6 +247,7 @@ export class PlaylistsService {
         description: playlist.description,
         visibility: playlist.visibility,
         secretToken: playlist.secretToken,
+        genre: playlist.genre?.name ?? null,
         owner: {
           id: playlist.owner.id,
           display_name: playlist.owner.profile?.displayName ?? "Unknown User",
@@ -298,6 +300,11 @@ export class PlaylistsService {
           description: true,
           visibility: true,
           secretToken: true,
+          genre: {
+            select: {
+              name: true,
+            },
+          },
           owner: {
             select: {
               id: true,
@@ -494,6 +501,11 @@ export class PlaylistsService {
         description: true,
         visibility: true,
         secretToken: true,
+        genre: {
+          select: {
+            name: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -660,6 +672,11 @@ export class PlaylistsService {
         title: true,
         coverImageUrl: true,
         coverArtUrl: true,
+        genre: {
+          select: {
+            name: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -683,6 +700,7 @@ export class PlaylistsService {
           playlistId: playlist.id,
           title: playlist.title,
           coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+          genre: playlist.genre?.name ?? null,
           owner: {
             id: playlist.owner.id,
             display_name: playlist.owner.profile?.displayName ?? "Unknown User",
@@ -691,31 +709,77 @@ export class PlaylistsService {
     };
   }
 
-    async getTopPlaylists(): Promise<GetTopPlaylistsResponseDto> {
-      const playlists = await this.prisma.playlist.findMany({
-        where: {
-          visibility: PlaylistVisibility.PUBLIC,
-          deletedAt: null,
-        },
-        orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
-        take: 10,
-        select: {
-          id: true,
-          title: true,
-          visibility: true,
-          likesCount: true,
-        },
-      });
+  async getTopPlaylists(): Promise<GetTopPlaylistsResponseDto> {
+    const noGenreLabel = "No Genre";
 
-      return {
-        playlists: playlists.map((playlist) => ({
+    const playlists = await this.prisma.playlist.findMany({
+      where: {
+        visibility: PlaylistVisibility.PUBLIC,
+        deletedAt: null,
+      },
+      orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        visibility: true,
+        likesCount: true,
+        genre: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    const groupedGenres = new Map<
+      string,
+      {
+        genre: string;
+        playlists: Array<{
+          playlistId: string;
+          title: string;
+          visibility: PlaylistVisibility;
+          likesCount: number;
+        }>;
+      }
+    >();
+
+    for (const playlist of playlists) {
+      const genreName = playlist.genre?.name ?? noGenreLabel;
+      const groupedGenre =
+        groupedGenres.get(genreName) ??
+        {
+          genre: genreName,
+          playlists: [],
+        };
+
+      if (groupedGenre.playlists.length < 10) {
+        const playlistItem = {
           playlistId: playlist.id,
           title: playlist.title,
           visibility: playlist.visibility,
           likesCount: playlist.likesCount,
-        })),
-      };
+        };
+
+        groupedGenre.playlists.push(playlistItem);
+      }
+
+      groupedGenres.set(genreName, groupedGenre);
     }
+
+    const orderedGenres = [...groupedGenres.values()]
+      .filter((group) => group.genre !== noGenreLabel)
+      .sort((left, right) => left.genre.localeCompare(right.genre));
+
+    const noGenreGroup = groupedGenres.get(noGenreLabel);
+    if (noGenreGroup) {
+      orderedGenres.push(noGenreGroup);
+    }
+
+    return {
+      genres: orderedGenres,
+    };
+  }
 
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlistIdResult = await this.prisma.$transaction(async (tx) => {
@@ -873,7 +937,21 @@ export class PlaylistsService {
           id: dto.trackId,
           deletedAt: null,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          coverArtUrl: true,
+          uploader: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  handle: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!track) {
@@ -918,6 +996,11 @@ export class PlaylistsService {
       return {
         playlistId: playlist.id,
         trackId: track.id,
+        coverArtUrl: track.coverArtUrl ?? null,
+        artist: {
+          id: track.uploader.id,
+          name: track.uploader.profile?.displayName ?? track.uploader.profile?.handle ?? "Unknown Artist",
+        },
       };
     });
 
@@ -929,6 +1012,8 @@ export class PlaylistsService {
       message: "Track added to playlist successfully",
       playlistId: result.playlistId,
       trackId: result.trackId,
+      coverArtUrl: result.coverArtUrl,
+      artist: result.artist,
     };
   }
 
@@ -1095,9 +1180,15 @@ export class PlaylistsService {
           id: true,
           title: true,
           slug: true,
+          coverImageUrl: true,
           coverArtUrl: true,
           visibility: true,
           likesCount: true,
+          genre: {
+            select: {
+              name: true,
+            },
+          },
           _count: {
             select: {
               tracks: true,
@@ -1115,9 +1206,10 @@ export class PlaylistsService {
         playlistId: playlist.id,
         title: playlist.title,
         slug: playlist.slug,
-        coverArtUrl: playlist.coverArtUrl ?? null,
+        coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
         visibility: playlist.visibility,
         likesCount: playlist.likesCount,
+        genre: playlist.genre?.name ?? null,
         tracksCount: playlist._count.tracks,
       })),
     };

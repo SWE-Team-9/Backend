@@ -16,12 +16,17 @@ function buildServiceMock() {
       secretToken: null,
     }),
     getTopPlaylists: jest.fn().mockResolvedValue({
-      playlists: [
+      genres: [
         {
-          playlistId: "pl_101",
-          title: "Late Night Drive",
-          visibility: "PUBLIC",
-          likesCount: 48,
+          genre: "Electronic",
+          playlists: [
+            {
+              playlistId: "pl_101",
+              title: "Late Night Drive",
+              visibility: "PUBLIC",
+              likesCount: 48,
+            },
+          ],
         },
       ],
     }),
@@ -68,6 +73,11 @@ function buildServiceMock() {
       message: "Track added to playlist successfully",
       playlistId: "pl_101",
       trackId: "trk_123",
+      coverArtUrl: "https://example.com/cover.jpg",
+      artist: {
+        id: "usr_2",
+        name: "Artist Name",
+      },
     }),
     removeTrack: jest.fn().mockResolvedValue({
       message: "Track removed from playlist successfully",
@@ -80,6 +90,7 @@ function buildServiceMock() {
       title: "Late Night Drive",
       description: "chill tracks",
       visibility: "PUBLIC",
+      genre: "Electronic",
       owner: { id: "usr_1", display_name: "Ahmed Hassan" },
       tracks: [{ trackId: "trk_123", title: "Layali" }],
     }),
@@ -183,8 +194,8 @@ describe("PlaylistsController", () => {
       const res = await request(app.getHttpServer()).get("/playlists/top").expect(200);
 
       expect(service.getTopPlaylists).toHaveBeenCalled();
-      expect(res.body.playlists).toHaveLength(1);
-      expect(res.body.playlists[0]).toHaveProperty("likesCount", 48);
+      expect(res.body.genres).toHaveLength(1);
+      expect(res.body.genres[0]).toHaveProperty("genre", "Electronic");
     });
   });
 
@@ -254,13 +265,23 @@ describe("PlaylistsController", () => {
 
   describe("POST /playlists/:playlistId/tracks", () => {
     it("adds track to playlist", async () => {
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post("/playlists/pl_101/tracks")
         .send({ trackId: "trk_123" })
         .expect(201);
 
       expect(service.addTrack).toHaveBeenCalledWith("usr_1", "pl_101", {
         trackId: "trk_123",
+      });
+      expect(res.body).toEqual({
+        message: expect.any(String),
+        playlistId: expect.any(String),
+        trackId: expect.any(String),
+        coverArtUrl: expect.anything(),
+        artist: {
+          id: expect.any(String),
+          name: expect.any(String),
+        },
       });
     });
 
