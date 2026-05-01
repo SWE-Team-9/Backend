@@ -840,12 +840,17 @@ export class AuthService {
   // Endpoint 15: Get Current User
   // ═══════════════════════════════════════════════════════════════════════════
   async getMe(userId: string) {
+    const now = new Date();
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
         profile: true,
         subscriptions: {
-          where: { status: { in: ["ACTIVE", "TRIALING"] } },
+          where: {
+            status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
+            currentPeriodEnd: { gte: now },
+          },
           orderBy: { createdAt: "desc" },
           select: {
             plan: { select: { name: true, tier: true, code: true } },
