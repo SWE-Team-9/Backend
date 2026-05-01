@@ -1,11 +1,22 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { DiscoveryService } from './discovery.service';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
-import { ResolveQueryDto } from './dto/resolve-query.dto';
-import { SearchQueryDto } from './dto/search-query.dto';
-import { TrendingQueryDto } from './dto/trending-query.dto';
+import { Controller, Get, Param, Query } from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiCookieAuth,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { DiscoveryService } from "./discovery.service";
+import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { Public } from "../common/decorators/public.decorator";
+import { ResolveQueryDto } from "./dto/resolve-query.dto";
+import { SearchQueryDto } from "./dto/search-query.dto";
+import { TrendingQueryDto } from "./dto/trending-query.dto";
+import { TrendingGenreQueryDto } from "./dto/trending-genre-query.dto";
 
 @ApiTags('Discovery')
 @ApiCookieAuth('access_token')
@@ -140,7 +151,83 @@ export class DiscoveryController {
     return this.discoveryService.trending(query.limit, query.windowDays, userId);
   }
 
-  @Get('resolve')
+  @Get("trending/genres/:genreSlug/tracks")
+  @Public()
+  @ApiOperation({
+    summary: "Get trending tracks for a specific genre",
+    description:
+      "Returns trending public finished tracks for the exact genre slug. " +
+      "No fallback tracks are returned. " +
+      "Tracks are sorted by total likes count descending.",
+  })
+  @ApiParam({
+    name: "genreSlug",
+    description: 'Exact genre slug (e.g. "electronic", "hip-hop")',
+    example: "electronic",
+  })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    description: "Max tracks to return (1–5, default 5)",
+    example: 5,
+  })
+  @ApiOkResponse({
+    description:
+      "Trending tracks for the genre. Returns tracks: [] when the genre exists but has no matching tracks.",
+    schema: {
+      example: {
+        genre: { slug: "electronic", name: "Electronic" },
+        limit: 5,
+        total: 1,
+        tracks: [
+          {
+            trackId: "00000000-0000-0000-0000-000000000001",
+            title: "Example Track",
+            slug: "example-track",
+            artist: {
+              id: "00000000-0000-0000-0000-000000000002",
+              displayName: "Example Artist",
+              handle: "example-artist",
+              avatarUrl: null,
+            },
+            genre: { slug: "electronic", name: "Electronic" },
+            coverArtUrl: null,
+            durationMs: 210000,
+            waveformData: [],
+            likesCount: 42,
+            repostsCount: 7,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            publishedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+    },
+  })
+  @ApiNotFoundResponse({
+    description: "Genre slug does not exist in the database.",
+    schema: {
+      example: {
+        statusCode: 404,
+        error: "Not Found",
+        message: 'Genre "wrong-slug" not found.',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid limit value.",
+  })
+  getTrendingTracksByGenre(
+    @Param("genreSlug") genreSlug: string,
+    @Query() query: TrendingGenreQueryDto,
+  ) {
+    return this.discoveryService.getTrendingTracksByGenre(
+      genreSlug,
+      query.limit ?? 5,
+    );
+  }
+
+  @Get("resolve")
   @Public()
   @ApiOperation({
     summary: 'Resolve a public URL/path into internal resource UUID + type',
