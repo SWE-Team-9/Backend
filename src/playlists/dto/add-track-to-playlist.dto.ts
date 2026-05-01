@@ -22,4 +22,18 @@ export class AddTrackToPlaylistResponseDto {
 
   @ApiProperty({ example: 'trk_123' })
   trackId!: string;
+
+  @ApiProperty({ example: 'https://example.com/cover.jpg', nullable: true })
+  coverArtUrl!: string | null;
+
+  @ApiProperty({
+    example: {
+      id: 'usr_1',
+      name: 'Artist Name',
+    },
+  })
+  artist!: {
+    id: string;
+    name: string;
+  };
 }

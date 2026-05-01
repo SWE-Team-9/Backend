@@ -73,6 +73,11 @@ function buildServiceMock() {
       message: "Track added to playlist successfully",
       playlistId: "pl_101",
       trackId: "trk_123",
+      coverArtUrl: "https://example.com/cover.jpg",
+      artist: {
+        id: "usr_2",
+        name: "Artist Name",
+      },
     }),
     removeTrack: jest.fn().mockResolvedValue({
       message: "Track removed from playlist successfully",
@@ -259,13 +264,23 @@ describe("PlaylistsController", () => {
 
   describe("POST /playlists/:playlistId/tracks", () => {
     it("adds track to playlist", async () => {
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post("/playlists/pl_101/tracks")
         .send({ trackId: "trk_123" })
         .expect(201);
 
       expect(service.addTrack).toHaveBeenCalledWith("usr_1", "pl_101", {
         trackId: "trk_123",
+      });
+      expect(res.body).toEqual({
+        message: expect.any(String),
+        playlistId: expect.any(String),
+        trackId: expect.any(String),
+        coverArtUrl: expect.anything(),
+        artist: {
+          id: expect.any(String),
+          name: expect.any(String),
+        },
       });
     });
 

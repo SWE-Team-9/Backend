@@ -732,7 +732,17 @@ describe("PlaylistsService", () => {
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.track.findFirst.mockResolvedValue({ id: "trk_123" });
+      prisma.track.findFirst.mockResolvedValue({
+        id: "trk_123",
+        coverArtUrl: "https://example.com/cover.jpg",
+        uploader: {
+          id: "usr_2",
+          profile: {
+            handle: "artist_user",
+            displayName: "Artist Name",
+          },
+        },
+      });
       prisma.playlistTrack.aggregate.mockResolvedValue({
         _count: { _all: 3 },
         _max: { position: 2 },
@@ -750,6 +760,11 @@ describe("PlaylistsService", () => {
         message: "Track added to playlist successfully",
         playlistId: "pl_101",
         trackId: "trk_123",
+        coverArtUrl: "https://example.com/cover.jpg",
+        artist: {
+          id: "usr_2",
+          name: "Artist Name",
+        },
       });
     });
 

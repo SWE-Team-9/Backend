@@ -478,6 +478,18 @@ export class PlaylistsController {
     status: 201,
     description: 'Track added to playlist successfully.',
     type: AddTrackToPlaylistResponseDto,
+    schema: {
+      example: {
+        message: 'Track added to playlist successfully',
+        playlistId: 'pl_101',
+        trackId: 'trk_123',
+        coverArtUrl: 'https://example.com/cover.jpg',
+        artist: {
+          id: 'usr_1',
+          name: 'Artist Name',
+        },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Validation error.' })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })

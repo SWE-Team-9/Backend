@@ -919,7 +919,21 @@ export class PlaylistsService {
           id: dto.trackId,
           deletedAt: null,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          coverArtUrl: true,
+          uploader: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  handle: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!track) {
@@ -964,6 +978,11 @@ export class PlaylistsService {
       return {
         playlistId: playlist.id,
         trackId: track.id,
+        coverArtUrl: track.coverArtUrl ?? null,
+        artist: {
+          id: track.uploader.id,
+          name: track.uploader.profile?.displayName ?? track.uploader.profile?.handle ?? "Unknown Artist",
+        },
       };
     });
 
@@ -975,6 +994,8 @@ export class PlaylistsService {
       message: "Track added to playlist successfully",
       playlistId: result.playlistId,
       trackId: result.trackId,
+      coverArtUrl: result.coverArtUrl,
+      artist: result.artist,
     };
   }
 
