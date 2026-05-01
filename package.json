@@ -135,6 +135,6 @@
     "seed": "node node_modules/ts-node/dist/bin.js prisma/seed.ts"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.0.0"
   }
 }
