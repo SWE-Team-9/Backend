@@ -489,15 +489,13 @@ describe('SubscriptionsService', () => {
       );
     });
 
-    it('immediately upgrades an existing active subscription to a higher plan', async () => {
-      // PRO -> GO_PLUS is an upgrade — should apply immediately
+    it('schedules a plan change when switching from PRO to GO_PLUS (period-end, not immediate)', async () => {
+      // PRO -> GO_PLUS is now scheduled at period end, same as downgrades
       const goPlus = makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-uuid-NEW');
       const existing = makeActiveSub(SubscriptionTier.PRO, 100); // planId='plan-uuid-4444'
       mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlus);
       mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(existing); // findActiveSubscription
-      mockPrisma.trialRedemption.findUnique.mockResolvedValue(null);
       mockPrisma.userSubscription.update.mockResolvedValue({});
-      mockPrisma.billingInvoice.create.mockResolvedValue({ id: 'inv-id' });
       mockPrisma.paymentEvent.create.mockResolvedValue({});
 
       const result: any = await service.subscribe(USER_ID, {
@@ -505,9 +503,17 @@ describe('SubscriptionsService', () => {
         paymentMethodId: 'pm_test_card',
       });
 
-      expect(mockPrisma.userSubscription.update).toHaveBeenCalledTimes(1);
+      expect(result.scheduled).toBe(true);
+      expect(result.currentPlan).toBe('PRO');
+      expect(result.newPlan).toBe('GO_PLUS');
+      expect(result.effectiveAt).toBeDefined();
+      expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: existing.id },
+          data: expect.objectContaining({ cancelAtPeriodEnd: true }),
+        }),
+      );
       expect(mockPrisma.userSubscription.create).not.toHaveBeenCalled();
-      expect(result.planCode).toBe('GO_PLUS');
     });
 
     it('schedules a downgrade when switching from a higher plan to a lower one', async () => {
@@ -998,14 +1004,14 @@ describe('SubscriptionsService', () => {
         });
       });
 
-      it('GO_PLUS is ad-free, allows downloads, priority support, 30-day trial', () => {
+      it('GO_PLUS is ad-free, allows downloads, priority support, no trial (trialDays=0)', () => {
         expect(PLAN_CONFIG.GO_PLUS).toMatchObject({
           priceCents: 1999,
           uploadLimit: 1000,
           adsEnabled: false,
           canDownload: true,
           supportLevel: 'priority',
-          trialDays: 30,
+          trialDays: 0,
         });
       });
 
@@ -1022,8 +1028,9 @@ describe('SubscriptionsService', () => {
         expect(PLAN_CONFIG.GO_PLUS.uploadLimit).toBeGreaterThan(PLAN_CONFIG.PRO.uploadLimit);
       });
 
-      it('GO_PLUS trialDays > PRO trialDays', () => {
-        expect(PLAN_CONFIG.GO_PLUS.trialDays).toBeGreaterThan(PLAN_CONFIG.PRO.trialDays);
+      it('only PRO gets a trial; GO_PLUS trialDays is 0', () => {
+        expect(PLAN_CONFIG.PRO.trialDays).toBe(7);
+        expect(PLAN_CONFIG.GO_PLUS.trialDays).toBe(0);
       });
     });
 
@@ -1154,15 +1161,18 @@ describe('SubscriptionsService', () => {
         );
       });
 
-      it('passes trialDays=30 to billing provider for first GO_PLUS checkout', async () => {
+      it('passes trialDays=0 to billing provider for GO_PLUS checkout (no trial for GO_PLUS)', async () => {
+        // GO_PLUS has no free trial — only PRO gets a 7-day trial
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(
           makePlan(SubscriptionTier.GO_PLUS, 1000),
         );
+        // No existing sub so the plan-change-scheduled path is skipped
+        mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
 
         await service.checkout(USER_ID, { planCode: PlanCodeEnum.GO_PLUS });
 
         expect(mockBillingProvider.createCheckoutSession).toHaveBeenCalledWith(
-          expect.objectContaining({ trialDays: 30 }),
+          expect.objectContaining({ trialDays: 0 }),
         );
       });
 
@@ -1229,15 +1239,17 @@ describe('SubscriptionsService', () => {
         });
       });
 
-      it('updates (not creates) sub when upgrading to different plan', async () => {
+      it('schedules plan change (not creates) when switching from PRO to GO_PLUS', async () => {
         const goPlusPlan = makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-uuid-GOPLUS');
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
         mockPrisma.userSubscription.findFirst.mockResolvedValue(
           makeActiveSub(SubscriptionTier.PRO, 100),
         );
 
-        await service.checkout(USER_ID, { planCode: PlanCodeEnum.GO_PLUS });
+        const result: any = await service.checkout(USER_ID, { planCode: PlanCodeEnum.GO_PLUS });
 
+        // Scheduled at period end — updates existing sub with cancelAtPeriodEnd + pendingDowngrade
+        expect(result.scheduled).toBe(true);
         expect(mockPrisma.userSubscription.update).toHaveBeenCalledTimes(1);
         expect(mockPrisma.userSubscription.create).not.toHaveBeenCalled();
       });
@@ -1394,6 +1406,31 @@ describe('SubscriptionsService', () => {
           expect.objectContaining({ cancelAtPeriodEnd: true }),
         );
       });
+
+      it('clears pendingDowngrade from paymentMethod when canceling', async () => {
+        const subWithPending = makeActiveSub(SubscriptionTier.PRO, 100, {
+          paymentMethod: {
+            pendingDowngrade: {
+              planCode: 'GO_PLUS',
+              planId: 'plan-uuid-GOPLUS',
+              planName: 'Go+',
+              effectiveAt: FUTURE.toISOString(),
+            },
+          },
+        });
+        mockPrisma.userSubscription.findFirst.mockResolvedValue(subWithPending);
+
+        await service.cancelSubscription(USER_ID, dto);
+
+        expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              cancelAtPeriodEnd: true,
+              paymentMethod: expect.not.objectContaining({ pendingDowngrade: expect.anything() }),
+            }),
+          }),
+        );
+      });
     });
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1444,44 +1481,52 @@ describe('SubscriptionsService', () => {
         ).rejects.toThrow(BadRequestException);
       });
 
-      it('PRO -> GO_PLUS: updates subscription planId to GO_PLUS plan', async () => {
+      it('PRO -> GO_PLUS: schedules plan change (sets cancelAtPeriodEnd + pendingDowngrade)', async () => {
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
-        mockPrisma.userSubscription.findFirst
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100))
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.GO_PLUS, 1000));
-        mockPrisma.track.count.mockResolvedValue(0);
+        mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(
+          makeActiveSub(SubscriptionTier.PRO, 100),
+        );
 
-        await service.changePlan(USER_ID, {
+        const result: any = await service.changePlan(USER_ID, {
           planCode: ChangePlanCodeEnum.GO_PLUS,
         });
 
+        expect(result.scheduled).toBe(true);
+        expect(result.currentPlan).toBe('PRO');
+        expect(result.newPlan).toBe('GO_PLUS');
+        expect(result.effectiveAt).toBeDefined();
         expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
           expect.objectContaining({
-            data: expect.objectContaining({ planId: goPlusPlan.id }),
+            data: expect.objectContaining({
+              cancelAtPeriodEnd: true,
+              paymentMethod: expect.objectContaining({
+                pendingDowngrade: expect.objectContaining({ planCode: 'GO_PLUS' }),
+              }),
+            }),
           }),
         );
+        // Must NOT call billing.changePlan (no immediate billing change)
+        expect(mockBillingProvider.changePlan).not.toHaveBeenCalled();
       });
 
-      it('calls billing.changePlan once', async () => {
+      it('does NOT call billing.changePlan (plan change is scheduled DB-side only)', async () => {
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
-        mockPrisma.userSubscription.findFirst
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100))
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.GO_PLUS, 1000));
-        mockPrisma.track.count.mockResolvedValue(0);
+        mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(
+          makeActiveSub(SubscriptionTier.PRO, 100),
+        );
 
         await service.changePlan(USER_ID, {
           planCode: ChangePlanCodeEnum.GO_PLUS,
         });
 
-        expect(mockBillingProvider.changePlan).toHaveBeenCalledTimes(1);
+        expect(mockBillingProvider.changePlan).not.toHaveBeenCalled();
       });
 
-      it('records customer.subscription.updated payment event', async () => {
+      it('records customer.subscription.downgrade_scheduled payment event', async () => {
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
-        mockPrisma.userSubscription.findFirst
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100))
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.GO_PLUS, 1000));
-        mockPrisma.track.count.mockResolvedValue(0);
+        mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(
+          makeActiveSub(SubscriptionTier.PRO, 100),
+        );
 
         await service.changePlan(USER_ID, {
           planCode: ChangePlanCodeEnum.GO_PLUS,
@@ -1490,31 +1535,25 @@ describe('SubscriptionsService', () => {
         expect(mockPrisma.paymentEvent.create).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({
-              eventType: 'customer.subscription.updated',
+              eventType: 'customer.subscription.downgrade_scheduled',
             }),
           }),
         );
       });
 
-      it('GO_PLUS -> PRO: hides over-limit tracks (5 tracks, limit=3 -> hides 2)', async () => {
+      it('GO_PLUS -> PRO: schedules plan change (no immediate track hiding)', async () => {
+        // changePlan now always schedules — track limits are applied when the
+        // period-end finalization activates the new plan, not immediately.
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(proPlan);
-        mockPrisma.userSubscription.findFirst
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.GO_PLUS, 1000))
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100));
-        const tracks = [
-          { id: 't1', hiddenByPlanLimit: false },
-          { id: 't2', hiddenByPlanLimit: false },
-          { id: 't3', hiddenByPlanLimit: false },
-          { id: 't4', hiddenByPlanLimit: false },
-          { id: 't5', hiddenByPlanLimit: false },
-        ];
-        mockPrisma.track.findMany.mockResolvedValue(tracks);
-        mockPrisma.track.count.mockResolvedValue(5);
+        mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(
+          makeActiveSub(SubscriptionTier.GO_PLUS, 1000),
+        );
 
-        await service.changePlan(USER_ID, { planCode: ChangePlanCodeEnum.PRO });
+        const result: any = await service.changePlan(USER_ID, { planCode: ChangePlanCodeEnum.PRO });
 
-        // PRO uploadLimit in PLAN_CONFIG = 100, so no tracks should be hidden
-        // (5 tracks is within 100 limit)
+        expect(result.scheduled).toBe(true);
+        expect(result.newPlan).toBe('PRO');
+        // No immediate track hiding — deferred to period-end finalization
         expect(mockPrisma.track.updateMany).not.toHaveBeenCalled();
       });
 
@@ -1538,18 +1577,106 @@ describe('SubscriptionsService', () => {
         );
       });
 
-      it('returns updated subscription plan after change', async () => {
+      it('returns scheduled response with newPlan=GO_PLUS after change', async () => {
         mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(goPlusPlan);
-        mockPrisma.userSubscription.findFirst
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100))
-          .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.GO_PLUS, 1000));
-        mockPrisma.track.count.mockResolvedValue(0);
+        mockPrisma.userSubscription.findFirst.mockResolvedValueOnce(
+          makeActiveSub(SubscriptionTier.PRO, 100),
+        );
 
-        const result = await service.changePlan(USER_ID, {
+        const result: any = await service.changePlan(USER_ID, {
           planCode: ChangePlanCodeEnum.GO_PLUS,
         });
 
-        expect(result.planCode).toBe('GO_PLUS');
+        expect(result.scheduled).toBe(true);
+        expect(result.newPlan).toBe('GO_PLUS');
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // finalizeExpiredCancelAtPeriodEndSubscriptions (via getMySubscription)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    describe('finalizeExpiredCancelAtPeriodEndSubscriptions()', () => {
+      const PAST = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
+
+      it('creates a new subscription when pendingDowngrade exists at period end', async () => {
+        const expiredSubWithPending = {
+          id: 'sub-expired-id',
+          userId: USER_ID,
+          status: SubscriptionStatus.ACTIVE,
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: PAST,
+          stripeCustomerId: 'cus_mock_test',
+          paymentMethod: {
+            pendingDowngrade: {
+              planCode: 'GO_PLUS',
+              planId: 'plan-uuid-GOPLUS',
+              planName: 'Go+',
+              effectiveAt: PAST.toISOString(),
+            },
+          },
+          plan: { name: 'Pro Monthly', tier: SubscriptionTier.PRO },
+        };
+
+        // First call: findMany in finalizeExpiredCancelAtPeriodEndSubscriptions
+        mockPrisma.userSubscription.findMany.mockResolvedValueOnce([expiredSubWithPending]);
+        // Second call: findFirst in findActiveSubscription (for getMySubscription)
+        mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
+        mockPrisma.track.count.mockResolvedValue(0);
+        mockPrisma.userSubscription.create.mockResolvedValue({ id: 'new-goplus-sub-id' });
+
+        await service.getMySubscription(USER_ID);
+
+        // Cancel the old sub
+        expect(mockPrisma.userSubscription.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'sub-expired-id' },
+            data: expect.objectContaining({
+              status: SubscriptionStatus.CANCELED,
+              cancelAtPeriodEnd: false,
+            }),
+          }),
+        );
+        // Activate the new plan
+        expect(mockPrisma.userSubscription.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              userId: USER_ID,
+              planId: 'plan-uuid-GOPLUS',
+              status: SubscriptionStatus.ACTIVE,
+              cancelAtPeriodEnd: false,
+            }),
+          }),
+        );
+        // Should NOT revert tracks to FREE (that's only for pure cancellations)
+        expect(mockPrisma.offlineDownload.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('reverts to FREE (revokeOfflineDownloads + applyPlanLimit) on pure cancellation', async () => {
+        const expiredSubNoPending = {
+          id: 'sub-expired-id',
+          userId: USER_ID,
+          status: SubscriptionStatus.ACTIVE,
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: PAST,
+          stripeCustomerId: 'cus_mock_test',
+          paymentMethod: null,
+          plan: { name: 'Pro Monthly', tier: SubscriptionTier.PRO },
+        };
+
+        mockPrisma.userSubscription.findMany.mockResolvedValueOnce([expiredSubNoPending]);
+        mockPrisma.userSubscription.findFirst.mockResolvedValue(null);
+        mockPrisma.track.count.mockResolvedValue(0);
+        mockPrisma.track.findMany.mockResolvedValue([]);
+
+        await service.getMySubscription(USER_ID);
+
+        // Should revoke offline downloads and apply FREE limit
+        expect(mockPrisma.offlineDownload.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { userId: USER_ID } }),
+        );
+        // Should NOT create a new subscription
+        expect(mockPrisma.userSubscription.create).not.toHaveBeenCalled();
       });
     });
 

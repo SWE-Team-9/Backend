@@ -88,18 +88,8 @@ export const PLAN_CONFIG: Record<
     adsEnabled: false,
     canDownload: true,
     supportLevel: 'priority',
-    trialDays: 30, // 30-day free trial for GO+
+    trialDays: 0, // No free trial for GO+; only PRO gets a 7-day trial
   },
-};
-
-/**
- * Numeric rank for plan tiers — higher = more features/price.
- * Used to detect upgrades vs downgrades.
- */
-const PLAN_TIER_RANK: Record<string, number> = {
-  FREE: 0,
-  PRO: 1,
-  GO_PLUS: 2,
 };
 
 /** Returns a new Date exactly one calendar month after the given date. */
@@ -361,16 +351,16 @@ export class SubscriptionsService {
       });
     }
 
-    // ── Downgrade detection ──────────────────────────────────────────────────
-    // If the user is on a higher-tier plan and requests a lower one, schedule
-    // the downgrade at the end of the current billing period instead of applying
-    // it immediately. The user keeps all higher-plan benefits until then.
+    // ── Plan-switch detection ────────────────────────────────────────────────
+    // If the user is on any paid plan and requests a different paid plan,
+    // schedule the change at the end of the current billing period instead of
+    // applying it immediately. The user keeps all current benefits until then.
     if (existing) {
       const currentTierCode = planTierToCode(existing.plan.tier);
-      if (PLAN_TIER_RANK[currentTierCode] > PLAN_TIER_RANK[planCode]) {
+      if (currentTierCode !== planCode) {
         const effectiveAt = existing.currentPeriodEnd;
 
-        // Persist the scheduled downgrade intent in the subscription's
+        // Persist the scheduled plan-change intent in the subscription's
         // paymentMethod JSON so getMySubscription can surface it.
         const currentPaymentMethod =
           typeof existing.paymentMethod === 'object' && existing.paymentMethod !== null
@@ -406,7 +396,7 @@ export class SubscriptionsService {
           effectiveAt: effectiveAt.toISOString(),
           currentPlan: currentTierCode,
           newPlan: planCode,
-          message: `Your plan will downgrade from ${existing.plan.name} to ${plan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
+          message: `Your plan will change to ${plan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
         };
       }
     }
@@ -610,9 +600,17 @@ export class SubscriptionsService {
       providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
       cancelAtPeriodEnd: true,
     });
+
+    // Clear any pending plan change so it won't activate at period end
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+    const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
+
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
-      data: { cancelAtPeriodEnd: true, canceledAt: now },
+      data: { cancelAtPeriodEnd: true, canceledAt: now, paymentMethod: cleanPaymentMethod as any },
     });
     await this.logPaymentEvent(sub.id, 'customer.subscription.updated', {
       cancelAtPeriodEnd: true,
@@ -684,25 +682,48 @@ export class SubscriptionsService {
       where: { tier: newTier, isActive: true },
     });
     if (!newPlan) throw new BadRequestException(`Plan "${dto.planCode}" not found.`);
-    const now = new Date();
-    await this.billing.changePlan({
-      providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
-      newPlanCode: dto.planCode,
-      newProviderPriceId: newPlan.stripePriceId ?? undefined,
-    });
+
+    const currentPlanCode = planTierToCode(currentTier);
+    const newPlanCode = planTierToCode(newTier);
+    const effectiveAt = sub.currentPeriodEnd;
+
+    // Schedule the plan change at period end (never apply immediately)
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
-      data: { planId: newPlan.id },
+      data: {
+        cancelAtPeriodEnd: true,
+        paymentMethod: {
+          ...currentPaymentMethod,
+          pendingDowngrade: {
+            planCode: newPlanCode,
+            planId: newPlan.id,
+            planName: newPlan.name,
+            effectiveAt: effectiveAt.toISOString(),
+          },
+        },
+      },
     });
-    await this.logPaymentEvent(sub.id, 'customer.subscription.updated', {
-      oldPlanCode: planTierToCode(currentTier),
-      newPlanCode: dto.planCode,
-      effectiveDate: now.toISOString(),
+
+    await this.logPaymentEvent(sub.id, 'customer.subscription.downgrade_scheduled', {
+      oldPlanCode: currentPlanCode,
+      newPlanCode,
+      effectiveAt: effectiveAt.toISOString(),
     });
-    const newPlanCode = planTierToCode(newTier);
-    await this.applyPlanLimitToTracks(userId, PLAN_CONFIG[newPlanCode].uploadLimit);
-    this.sendPlanChangedEmailAsync(userId, planTierToCode(currentTier), newPlanCode, now);
-    return this.getMySubscription(userId);
+
+    this.sendDowngradeScheduledEmailAsync(userId, sub.plan.name, newPlan.name, effectiveAt);
+
+    return {
+      subscriptionId: sub.id,
+      scheduled: true,
+      effectiveAt: effectiveAt.toISOString(),
+      currentPlan: currentPlanCode,
+      newPlan: newPlanCode,
+      message: `Your plan will change to ${newPlan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
+    };
   }
 
   // ── GET /subscriptions/invoices ───────────────────────────────────────────
@@ -1368,11 +1389,23 @@ export class SubscriptionsService {
       select: {
         id: true,
         userId: true,
-        plan: { select: { name: true } },
+        stripeCustomerId: true,
+        paymentMethod: true,
+        plan: { select: { name: true, tier: true } },
       },
     });
 
     for (const sub of expiredCancelingSubs) {
+      const rawPaymentMethod = (sub as any).paymentMethod as Record<string, unknown> | null;
+      const pendingChange =
+        (rawPaymentMethod?.pendingDowngrade as {
+          planCode: string;
+          planId: string;
+          planName: string;
+          effectiveAt: string;
+        } | null) ?? null;
+
+      // Cancel (expire) the current subscription
       await this.prisma.userSubscription.update({
         where: { id: sub.id },
         data: {
@@ -1382,16 +1415,43 @@ export class SubscriptionsService {
         },
       });
 
-      await this.revokeOfflineDownloads(sub.userId);
-      await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
-
       await this.logPaymentEvent(sub.id, 'subscription.cancel_period_end_finalized', {
         finalizedAt: now.toISOString(),
       });
 
-      this.logger.warn(
-        `[SUBSCRIPTION FINALIZE] Auto-finalized expired cancel-at-period-end subscription ${sub.id}`,
-      );
+      if (pendingChange) {
+        // Activate the scheduled plan change by creating a new subscription record
+        const newSub = await this.prisma.userSubscription.create({
+          data: {
+            userId: sub.userId,
+            planId: pendingChange.planId,
+            stripeCustomerId: (sub as any).stripeCustomerId ?? undefined,
+            stripeSubscriptionId: `sub_mock_${Date.now()}`,
+            status: SubscriptionStatus.ACTIVE,
+            currentPeriodStart: now,
+            currentPeriodEnd: addOneMonth(now),
+            cancelAtPeriodEnd: false,
+          },
+        });
+
+        await this.logPaymentEvent(newSub.id, 'subscription.plan_change_activated', {
+          fromPlan: sub.plan.name,
+          toPlan: pendingChange.planName,
+          activatedAt: now.toISOString(),
+        });
+
+        this.logger.log(
+          `[SUBSCRIPTION FINALIZE] Activated pending plan change from ${sub.plan.name} to ${pendingChange.planName} for user ${sub.userId} (new sub: ${newSub.id})`,
+        );
+      } else {
+        // Pure cancellation → revert to FREE limits
+        await this.revokeOfflineDownloads(sub.userId);
+        await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
+
+        this.logger.warn(
+          `[SUBSCRIPTION FINALIZE] Auto-finalized expired cancel-at-period-end subscription ${sub.id}`,
+        );
+      }
     }
   }
 
