@@ -249,6 +249,11 @@ export class PlaylistsService {
     );
   }
 
+  private normalizeVisibility(visibility: PlaylistVisibility | 'PRIVATE'): 'PUBLIC' | 'SECRET' {
+    return visibility === PlaylistVisibility.PUBLIC ? 'PUBLIC' : 'SECRET';
+  }
+
+  // The playlist workflow always returns frontend-ready shapes, never raw Prisma rows.
   private sanitizePlaylistOutput(
     playlist: {
       id: string;
@@ -264,7 +269,7 @@ export class PlaylistsService {
       createdAt?: Date | string | null;
       releaseDate?: Date | string | null;
       owner: { id: string; profile: { displayName: string } | null };
-      tracks: Array<{
+      tracks?: Array<{
         track: {
           id: string;
           title: string;
@@ -280,12 +285,16 @@ export class PlaylistsService {
     },
     requesterUserId?: string,
     isLiked = false,
+    tracksCount?: number,
   ): GetPlaylistDetailsResponseDto {
+    const tracks = playlist.tracks ?? [];
+    const resolvedTracksCount = tracksCount ?? tracks.length;
+
     return {
       playlistId: playlist.id,
       title: playlist.title,
       description: playlist.description,
-      visibility: playlist.visibility,
+      visibility: this.normalizeVisibility(playlist.visibility),
       coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
       likesCount: playlist.likesCount ?? 0,
       isLiked,
@@ -296,17 +305,18 @@ export class PlaylistsService {
         ? { secretToken: playlist.secretToken }
         : {}),
       genre: playlist.genre?.slug ?? null,
+      tracksCount: resolvedTracksCount,
       owner: {
         id: playlist.owner.id,
         displayName: playlist.owner.profile?.displayName ?? 'Unknown User',
       },
-      tracks: playlist.tracks.map(({ track }) => {
+      tracks: tracks.map(({ track }) => {
         const uploaderProfile = track.uploader.profile;
         return {
           trackId: track.id,
           title: track.title,
           coverArtUrl: track.coverArtUrl,
-          durationMs: track.durationMs ?? null,
+          durationMs: track.durationMs ?? 0,
           likesCount: track._count?.likes ?? 0,
           repostsCount: track._count?.reposts ?? 0,
           artist: {
@@ -330,7 +340,7 @@ export class PlaylistsService {
       : undefined;
     const tracksOffset = shouldPaginate ? (tracksQuery.offset ?? 0) : undefined;
 
-    const [playlist, trackRows] = await this.prisma.$transaction([
+    const [playlist, trackRows, playlistTrackCount] = await this.prisma.$transaction([
       this.prisma.playlist.findFirst({
         where: {
           id: playlistId,
@@ -400,6 +410,14 @@ export class PlaylistsService {
           },
         },
       }),
+      this.prisma.playlistTrack.count({
+        where: {
+          playlistId,
+          track: {
+            deletedAt: null,
+          },
+        },
+      }),
     ]);
 
     if (!playlist) {
@@ -422,6 +440,7 @@ export class PlaylistsService {
       },
       requesterUserId,
       isLiked,
+      playlistTrackCount,
     );
   }
 
@@ -451,6 +470,11 @@ export class PlaylistsService {
         type: true,
         releaseDate: true,
         genreId: true,
+        genre: {
+          select: {
+            slug: true,
+          },
+        },
         tags: true,
       },
     });
@@ -463,16 +487,17 @@ export class PlaylistsService {
       throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only edit your own playlists.');
     }
 
+    // Edit mode uses the slug so the Flutter UI can prefill without mapping numeric IDs.
     return {
       playlistId: playlist.id,
       title: playlist.title,
       description: playlist.description,
-      visibility: playlist.visibility,
+      visibility: this.normalizeVisibility(playlist.visibility),
       slug: playlist.slug,
       coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
       type: playlist.type,
       releaseDate: playlist.releaseDate ? new Date(playlist.releaseDate).toISOString() : null,
-      genreId: playlist.genreId,
+      genre: playlist.genre?.slug ?? null,
       tags: playlist.tags ?? [],
     };
   }
@@ -500,6 +525,18 @@ export class PlaylistsService {
       throw this.forbidden('PLAYLIST_OWNER_REQUIRED', 'You can only update your own playlists.');
     }
 
+    const requestedVisibility = (dto as { visibility?: string }).visibility;
+    if (
+      requestedVisibility !== undefined &&
+      requestedVisibility !== 'public' &&
+      requestedVisibility !== 'secret'
+    ) {
+      throw this.badRequest(
+        'INVALID_VISIBILITY',
+        'visibility must be one of the following values: public, secret',
+      );
+    }
+
     const data: Record<string, unknown> = {};
 
     if (dto.title !== undefined) {
@@ -515,12 +552,9 @@ export class PlaylistsService {
     }
 
     if (dto.visibility !== undefined) {
-      const normalizedVisibility =
-        dto.visibility === 'PRIVATE' ? PlaylistVisibility.SECRET : dto.visibility;
+      data.visibility = dto.visibility === 'public' ? PlaylistVisibility.PUBLIC : PlaylistVisibility.SECRET;
 
-      data.visibility = normalizedVisibility;
-
-      if (normalizedVisibility === PlaylistVisibility.PUBLIC) {
+      if (dto.visibility === 'public') {
         data.secretToken = null;
       } else if (playlist.visibility !== PlaylistVisibility.SECRET || !playlist.secretToken) {
         data.secretToken = await this.generateUniqueSecretToken(playlist.id);
@@ -750,7 +784,7 @@ export class PlaylistsService {
         .map((playlist) => ({
           playlistId: playlist.id,
           title: playlist.title,
-          visibility: playlist.visibility,
+          visibility: this.normalizeVisibility(playlist.visibility),
           coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
           likesCount: playlist.likesCount,
           isLiked: likedPlaylistIds.has(playlist.id),
@@ -1449,7 +1483,7 @@ export class PlaylistsService {
       playlists: playlists.map((playlist) => ({
         playlistId: playlist.id,
         title: playlist.title,
-        visibility: playlist.visibility,
+          visibility: this.normalizeVisibility(playlist.visibility),
         coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
         likesCount: playlist.likesCount,
         isLiked: likedPlaylistIds.has(playlist.id),
@@ -1464,15 +1498,14 @@ export class PlaylistsService {
   }
 
   async resolveSecret(secretToken: string): Promise<ResolveSecretPlaylistResponseDto> {
+    // Secret links resolve through the same detailed playlist projection as the standard details route.
     const playlist = await this.prisma.playlist.findFirst({
       where: {
         secretToken,
-        visibility: PlaylistVisibility.SECRET,
         deletedAt: null,
       },
       select: {
         id: true,
-        title: true,
       },
     });
 
@@ -1480,12 +1513,7 @@ export class PlaylistsService {
       throw this.notFound('PLAYLIST_SECRET_NOT_FOUND', 'Secret playlist not found.');
     }
 
-    return {
-      playlistId: playlist.id,
-      title: playlist.title,
-      visibility: 'PRIVATE',
-      message: 'Access granted via secret token',
-    };
+    return this.findOne(playlist.id);
   }
 
   async getEmbedCode(

@@ -69,6 +69,7 @@ import {
 export class PlaylistsController {
   constructor(private readonly playlistsService: PlaylistsService) {}
 
+  // Playlist lifecycle endpoints are grouped by create, public read, owner edit, and track actions.
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(
@@ -230,8 +231,33 @@ export class PlaylistsController {
       example: {
         playlistId: 'pl_101',
         title: 'Late Night Drive',
-        visibility: 'PRIVATE',
-        message: 'Access granted via secret token',
+        description: 'My favorite chill tracks',
+        visibility: 'SECRET',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+        tracksCount: 12,
+        likesCount: 48,
+        isLiked: false,
+        genre: 'electronic',
+        releaseDate: '2026-03-01T00:00:00.000Z',
+        owner: {
+          id: 'usr_1',
+          displayName: 'Ahmed Hassan',
+        },
+        tracks: [
+          {
+            trackId: 'trk_123',
+            title: 'Layali',
+            coverArtUrl: 'https://cdn.example.com/tracks/trk_123.jpg',
+            durationMs: 240000,
+            likesCount: 156,
+            repostsCount: 42,
+            artist: {
+              id: 'usr_456',
+              name: 'DJ Ahmed',
+              handle: 'dj_ahmed',
+            },
+          },
+        ],
       },
     },
   })
@@ -432,7 +458,7 @@ export class PlaylistsController {
         coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
         type: 'PLAYLIST',
         releaseDate: '2026-03-01T00:00:00.000Z',
-        genreId: 12,
+        genre: 'electronic',
         tags: ['chill', 'night-drive'],
       },
     },
@@ -705,17 +731,31 @@ export class PlaylistsController {
         playlistId: 'pl_101',
         title: 'Late Night Drive',
         description: 'My favorite chill tracks',
-        visibility: 'PUBLIC',
+        visibility: 'SECRET',
         secretToken: null,
-        genre: 'Electronic',
+        coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+        tracksCount: 12,
+        likesCount: 48,
+        isLiked: false,
+        genre: 'electronic',
+        releaseDate: '2026-03-01T00:00:00.000Z',
         owner: {
           id: 'usr_1',
-          display_name: 'Ahmed Hassan',
+          displayName: 'Ahmed Hassan',
         },
         tracks: [
           {
             trackId: 'trk_123',
             title: 'Layali',
+            coverArtUrl: 'https://cdn.example.com/tracks/trk_123.jpg',
+            durationMs: 240000,
+            likesCount: 156,
+            repostsCount: 42,
+            artist: {
+              id: 'usr_456',
+              name: 'DJ Ahmed',
+              handle: 'dj_ahmed',
+            },
           },
         ],
       },
@@ -752,7 +792,8 @@ export class PlaylistsController {
     schema: {
       example: {
         title: 'Late Night Drive Vol. 2',
-        visibility: 'PRIVATE',
+        visibility: 'SECRET',
+        genre: 'electronic',
       },
     },
   })
