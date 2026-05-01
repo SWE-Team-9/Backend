@@ -1,7 +1,7 @@
 {
   "name": "iqa3-backend",
   "version": "0.0.1",
-  "description": "IQA3 — Social Streaming Platform Backend (NestJS + PostgreSQL)",
+  "description": "IQA3 \u2014 Social Streaming Platform Backend (NestJS + PostgreSQL)",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -135,6 +135,6 @@
     "seed": "node node_modules/ts-node/dist/bin.js prisma/seed.ts"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }
