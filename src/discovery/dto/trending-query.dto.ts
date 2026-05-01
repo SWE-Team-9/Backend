@@ -1,10 +1,10 @@
-import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsOptional, Max, Min } from "class-validator";
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class TrendingQueryDto {
   @ApiPropertyOptional({
-    description: "How many trending tracks to return",
+    description: 'How many trending tracks to return',
     example: 20,
     minimum: 1,
     maximum: 100,
@@ -18,7 +18,7 @@ export class TrendingQueryDto {
   limit?: number = 20;
 
   @ApiPropertyOptional({
-    description: "Recent window in days used for engagement velocity",
+    description: 'Recent window in days used for engagement velocity',
     example: 7,
     minimum: 1,
     maximum: 30,

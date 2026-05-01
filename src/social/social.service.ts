@@ -68,10 +68,7 @@ export class SocialService {
         },
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         throw new ConflictException({
           statusCode: 409,
           error: "ALREADY_FOLLOWING",
@@ -414,9 +411,7 @@ export class SocialService {
       }
 
       const tasteScore =
-        myGenreIds.length > 0
-          ? this.normalizeScore(sharedGenresCount, myGenreIds.length)
-          : 0;
+        myGenreIds.length > 0 ? this.normalizeScore(sharedGenresCount, myGenreIds.length) : 0;
 
       const graphRaw =
         (sharedFollowingCountByUser.get(candidate.id) ?? 0) +
@@ -456,10 +451,7 @@ export class SocialService {
 
     const scoredCandidates = rawCandidates.map((candidate) => {
       const graphScore = this.normalizeScore(candidate.graphRaw, maxGraphRaw);
-      const engagementScore = this.normalizeScore(
-        candidate.engagementRaw,
-        maxEngagementRaw,
-      );
+      const engagementScore = this.normalizeScore(candidate.engagementRaw, maxEngagementRaw);
       const activityScore = 0.6 * engagementScore + 0.4 * candidate.activityRecency;
 
       const baseScore =
@@ -509,10 +501,7 @@ export class SocialService {
         display_name: candidate.profile?.displayName ?? "",
         handle: candidate.profile?.handle ?? "",
         avatar_url: candidate.profile?.avatarUrl ?? null,
-        reason:
-          candidate.sharedGenresCount > 0
-            ? "Shared genres"
-            : "Suggested for you",
+        reason: candidate.sharedGenresCount > 0 ? "Shared genres" : "Suggested for you",
       })),
     };
   }
@@ -525,11 +514,7 @@ export class SocialService {
     return Math.min(value / maxValue, 1);
   }
 
-  private recencyScore(
-    date: Date | null | undefined,
-    nowMs: number,
-    halfLifeDays: number,
-  ): number {
+  private recencyScore(date: Date | null | undefined, nowMs: number, halfLifeDays: number): number {
     if (!date) {
       return 0;
     }

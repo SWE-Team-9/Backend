@@ -1,6 +1,6 @@
-import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, Max, Min } from "class-validator";
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, Max, Min } from 'class-validator';
 
 export class SuggestionsQueryDto {
   // TODO(Module 3): Add optional filters (genre, language, locale) if product scope expands.
@@ -9,7 +9,7 @@ export class SuggestionsQueryDto {
     default: 10,
     minimum: 1,
     maximum: 50,
-    description: "Maximum number of suggested users.",
+    description: 'Maximum number of suggested users.',
   })
   @Type(() => Number)
   @IsInt()

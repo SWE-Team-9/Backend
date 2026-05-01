@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class RemoveTrackFromPlaylistParamsDto {
   @IsString()
@@ -11,5 +12,6 @@ export class RemoveTrackFromPlaylistParamsDto {
 }
 
 export class RemoveTrackFromPlaylistResponseDto {
+  @ApiProperty({ example: 'Track removed from playlist successfully' })
   message!: string;
 }

@@ -71,10 +71,7 @@ export class PaymentMethodsService {
   // Called after the frontend confirms the SetupIntent.
   // Saves the PM metadata in our DB for display without re-fetching from Stripe.
 
-  async attachPaymentMethod(
-    userId: string,
-    dto: AttachPaymentMethodDto,
-  ): Promise<object> {
+  async attachPaymentMethod(userId: string, dto: AttachPaymentMethodDto): Promise<object> {
     const stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
 
     // Check it's not already saved
@@ -86,17 +83,13 @@ export class PaymentMethodsService {
     }
 
     // Attach to the Stripe customer (idempotent if already attached)
-    const pm = await this.stripe.attachPaymentMethod(
-      dto.stripePaymentMethodId,
-      stripeCustomerId,
-    );
+    const pm = await this.stripe.attachPaymentMethod(dto.stripePaymentMethodId, stripeCustomerId);
 
     if (pm.type !== "card" || !pm.card) {
       throw new BadRequestException("Only card payment methods are supported");
     }
 
-    const isFirstMethod =
-      (await this.prisma.paymentMethod.count({ where: { userId } })) === 0;
+    const isFirstMethod = (await this.prisma.paymentMethod.count({ where: { userId } })) === 0;
     const makeDefault = dto.setAsDefault ?? isFirstMethod;
 
     // If this will be the default, clear any existing default flag
@@ -105,10 +98,7 @@ export class PaymentMethodsService {
         where: { userId, isDefault: true },
         data: { isDefault: false },
       });
-      await this.stripe.updateCustomerDefaultPaymentMethod(
-        stripeCustomerId,
-        pm.id,
-      );
+      await this.stripe.updateCustomerDefaultPaymentMethod(stripeCustomerId, pm.id);
     }
 
     const saved = await this.prisma.paymentMethod.create({
@@ -243,10 +233,7 @@ export class PaymentMethodsService {
         });
         const stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
         await this.stripe
-          .updateCustomerDefaultPaymentMethod(
-            stripeCustomerId,
-            next.stripePaymentMethodId,
-          )
+          .updateCustomerDefaultPaymentMethod(stripeCustomerId, next.stripePaymentMethodId)
           .catch(() => {
             /* best effort */
           });
@@ -267,7 +254,7 @@ export class PaymentMethodsService {
           .cancelSubscription(autoCancel.stripeSubId, true)
           .catch((err) =>
             this.logger.warn(
-              `[PM DELETE] Stripe cancel-at-period-end failed for ${autoCancel!.stripeSubId}: ${String(err)}`,
+              `[PM DELETE] Stripe cancel-at-period-end failed for ${autoCancel.stripeSubId}: ${String(err)}`,
             ),
           );
       }

@@ -144,10 +144,7 @@ export class SessionService {
   }
 
   // Revoke all sessions EXCEPT a specific one
-  async revokeOtherSessions(
-    userId: string,
-    keepSessionId: string,
-  ): Promise<void> {
+  async revokeOtherSessions(userId: string, keepSessionId: string): Promise<void> {
     await this.prisma.userSession.updateMany({
       where: {
         userId,

@@ -29,9 +29,7 @@ export class EntitlementsService {
       isPremium: planCode !== "FREE",
       uploadLimit: isUnlimited ? -1 : uploadLimit,
       uploadedCount,
-      remainingUploads: isUnlimited
-        ? null
-        : Math.max(0, uploadLimit - uploadedCount),
+      remainingUploads: isUnlimited ? null : Math.max(0, uploadLimit - uploadedCount),
       canUpload: isUnlimited || uploadedCount < uploadLimit,
       adsEnabled: planCode === "FREE",
       canDownload: planCode !== "FREE",
@@ -46,8 +44,7 @@ export class EntitlementsService {
   }
 
   async assertCanUploadTrack(userId: string): Promise<void> {
-    const { canUpload, uploadLimit, uploadedCount } =
-      await this.getUserEntitlements(userId);
+    const { canUpload, uploadLimit, uploadedCount } = await this.getUserEntitlements(userId);
     if (!canUpload) {
       throw new ForbiddenException({
         code: "UPLOAD_LIMIT_REACHED",

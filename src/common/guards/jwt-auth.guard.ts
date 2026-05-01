@@ -62,10 +62,7 @@ export class JwtAuthGuard extends AuthGuard("jwt-cookie") {
 
     // Block suspended / banned users unless the endpoint opts out
     const typedUser = user as { accountStatus?: string };
-    if (
-      typedUser.accountStatus === "SUSPENDED" ||
-      typedUser.accountStatus === "BANNED"
-    ) {
+    if (typedUser.accountStatus === "SUSPENDED" || typedUser.accountStatus === "BANNED") {
       const allowSuspended = context
         ? this.reflector.getAllAndOverride<boolean>(ALLOW_SUSPENDED_KEY, [
             context.getHandler(),
@@ -75,9 +72,7 @@ export class JwtAuthGuard extends AuthGuard("jwt-cookie") {
 
       if (!allowSuspended) {
         const code =
-          typedUser.accountStatus === "SUSPENDED"
-            ? "ACCOUNT_SUSPENDED"
-            : "ACCOUNT_BANNED";
+          typedUser.accountStatus === "SUSPENDED" ? "ACCOUNT_SUSPENDED" : "ACCOUNT_BANNED";
         throw new ForbiddenException({
           code,
           message: `Account ${typedUser.accountStatus.toLowerCase()}.`,

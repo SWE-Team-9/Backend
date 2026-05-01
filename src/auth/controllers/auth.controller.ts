@@ -1,55 +1,56 @@
 import {
-  Controller,
-  Post,
-  Get,
-  Delete,
+  BadRequestException,
   Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  Post,
   Query,
   Req,
   Res,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-  BadRequestException,
   UnauthorizedException,
-} from "@nestjs/common";
+  UseGuards,
+} from '@nestjs/common';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBody,
-  ApiParam,
   ApiBearerAuth,
+  ApiBody,
   ApiCookieAuth,
   ApiExcludeEndpoint,
-} from "@nestjs/swagger";
-import { Request, Response } from "express";
-import { AuthService } from "../auth.service";
-import { CookieService } from "../services/cookie.service";
-import { TokenService } from "../services/token.service";
-import { SessionService } from "../services/session.service";
-import { Public } from "../../common/decorators/public.decorator";
-import { CurrentUser } from "../../common/decorators/current-user.decorator";
-import { ThrottlePolicy } from "../../common/decorators/throttle-policy.decorator";
-import { GoogleAuthGuard } from "../guards/google-auth.guard";
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Request, Response } from 'express';
+import { AuthService } from '../auth.service';
+import { CookieService } from '../services/cookie.service';
+import { TokenService } from '../services/token.service';
+import { SessionService } from '../services/session.service';
+import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ThrottlePolicy } from '../../common/decorators/throttle-policy.decorator';
+import { GoogleAuthGuard } from '../guards/google-auth.guard';
 import {
-  RegisterDto,
-  CheckEmailQueryDto,
-  VerifyEmailDto,
-  ResendVerificationDto,
-  LoginDto,
-  ForgotPasswordDto,
-  ResetPasswordDto,
   ChangePasswordDto,
-  RequestEmailChangeDto,
+  CheckEmailQueryDto,
   ConfirmEmailChangeDto,
-  RevokeSessionParamsDto,
+  ForgotPasswordDto,
+  LoginDto,
   RefreshTokenDto,
-} from "../dto/auth.dto";
+  RegisterDto,
+  RequestEmailChangeDto,
+  ResendVerificationDto,
+  ResetPasswordDto,
+  RevokeSessionParamsDto,
+  VerifyEmailDto,
+} from '../dto/auth.dto';
 
-@ApiTags("Auth")
-@Controller("auth")
+@ApiTags('Auth')
+@Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -60,208 +61,234 @@ export class AuthController {
 
   // ─── Endpoint 1: POST /auth/register ───────────────────────────────────
   @ApiOperation({
-    summary: "Register a new account",
+    summary: 'Register a new account',
     description:
-      "Creates a new user account. A verification email is sent to the provided address. " +
-      "The account cannot be used until the email is verified. " +
-      "Requires a reCAPTCHA v3 token in production.",
+      'Creates a new user account. A verification email is sent to the provided address. ' +
+      'The account cannot be used until the email is verified. ' +
+      'Requires a reCAPTCHA v3 token in production.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({
     status: 201,
-    description: "Account created - verification email sent.",
+    description: 'Account created - verification email sent.',
     schema: {
       example: {
-        message:
-          "Registration successful. Please check your email to verify your account.",
+        message: 'Registration successful. Please check your email to verify your account.',
+        user: {
+          id: 'uuid',
+          email: 'user@example.com',
+          display_name: 'John Doe',
+          is_verified: false,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Validation error (weak password, invalid DOB, underage, etc.)",
+    description: 'Validation error (weak password, invalid DOB, underage, etc.)',
     schema: {
       example: {
         statusCode: 400,
-        error: "Bad Request",
-        message: "Password must be at least 8 characters...",
+        error: 'Bad Request',
+        message: 'Password must be at least 8 characters...',
       },
     },
   })
   @ApiResponse({
     status: 409,
-    description: "Email already registered.",
+    description: 'Email already registered.',
     schema: {
       example: {
         statusCode: 409,
-        error: "EMAIL_ALREADY_EXISTS",
-        message: "An account with this email already exists.",
+        error: 'EMAIL_ALREADY_EXISTS',
+        message: 'An account with this email already exists.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (5 requests/min).",
+    description: 'Rate limit exceeded (5 requests/min).',
   })
   @Public()
   @ThrottlePolicy(5, 60_000)
-  @Post("register")
+  @Post('register')
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
-    const ip = req.ip;
+    const { ip } = req;
     return this.authService.register(dto, ip);
   }
 
   // ─── Endpoint 1.1: GET /auth/check-email ───────────────────────────────
   @ApiOperation({
-    summary: "Check email availability",
+    summary: 'Check email availability',
     description:
-      "Checks whether an email can be used for registration. " +
-      "Returns available=false when the email is already registered.",
+      'Checks whether an email can be used for registration. ' +
+      'Returns available=false when the email is already registered.',
   })
   @ApiResponse({
     status: 200,
-    description: "Email availability status.",
-    schema: { example: { available: false, email: "user@example.com" } },
+    description: 'Email availability status.',
+    schema: { example: { available: false, email: 'user@example.com' } },
   })
-  @ApiResponse({ status: 400, description: "Invalid email format." })
+  @ApiResponse({ status: 400, description: 'Invalid email format.' })
+  @ApiQuery({
+    name: 'email',
+    type: String,
+    required: true,
+    example: 'user@example.com',
+    description: 'Email address to check for registration availability',
+  })
   @Public()
   @ThrottlePolicy(30, 60_000)
-  @Get("check-email")
+  @Get('check-email')
   async checkEmail(@Query() query: CheckEmailQueryDto) {
     return this.authService.checkEmailAvailability(query.email);
   }
 
   // ─── Endpoint 2: POST /auth/verify-email ───────────────────────────────
   @ApiOperation({
-    summary: "Verify email address",
+    summary: 'Verify email address',
     description:
-      "Activates the account using the token from the verification email link. " +
-      "Tokens expire after 24 hours. Use /auth/resend-verification to get a new one.",
+      'Activates the account using the token from the verification email link. ' +
+      'Tokens expire after 24 hours. Use /auth/resend-verification to get a new one.',
   })
   @ApiBody({ type: VerifyEmailDto })
   @ApiResponse({
     status: 200,
-    description: "Email verified - account is now active.",
-    schema: { example: { message: "Email verified successfully." } },
+    description: 'Email verified - account is now active.',
+    schema: { example: { message: 'Email verified successfully. You can now log in.' } },
   })
-  @ApiResponse({ status: 400, description: "Token missing or malformed." })
+  @ApiResponse({ status: 400, description: 'Token missing, malformed, or already used.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Account is already verified.',
+    schema: {
+      example: {
+        statusCode: 409,
+        error: 'ALREADY_VERIFIED',
+        message: 'This account is already verified.',
+      },
+    },
+  })
   @ApiResponse({
     status: 410,
-    description: "Token expired or already used.",
+    description: 'Token expired.',
     schema: {
       example: {
         statusCode: 410,
-        error: "TOKEN_EXPIRED",
-        message: "Verification token has expired.",
+        error: 'TOKEN_EXPIRED',
+        message: 'This verification link has expired. Please request a new one.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (10 requests/min).",
+    description: 'Rate limit exceeded (10 requests/min).',
   })
   @Public()
   @ThrottlePolicy(10, 60_000)
-  @Post("verify-email")
+  @Post('verify-email')
   async verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token);
   }
 
   // ─── Endpoint 3: POST /auth/resend-verification ────────────────────────
   @ApiOperation({
-    summary: "Resend verification email",
+    summary: 'Resend verification email',
     description:
-      "Sends a fresh verification link if the original expired or was not received. " +
-      "Always returns 200 to prevent email enumeration - even if the email is not registered.",
+      'Sends a fresh verification link if the original expired or was not received. ' +
+      'Always returns 200 to prevent email enumeration - even if the email is not registered.',
   })
   @ApiBody({ type: ResendVerificationDto })
   @ApiResponse({
     status: 200,
-    description:
-      "Verification email sent (always, regardless of whether the email exists).",
+    description: 'Verification email sent (always, regardless of whether the email exists).',
     schema: {
       example: {
         message:
-          "If this email is registered and unverified, a new verification link has been sent.",
+          'If an unverified account with this email exists, a new verification link has been sent.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (3 requests/min).",
+    description: 'Rate limit exceeded (3 requests/min).',
   })
   @Public()
   @ThrottlePolicy(3, 60_000)
-  @Post("resend-verification")
+  @Post('resend-verification')
   async resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto.email);
   }
 
   // ─── Endpoint 4: POST /auth/login ──────────────────────────────────────
   @ApiOperation({
-    summary: "Login with email and password",
+    summary: 'Login with email and password',
     description:
-      "Authenticates the user and sets httpOnly cookies: `access_token` (15 min) and `refresh_token` " +
-      "(7 days, or 30 days with remember_me). " +
-      "The email must be verified before login is allowed. " +
-      "Requires a reCAPTCHA token when CAPTCHA verification is enabled.",
+      'Authenticates the user and sets httpOnly cookies: `access_token` (15 min) and `refresh_token` ' +
+      '(7 days, or 30 days with remember_me). ' +
+      'The email must be verified before login is allowed. ' +
+      'Requires a reCAPTCHA token when CAPTCHA verification is enabled.',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
-    description: "Login successful - auth cookies set.",
+    description: 'Login successful - auth cookies set.',
     schema: {
       example: {
-        message: "Login successful",
+        message: 'Login successful',
         user: {
-          id: "uuid",
-          email: "user@example.com",
-          display_name: "John Doe",
-          handle: "johndoe",
+          id: 'uuid',
+          email: 'user@example.com',
+          display_name: 'John Doe',
+          handle: 'johndoe',
           avatar_url: null,
+          account_type: 'LISTENER',
+          system_role: 'USER',
           is_verified: true,
         },
+        access_token: '<jwt>',
+        refresh_token: '<token>',
       },
     },
   })
   @ApiResponse({
     status: 401,
-    description: "Invalid credentials.",
+    description: 'Invalid credentials.',
     schema: {
       example: {
         statusCode: 401,
-        error: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
+        error: 'INVALID_CREDENTIALS',
+        message: 'The email or password you entered is incorrect.',
       },
     },
   })
   @ApiResponse({
     status: 403,
-    description: "Email not verified.",
+    description: 'Email not verified, account suspended, or account banned.',
     schema: {
       example: {
         statusCode: 403,
-        error: "EMAIL_NOT_VERIFIED",
-        message: "Please verify your email address before logging in.",
+        error: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email before logging in.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (10 requests/min).",
+    description: 'Rate limit exceeded (10 requests/min).',
   })
   @Public()
   @ThrottlePolicy(10, 60_000)
-  @Post("login")
+  @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const ip = req.ip ?? "unknown";
-    const userAgent = req.headers["user-agent"] ?? "unknown";
+    const ip = req.ip ?? 'unknown';
+    const userAgent = req.headers['user-agent'] ?? 'unknown';
 
     const result = await this.authService.login(dto, ip, userAgent);
 
@@ -276,7 +303,7 @@ export class AuthController {
     // Also return tokens in the response body so non-browser clients
     // (Postman, Swagger UI, mobile HTTP clients) can use Bearer auth.
     return {
-      message: "Login successful",
+      message: 'Login successful',
       user: result.user,
       access_token: result.accessToken,
       refresh_token: result.refreshToken,
@@ -285,19 +312,26 @@ export class AuthController {
 
   // ─── Endpoint 5: GET /auth/google ──────────────────────────────────────
   @ApiOperation({
-    summary: "Initiate Google OAuth login",
+    summary: 'Initiate Google OAuth login',
     description:
       "Redirects the browser to Google's OAuth consent page. " +
-      "This endpoint is not testable via Swagger - open it directly in a browser tab.",
+      'This endpoint is not testable via Swagger - open it directly in a browser tab.',
+  })
+  @ApiQuery({
+    name: 'redirect_uri',
+    type: String,
+    required: false,
+    description: 'Optional deep-link URI for native app clients to receive the access token after OAuth.',
+    example: 'myapp://auth/callback',
   })
   @ApiResponse({
     status: 302,
-    description: "Redirect to Google OAuth consent page.",
+    description: 'Redirect to Google OAuth consent page.',
   })
   @Public()
   @UseGuards(GoogleAuthGuard)
-  @Get("google")
-  googleRedirect(@Query("redirect_uri") _redirectUri?: string) {
+  @Get('google')
+  googleRedirect(@Query('redirect_uri') _redirectUri?: string) {
     // Passport redirects to Google - this method body is never reached
   }
 
@@ -305,33 +339,24 @@ export class AuthController {
   @ApiExcludeEndpoint() // Google redirects here - not callable from Swagger
   @Public()
   @UseGuards(GoogleAuthGuard)
-  @Get("google/callback")
+  @Get('google/callback')
   async googleCallback(@Req() req: Request, @Res() res: Response) {
     const googleUser = req.user as any;
-    const ip = req.ip ?? "unknown";
-    const userAgent = req.headers["user-agent"] ?? "unknown";
+    const ip = req.ip ?? 'unknown';
+    const userAgent = req.headers['user-agent'] ?? 'unknown';
 
-    const result = await this.authService.googleLogin(
-      googleUser,
-      ip,
-      userAgent,
-    );
+    const result = await this.authService.googleLogin(googleUser, ip, userAgent);
 
     // Set httpOnly cookies
-    this.cookieService.setAuthCookies(
-      res,
-      result.accessToken,
-      result.refreshToken,
-    );
+    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-    const stateValue =
-      typeof req.query?.state === "string" ? req.query.state : "";
+    const stateValue = typeof req.query?.state === 'string' ? req.query.state : '';
     const nativeRedirectUri = this.decodeGoogleState(stateValue);
 
     if (nativeRedirectUri) {
       try {
         const redirectUrl = new URL(nativeRedirectUri);
-        redirectUrl.searchParams.set("code", result.accessToken);
+        redirectUrl.searchParams.set('code', result.accessToken);
         return res.redirect(redirectUrl.toString());
       } catch {
         // Fall through to the frontend redirect if the stored URI is invalid.
@@ -339,7 +364,7 @@ export class AuthController {
     }
 
     // Fallback to the web frontend when no native redirect URI was provided.
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/auth/callback`);
   }
 
@@ -349,9 +374,7 @@ export class AuthController {
     }
 
     try {
-      const nativeRedirectUri = Buffer.from(state, "base64url")
-        .toString("utf8")
-        .trim();
+      const nativeRedirectUri = Buffer.from(state, 'base64url').toString('utf8').trim();
 
       return nativeRedirectUri.length > 0 ? nativeRedirectUri : null;
     } catch {
@@ -361,36 +384,54 @@ export class AuthController {
 
   // ─── Endpoint 7: POST /auth/refresh ────────────────────────────────────
   @ApiOperation({
-    summary: "Refresh access token",
+    summary: 'Refresh access token',
     description:
-      "Uses the `refresh_token` httpOnly cookie to issue a new rotated pair of " +
-      "`access_token` + `refresh_token` cookies. " +
-      "The frontend axios interceptor calls this automatically on 401 responses. " +
-      "Token reuse detection is active - a reused refresh token invalidates all sessions.",
+      'Uses the `refresh_token` httpOnly cookie to issue a new rotated pair of ' +
+      '`access_token` + `refresh_token` cookies. ' +
+      'The frontend axios interceptor calls this automatically on 401 responses. ' +
+      'Token reuse detection is active - a reused refresh token invalidates all sessions.',
   })
   @ApiResponse({
     status: 200,
-    description: "New tokens issued - cookies updated.",
-    schema: { example: { message: "Token refreshed successfully" } },
+    description: 'New tokens issued - cookies updated.',
+    schema: {
+      example: {
+        message: 'Token refreshed successfully',
+        access_token: '<jwt>',
+        refresh_token: '<token>',
+      },
+    },
   })
   @ApiResponse({
     status: 401,
-    description: "No refresh token cookie, or token is invalid/expired/reused.",
+    description: 'No refresh token cookie, or token is invalid/expired/reused.',
     schema: {
       example: {
         statusCode: 401,
-        error: "NO_REFRESH_TOKEN",
-        message: "No refresh token provided.",
+        error: 'NO_REFRESH_TOKEN',
+        message: 'No refresh token provided.',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Account suspended.',
+    schema: {
+      example: {
+        statusCode: 403,
+        error: 'ACCOUNT_SUSPENDED',
+        message: 'Your account has been suspended.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (30 requests/min).",
+    description: 'Rate limit exceeded (30 requests/min).',
   })
+  @ApiBody({ type: RefreshTokenDto })
   @Public()
   @ThrottlePolicy(30, 60_000)
-  @Post("refresh")
+  @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
@@ -399,28 +440,23 @@ export class AuthController {
   ) {
     // Browser clients send the token via httpOnly cookie (body.refresh_token is absent).
     // Non-browser clients (mobile/desktop) send it in the request body.
-    const refreshTokenRaw =
-      body?.refresh_token ?? req.cookies?.["refresh_token"];
+    const refreshTokenRaw = body?.refresh_token ?? req.cookies?.['refresh_token'];
     if (!refreshTokenRaw) {
       throw new UnauthorizedException({
         statusCode: 401,
-        error: "NO_REFRESH_TOKEN",
-        message: "No refresh token provided.",
+        error: 'NO_REFRESH_TOKEN',
+        message: 'No refresh token provided.',
       });
     }
 
     const result = await this.authService.refresh(refreshTokenRaw);
 
     // Set new cookies with rotated tokens (for browser / web clients)
-    this.cookieService.setAuthCookies(
-      res,
-      result.accessToken,
-      result.refreshToken,
-    );
+    this.cookieService.setAuthCookies(res, result.accessToken, result.refreshToken);
 
     // Return new tokens in body for non-browser clients using Bearer auth.
     return {
-      message: "Token refreshed successfully",
+      message: 'Token refreshed successfully',
       access_token: result.accessToken,
       refresh_token: result.refreshToken,
     };
@@ -428,44 +464,49 @@ export class AuthController {
 
   // ─── Endpoint 8: POST /auth/logout ─────────────────────────────────────
   @ApiOperation({
-    summary: "Logout from current session",
+    summary: 'Logout from current session',
     description:
       "Revokes the current session's refresh token and clears both auth cookies. " +
-      "Does NOT require authentication - anyone can call this (idempotent).",
+      'Does NOT require authentication - anyone can call this (idempotent).',
   })
   @ApiResponse({
     status: 200,
-    description: "Logged out - cookies cleared.",
-    schema: { example: { message: "Logged out successfully" } },
+    description: 'Logged out - cookies cleared.',
+    schema: { example: { message: 'Logged out successfully' } },
   })
   @Public()
-  @Post("logout")
+  @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshTokenRaw = req.cookies?.["refresh_token"];
+    const refreshTokenRaw = req.cookies?.['refresh_token'];
     await this.authService.logout(refreshTokenRaw);
     this.cookieService.clearAuthCookies(res);
-    return { message: "Logged out successfully" };
+    return { message: 'Logged out successfully' };
   }
 
   // ─── Endpoint 9: POST /auth/logout-all ─────────────────────────────────
   @ApiOperation({
-    summary: "Logout from all devices",
+    summary: 'Logout from all devices',
     description:
-      "Revokes ALL active sessions for the authenticated user. " +
-      "Useful if the account is compromised. Requires a valid access_token cookie.",
+      'Revokes ALL active sessions for the authenticated user. ' +
+      'Useful if the account is compromised. Requires a valid access_token cookie.',
   })
-  @ApiCookieAuth("access_token")
+  @ApiCookieAuth('access_token')
   @ApiResponse({
     status: 200,
-    description: "All sessions revoked - cookies cleared.",
-    schema: { example: { message: "All sessions revoked", revokedCount: 3 } },
+    description: 'All sessions revoked - cookies cleared.',
+    schema: {
+      example: {
+        message: 'All sessions have been revoked. You have been logged out of all devices.',
+        revoked_count: 3,
+      },
+    },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @Post("logout-all")
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Post('logout-all')
   @HttpCode(HttpStatus.OK)
   async logoutAll(
-    @CurrentUser("userId") userId: string,
+    @CurrentUser('userId') userId: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.logoutAll(userId);
@@ -475,31 +516,29 @@ export class AuthController {
 
   // ─── Endpoint 10: POST /auth/forgot-password ──────────────────────────
   @ApiOperation({
-    summary: "Request a password reset email",
+    summary: 'Request a password reset email',
     description:
-      "Sends a password reset link to the given email if an account exists. " +
-      "Always returns 200 to prevent account enumeration. " +
-      "The reset link is valid for 1 hour.",
+      'Sends a password reset link to the given email if an account exists. ' +
+      'Always returns 200 to prevent account enumeration. ' +
+      'The reset link is valid for 1 hour.',
   })
   @ApiBody({ type: ForgotPasswordDto })
   @ApiResponse({
     status: 200,
-    description:
-      "Reset email sent (always, regardless of whether the email exists).",
+    description: 'Reset email sent (always, regardless of whether the email exists).',
     schema: {
       example: {
-        message:
-          "If this email is registered, a password reset link has been sent.",
+        message: 'If an account with this email exists, a password reset link has been sent.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (3 requests/min).",
+    description: 'Rate limit exceeded (3 requests/min).',
   })
   @Public()
   @ThrottlePolicy(3, 60_000)
-  @Post("forgot-password")
+  @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
@@ -507,40 +546,42 @@ export class AuthController {
 
   // ─── Endpoint 11: POST /auth/reset-password ───────────────────────────
   @ApiOperation({
-    summary: "Reset password using email token",
+    summary: 'Reset password using email token',
     description:
-      "Sets a new password using the token from the reset email. " +
-      "The token is single-use and expires after 1 hour. " +
-      "On success, all other sessions are revoked.",
+      'Sets a new password using the token from the reset email. ' +
+      'The token is single-use and expires after 1 hour. ' +
+      'On success, all other sessions are revoked.',
   })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({
     status: 200,
-    description: "Password reset successfully.",
-    schema: { example: { message: "Password has been reset successfully." } },
+    description: 'Password reset successfully.',
+    schema: {
+      example: { message: 'Password reset successful. Please log in with your new password.' },
+    },
   })
   @ApiResponse({
     status: 400,
-    description: "Weak password or passwords do not match.",
+    description: 'Token invalid or already used.',
   })
   @ApiResponse({
     status: 410,
-    description: "Token expired or already used.",
+    description: 'Token expired.',
     schema: {
       example: {
         statusCode: 410,
-        error: "TOKEN_EXPIRED",
-        message: "Reset token has expired.",
+        error: 'TOKEN_EXPIRED',
+        message: 'This reset link has expired. Please request a new one.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (5 requests/min).",
+    description: 'Rate limit exceeded (5 requests/min).',
   })
   @Public()
   @ThrottlePolicy(5, 60_000)
-  @Post("reset-password")
+  @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
@@ -548,18 +589,20 @@ export class AuthController {
 
   // ─── Endpoint 12: POST /auth/change-password ──────────────────────────
   @ApiOperation({
-    summary: "Change password (authenticated)",
+    summary: 'Change password (authenticated)',
     description:
-      "Changes the password for the currently logged-in user. " +
-      "Requires the current password for confirmation. " +
-      "On success, all OTHER sessions are revoked (current session stays active).",
+      'Changes the password for the currently logged-in user. ' +
+      'Requires the current password for confirmation. ' +
+      'On success, all OTHER sessions are revoked (current session stays active).',
   })
-  @ApiCookieAuth("access_token")
+  @ApiCookieAuth('access_token')
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({
     status: 200,
-    description: "Password changed - other sessions revoked.",
-    schema: { example: { message: "Password changed successfully." } },
+    description: 'Password changed - other sessions revoked.',
+    schema: {
+      example: { message: 'Password changed successfully. All other sessions have been revoked.' },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -567,30 +610,30 @@ export class AuthController {
   })
   @ApiResponse({
     status: 401,
-    description: "Current password is incorrect or not authenticated.",
+    description: 'Current password is incorrect or not authenticated.',
     schema: {
       example: {
         statusCode: 401,
-        error: "INVALID_CURRENT_PASSWORD",
-        message: "Current password is incorrect.",
+        error: 'INCORRECT_PASSWORD',
+        message: 'The current password you entered is incorrect.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (5 requests/min).",
+    description: 'Rate limit exceeded (5 requests/min).',
   })
   @ThrottlePolicy(5, 60_000)
-  @Post("change-password")
+  @Post('change-password')
   @HttpCode(HttpStatus.OK)
   async changePassword(
-    @CurrentUser("userId") userId: string,
+    @CurrentUser('userId') userId: string,
     @Body() dto: ChangePasswordDto,
     @Req() req: Request,
   ) {
     // Find current session from the refresh token cookie
-    const refreshTokenRaw = req.cookies?.["refresh_token"];
-    let currentSessionId = "";
+    const refreshTokenRaw = req.cookies?.['refresh_token'];
+    let currentSessionId = '';
     if (refreshTokenRaw) {
       const hash = this.tokenService.hashToken(refreshTokenRaw);
       const session = await this.sessionService.findActiveSessionByHash(hash);
@@ -601,40 +644,51 @@ export class AuthController {
 
   // ─── Endpoint 13: POST /auth/email/change ─────────────────────────────
   @ApiOperation({
-    summary: "Request email address change",
+    summary: 'Request email address change',
     description:
-      "Initiates an email change by sending a confirmation link to the NEW email address. " +
-      "Current password is required to authorise the change. " +
-      "The confirmation link is valid for 1 hour.",
+      'Initiates an email change by sending a confirmation link to the NEW email address. ' +
+      'Current password is required to authorise the change. ' +
+      'The confirmation link is valid for 1 hour.',
   })
-  @ApiCookieAuth("access_token")
+  @ApiCookieAuth('access_token')
   @ApiBody({ type: RequestEmailChangeDto })
   @ApiResponse({
     status: 200,
-    description: "Confirmation email sent to the new address.",
+    description: 'Confirmation email sent to the new address.',
     schema: {
       example: {
-        message: "A confirmation link has been sent to your new email address.",
+        message: 'A confirmation link has been sent to your new email address. The link expires in 1 hour.',
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description: "Invalid email or same as current.",
+    description: 'Invalid email or same as current.',
   })
   @ApiResponse({
     status: 401,
-    description: "Current password is incorrect or not authenticated.",
+    description: 'Current password is incorrect or not authenticated.',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'New email is already used by another account.',
+    schema: {
+      example: {
+        statusCode: 409,
+        error: 'EMAIL_ALREADY_EXISTS',
+        message: 'This email is already used by another account.',
+      },
+    },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (3 requests/min).",
+    description: 'Rate limit exceeded (3 requests/min).',
   })
   @ThrottlePolicy(3, 60_000)
-  @Post("email/change")
+  @Post('email/change')
   @HttpCode(HttpStatus.OK)
   async requestEmailChange(
-    @CurrentUser("userId") userId: string,
+    @CurrentUser('userId') userId: string,
     @Body() dto: RequestEmailChangeDto,
   ) {
     return this.authService.requestEmailChange(userId, dto);
@@ -642,25 +696,39 @@ export class AuthController {
 
   // ─── Endpoint 14: POST /auth/email/confirm-change ─────────────────────
   @ApiOperation({
-    summary: "Confirm email address change",
+    summary: 'Confirm email address change',
     description:
-      "Completes the email change using the token from the confirmation email. " +
-      "On success, the email is updated and ALL sessions are revoked (user must log in again with the new email).",
+      'Completes the email change using the token from the confirmation email. ' +
+      'On success, the email is updated and ALL sessions are revoked (user must log in again with the new email).',
   })
   @ApiBody({ type: ConfirmEmailChangeDto })
   @ApiResponse({
     status: 200,
-    description: "Email changed - all sessions revoked.",
-    schema: { example: { message: "Email address updated successfully." } },
+    description: 'Email changed - all sessions revoked.',
+    schema: {
+      example: { message: 'Email changed successfully. Please log in with your new email.' },
+    },
   })
-  @ApiResponse({ status: 410, description: "Token expired or already used." })
+  @ApiResponse({ status: 400, description: 'Token invalid or already used.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Email was taken by another account since the change was requested.',
+    schema: {
+      example: {
+        statusCode: 409,
+        error: 'EMAIL_ALREADY_EXISTS',
+        message: 'This email has been taken by another account since you requested the change.',
+      },
+    },
+  })
+  @ApiResponse({ status: 410, description: 'Token expired.' })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded (5 requests/min).",
+    description: 'Rate limit exceeded (5 requests/min).',
   })
   @Public()
   @ThrottlePolicy(5, 60_000)
-  @Post("email/confirm-change")
+  @Post('email/confirm-change')
   @HttpCode(HttpStatus.OK)
   async confirmEmailChange(@Body() dto: ConfirmEmailChangeDto) {
     return this.authService.confirmEmailChange(dto.token);
@@ -668,107 +736,106 @@ export class AuthController {
 
   // ─── Endpoint 15: GET /auth/me ─────────────────────────────────────────
   @ApiOperation({
-    summary: "Get current user",
+    summary: 'Get current user',
     description:
-      "Returns the profile of the currently authenticated user. " +
-      "Used by the frontend to restore session state on page load.",
+      'Returns the profile of the currently authenticated user. ' +
+      'Used by the frontend to restore session state on page load.',
   })
-  @ApiCookieAuth("access_token")
+  @ApiCookieAuth('access_token')
   @ApiResponse({
     status: 200,
-    description: "Current user profile.",
+    description: 'Current user profile.',
     schema: {
       example: {
-        id: "uuid",
-        email: "user@example.com",
-        display_name: "John Doe",
-        handle: "johndoe",
+        id: 'uuid',
+        email: 'user@example.com',
+        display_name: 'John Doe',
+        handle: 'johndoe',
         avatar_url: null,
+        account_type: 'LISTENER',
+        system_role: 'USER',
         is_verified: true,
+        subscription_tier: 'FREE',
+        created_at: '2026-01-01T00:00:00.000Z',
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @Get("me")
-  async getMe(@CurrentUser("userId") userId: string) {
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Get('me')
+  async getMe(@CurrentUser('userId') userId: string) {
     return this.authService.getMe(userId);
   }
 
   // ─── Endpoint 16: GET /auth/sessions ───────────────────────────────────
   @ApiOperation({
-    summary: "List active sessions",
+    summary: 'List active sessions',
     description:
-      "Returns all active sessions for the current user. " +
-      "The current session is flagged with `isCurrent: true`. " +
-      "Use DELETE /auth/sessions/:sessionId to revoke individual sessions.",
+      'Returns all active sessions for the current user. ' +
+      'The current session is flagged with `isCurrent: true`. ' +
+      'Use DELETE /auth/sessions/:sessionId to revoke individual sessions.',
   })
-  @ApiCookieAuth("access_token")
+  @ApiCookieAuth('access_token')
   @ApiResponse({
     status: 200,
-    description: "List of active sessions.",
+    description: 'List of active sessions.',
     schema: {
-      example: [
-        {
-          id: "550e8400-e29b-41d4-a716-446655440000",
-          ip: "127.0.0.1",
-          userAgent: "Mozilla/5.0 ...",
-          createdAt: "2026-03-01T10:00:00.000Z",
-          lastUsedAt: "2026-03-21T08:30:00.000Z",
-          isCurrent: true,
-        },
-      ],
+      example: {
+        sessions: [
+          {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            device: { platform: 'WEB', device_name: 'Unknown' },
+            ip_address: '127.0.0.1',
+            user_agent: 'Mozilla/5.0 ...',
+            is_current: true,
+            created_at: '2026-03-01T10:00:00.000Z',
+            expires_at: '2026-03-08T10:00:00.000Z',
+          },
+        ],
+      },
     },
   })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
-  @Get("sessions")
-  async getActiveSessions(
-    @CurrentUser("userId") userId: string,
-    @Req() req: Request,
-  ) {
-    const refreshTokenRaw = req.cookies?.["refresh_token"];
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Get('sessions')
+  async getActiveSessions(@CurrentUser('userId') userId: string, @Req() req: Request) {
+    const refreshTokenRaw = req.cookies?.['refresh_token'];
     return this.authService.getActiveSessions(userId, refreshTokenRaw);
   }
 
   // ─── Endpoint 17: DELETE /auth/sessions/:sessionId ─────────────────────
   @ApiOperation({
-    summary: "Revoke a specific session",
+    summary: 'Revoke a specific session',
     description:
-      "Revokes a single session by its UUID. " +
-      "Cannot revoke the current active session (use POST /auth/logout for that). " +
-      "The sessionId must be a valid v4 UUID.",
+      'Revokes a single session by its UUID. ' +
+      'Cannot revoke the current active session (use POST /auth/logout for that). ' +
+      'The sessionId must be a valid v4 UUID.',
   })
-  @ApiCookieAuth("access_token")
+  @ApiCookieAuth('access_token')
   @ApiParam({
-    name: "sessionId",
-    type: "string",
-    format: "uuid",
-    description: "UUID of the session to revoke",
-    example: "550e8400-e29b-41d4-a716-446655440000",
+    name: 'sessionId',
+    type: 'string',
+    format: 'uuid',
+    description: 'UUID of the session to revoke',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @ApiResponse({
     status: 200,
-    description: "Session revoked.",
-    schema: { example: { message: "Session revoked successfully." } },
+    description: 'Session revoked.',
+    schema: { example: { message: 'Session revoked successfully' } },
   })
-  @ApiResponse({ status: 400, description: "sessionId is not a valid UUID." })
-  @ApiResponse({ status: 401, description: "Not authenticated." })
+  @ApiResponse({ status: 400, description: 'sessionId is not a valid UUID.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @ApiResponse({
     status: 403,
-    description:
-      "Attempt to revoke current session or session belonging to another user.",
+    description: 'Attempt to revoke the current active session (use POST /auth/logout instead).',
   })
-  @ApiResponse({ status: 404, description: "Session not found." })
-  @Delete("sessions/:sessionId")
+  @ApiResponse({ status: 404, description: 'Session not found or does not belong to you.' })
+  @Delete('sessions/:sessionId')
   async revokeSession(
-    @CurrentUser("userId") userId: string,
+    @CurrentUser('userId') userId: string,
     @Param() params: RevokeSessionParamsDto,
     @Req() req: Request,
   ) {
-    const refreshTokenRaw = req.cookies?.["refresh_token"];
-    return this.authService.revokeSession(
-      userId,
-      params.sessionId,
-      refreshTokenRaw,
-    );
+    const refreshTokenRaw = req.cookies?.['refresh_token'];
+    return this.authService.revokeSession(userId, params.sessionId, refreshTokenRaw);
   }
 }

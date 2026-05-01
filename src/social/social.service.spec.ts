@@ -5,9 +5,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 
 function buildPrismaMock() {
   const prismaMock: any = {
-    $transaction: jest
-      .fn()
-      .mockImplementation((ops: Array<Promise<unknown>>) => Promise.all(ops)),
+    $transaction: jest.fn().mockImplementation((ops: Array<Promise<unknown>>) => Promise.all(ops)),
     user: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -44,10 +42,7 @@ describe("SocialService", () => {
   beforeEach(() => {
     prisma = buildPrismaMock();
     eventEmitter = { emit: jest.fn() };
-    service = new SocialService(
-      prisma as unknown as PrismaService,
-      eventEmitter as unknown as EventEmitter2,
-    );
+    service = new SocialService(prisma, eventEmitter as unknown as EventEmitter2);
   });
 
   describe("followUser", () => {
@@ -60,20 +55,16 @@ describe("SocialService", () => {
       prisma.userFollow.create.mockResolvedValue({});
       prisma.userFollow.count.mockResolvedValue(3);
 
-      await expect(service.followUser("usr_me", "usr_target")).resolves.toEqual(
-        {
-          message: "User followed successfully",
-          targetUserId: "usr_target",
-          followersCount: 3,
-          isFollowing: true,
-        },
-      );
+      await expect(service.followUser("usr_me", "usr_target")).resolves.toEqual({
+        message: "User followed successfully",
+        targetUserId: "usr_target",
+        followersCount: 3,
+        isFollowing: true,
+      });
     });
 
     it("throws BadRequestException when user follows themselves", async () => {
-      await expect(service.followUser("usr_me", "usr_me")).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.followUser("usr_me", "usr_me")).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -86,9 +77,7 @@ describe("SocialService", () => {
       prisma.userFollow.findUnique.mockResolvedValue({ followerId: "usr_me" });
       prisma.userFollow.delete.mockResolvedValue({});
 
-      await expect(
-        service.unfollowUser("usr_me", "usr_target"),
-      ).resolves.toEqual({
+      await expect(service.unfollowUser("usr_me", "usr_target")).resolves.toEqual({
         message: "User unfollowed successfully",
         targetUserId: "usr_target",
         isFollowing: false,
@@ -102,9 +91,7 @@ describe("SocialService", () => {
       });
       prisma.userFollow.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.unfollowUser("usr_me", "usr_target"),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.unfollowUser("usr_me", "usr_target")).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -179,9 +166,7 @@ describe("SocialService", () => {
         deletedAt: null,
       });
       prisma.userFollow.findMany.mockResolvedValue([]);
-      prisma.userBlock.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      prisma.userBlock.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       prisma.userFavoriteGenre.findMany.mockResolvedValue([]);
       prisma.user.findMany.mockResolvedValue([
         {
@@ -217,9 +202,7 @@ describe("SocialService", () => {
     });
 
     it("throws BadRequestException when user blocks themselves", async () => {
-      await expect(service.blockUser("usr_me", "usr_me")).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.blockUser("usr_me", "usr_me")).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -232,9 +215,7 @@ describe("SocialService", () => {
       prisma.userBlock.findUnique.mockResolvedValue({ blockerId: "usr_me" });
       prisma.userBlock.delete.mockResolvedValue({});
 
-      await expect(
-        service.unblockUser("usr_me", "usr_target"),
-      ).resolves.toEqual({
+      await expect(service.unblockUser("usr_me", "usr_target")).resolves.toEqual({
         message: "User unblocked successfully",
         blockedUserId: "usr_target",
       });

@@ -1,22 +1,22 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export enum PlanCodeEnum {
-  PRO = "PRO",
-  GO_PLUS = "GO_PLUS",
+  PRO = 'PRO',
+  GO_PLUS = 'GO_PLUS',
 }
 
 export class CheckoutDto {
   @ApiProperty({
     enum: PlanCodeEnum,
-    example: "PRO",
-    description: "Plan to subscribe to",
+    example: 'PRO',
+    description: 'Plan to subscribe to',
   })
   @IsEnum(PlanCodeEnum)
   planCode!: PlanCodeEnum;
 
   @ApiPropertyOptional({
-    description: "URL to redirect to after successful checkout",
+    description: 'URL to redirect to after successful checkout',
   })
   @IsOptional()
   @IsString()
@@ -24,7 +24,7 @@ export class CheckoutDto {
   returnUrl?: string;
 
   @ApiPropertyOptional({
-    description: "URL to redirect to if checkout is cancelled",
+    description: 'URL to redirect to if checkout is cancelled',
   })
   @IsOptional()
   @IsString()

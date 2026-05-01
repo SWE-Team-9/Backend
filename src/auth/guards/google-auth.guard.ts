@@ -7,9 +7,7 @@ export class GoogleAuthGuard extends AuthGuard("google") {
   getAuthenticateOptions(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest();
     const redirectUri =
-      typeof request.query?.redirect_uri === "string"
-        ? request.query.redirect_uri
-        : undefined;
+      typeof request.query?.redirect_uri === "string" ? request.query.redirect_uri : undefined;
 
     if (!redirectUri) {
       return {};

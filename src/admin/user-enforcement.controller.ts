@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBody,
   ApiCookieAuth,
@@ -15,34 +7,32 @@ import {
   ApiParam,
   ApiResponse,
   ApiTags,
-} from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { ThrottlePolicy } from "../common/decorators/throttle-policy.decorator";
-import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
-import { RolesGuard } from "../common/guards/roles.guard";
-import { UserEnforcementService } from "./user-enforcement.service";
+} from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ThrottlePolicy } from '../common/decorators/throttle-policy.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UserEnforcementService } from './user-enforcement.service';
 import {
-  WarnUserDto,
-  SuspendUserDto,
   BanUserDto,
   RestoreUserDto,
-} from "./dto/user-enforcement.dto";
+  SuspendUserDto,
+  WarnUserDto,
+} from './dto/user-enforcement.dto';
 
-@ApiTags("Admin - User Enforcement")
-@ApiCookieAuth("access_token")
+@ApiTags('Admin - User Enforcement')
+@ApiCookieAuth('access_token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller("admin/users")
-@Roles("ADMIN")
+@Controller('admin/users')
+@Roles('ADMIN')
 @ThrottlePolicy(30, 60_000)
 export class UserEnforcementController {
-  constructor(
-    private readonly userEnforcementService: UserEnforcementService,
-  ) {}
+  constructor(private readonly userEnforcementService: UserEnforcementService) {}
 
   // POST /api/v1/admin/users/:userId/warn
   @ApiOperation({
-    summary: "Warn a user",
+    summary: 'Warn a user',
     description: `Issues a formal warning to a user account. The warning is logged in the audit trail and the user receives an in-app notification.
 
 **When to use:** First-level enforcement for minor policy violations (e.g. repeated spam, misleading content, minor harassment). Does NOT change account status — the user stays ACTIVE.
@@ -63,87 +53,85 @@ export class UserEnforcementController {
 **Rate limit:** 30 requests / 60 s`,
   })
   @ApiParam({
-    name: "userId",
-    type: "string",
-    format: "uuid",
-    description: "UUID of the target user.",
-    example: "550e8400-e29b-41d4-a716-446655440000",
+    name: 'userId',
+    type: 'string',
+    format: 'uuid',
+    description: 'UUID of the target user.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @ApiBody({ type: WarnUserDto })
   @ApiCreatedResponse({
-    description: "Warning issued successfully.",
+    description: 'Warning issued successfully.',
     schema: {
       example: {
-        action_id: "b3d4e5f6-a7b8-9c0d-e1f2-a3b4c5d6e7f8",
-        action_type: "WARN_USER",
+        action_id: 'b3d4e5f6-a7b8-9c0d-e1f2-a3b4c5d6e7f8',
+        action_type: 'WARN_USER',
         target_user: {
-          id: "550e8400-e29b-41d4-a716-446655440000",
-          display_name: "Jane Doe",
-          handle: "janedoe",
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          display_name: 'Jane Doe',
+          handle: 'janedoe',
         },
-        admin_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        notes: "Posting misleading content repeatedly.",
-        created_at: "2025-06-01T12:00:00.000Z",
+        admin_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        notes: 'Posting misleading content repeatedly.',
+        created_at: '2025-06-01T12:00:00.000Z',
       },
     },
   })
   @ApiResponse({
     status: 400,
     description:
-      "Validation error — `reason` missing, too short (<10 chars), or invalid `reportId` format.",
+      'Validation error — `reason` missing or too short (<10 chars), `currentPassword` missing, or invalid `reportId` format.',  
     schema: {
       example: {
         statusCode: 400,
-        message: ["reason must be longer than or equal to 10 characters"],
-        error: "Bad Request",
+        message: ['reason must be longer than or equal to 10 characters'],
+        error: 'Bad Request',
       },
     },
   })
   @ApiResponse({
     status: 401,
-    description:
-      "Not authenticated — missing or expired `access_token` cookie. Re-login required.",
+    description: 'Not authenticated — missing or expired `access_token` cookie. Re-login required. Also returned for `INCORRECT_PASSWORD` — `currentPassword` did not match.',
   })
   @ApiResponse({
     status: 403,
     description: `Forbidden. Error codes:
 - \`INSUFFICIENT_PERMISSIONS\` — caller's ADMIN role could not be re-verified from DB
 - \`CANNOT_SELF_ENFORCE\` — admin is targeting their own account
-- \`CANNOT_WARN_ADMIN\` — target user is an ADMIN
-- \`INCORRECT_PASSWORD\` — \`currentPassword\` did not match`,
+- \`CANNOT_WARN_ADMIN\` — target user is an ADMIN`,
     schema: {
       example: {
-        code: "INCORRECT_PASSWORD",
-        message: "Incorrect password.",
+        code: 'CANNOT_SELF_ENFORCE',
+        message: 'Admins cannot perform enforcement actions on themselves.',
       },
     },
   })
   @ApiResponse({
     status: 404,
-    description: "User not found or has been deleted.",
+    description: 'User not found or has been deleted.',
     schema: {
-      example: { code: "USER_NOT_FOUND", message: "User not found." },
+      example: { code: 'USER_NOT_FOUND', message: 'User not found.' },
     },
   })
   @ApiResponse({
     status: 409,
-    description: "Conflict — user is already BANNED. Cannot warn a banned user.",
+    description: 'Conflict — user is already BANNED. Cannot warn a banned user.',
     schema: {
       example: {
-        code: "USER_ALREADY_BANNED",
-        message: "User is already banned.",
+        code: 'USER_ALREADY_BANNED',
+        message: 'User is already banned.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Post(":userId/warn")
+  @Post(':userId/warn')
   @HttpCode(201)
   warnUser(
-    @CurrentUser("userId") adminId: string,
-    @Param("userId", ParseUUIDPipe) targetUserId: string,
+    @CurrentUser('userId') adminId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
     @Body() dto: WarnUserDto,
   ) {
     return this.userEnforcementService.warnUser(adminId, targetUserId, dto);
@@ -151,7 +139,7 @@ export class UserEnforcementController {
 
   // POST /api/v1/admin/users/:userId/suspend
   @ApiOperation({
-    summary: "Suspend a user",
+    summary: 'Suspend a user',
     description: `Temporarily suspends a user account for 1–365 days. The user is locked out immediately — all active sessions are revoked in the same atomic transaction.
 
 **When to use:** Moderate-to-serious violations where a permanent ban is premature. Typical durations: 1 day (first offence), 7 days (repeat), 30 days (serious), up to 365 days (borderline permanent).
@@ -175,79 +163,76 @@ export class UserEnforcementController {
 **Rate limit:** 30 requests / 60 s`,
   })
   @ApiParam({
-    name: "userId",
-    type: "string",
-    format: "uuid",
-    description: "UUID of the target user.",
-    example: "550e8400-e29b-41d4-a716-446655440000",
+    name: 'userId',
+    type: 'string',
+    format: 'uuid',
+    description: 'UUID of the target user.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @ApiBody({ type: SuspendUserDto })
   @ApiCreatedResponse({
-    description: "User suspended. Returns the moderation action with suspension details.",
+    description: 'User suspended. Returns the moderation action with suspension details.',
     schema: {
       example: {
-        action_id: "c4d5e6f7-b8c9-0d1e-f2a3-b4c5d6e7f8a9",
-        action_type: "SUSPEND_USER",
+        action_id: 'c4d5e6f7-b8c9-0d1e-f2a3-b4c5d6e7f8a9',
+        action_type: 'SUSPEND_USER',
         target_user: {
-          id: "550e8400-e29b-41d4-a716-446655440000",
-          display_name: "Jane Doe",
-          handle: "janedoe",
-          account_status: "SUSPENDED",
-          suspended_until: "2025-06-08T12:00:00.000Z",
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          display_name: 'Jane Doe',
+          handle: 'janedoe',
+          account_status: 'SUSPENDED',
+          suspended_until: '2025-06-08T12:00:00.000Z',
         },
-        admin_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        notes: "Repeated violations of community guidelines.",
-        created_at: "2025-06-01T12:00:00.000Z",
+        admin_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        notes: 'Repeated violations of community guidelines.',
+        created_at: '2025-06-01T12:00:00.000Z',
       },
     },
   })
   @ApiResponse({
     status: 400,
     description:
-      "Validation error — `durationDays` missing, not an integer, or out of range (1–365); or `reason` too short.",
+      'Validation error — `durationDays` missing, not an integer, or out of range (1–365); `reason` too short; or `currentPassword` missing.',  
     schema: {
       example: {
         statusCode: 400,
-        message: [
-          "durationDays must be an integer number",
-          "durationDays must not be less than 1",
-        ],
-        error: "Bad Request",
+        message: ['durationDays must be an integer number', 'durationDays must not be less than 1'],
+        error: 'Bad Request',
       },
     },
   })
   @ApiResponse({
     status: 401,
-    description: "Not authenticated — missing or expired `access_token` cookie.",
+    description: 'Not authenticated — missing or expired `access_token` cookie, or `INCORRECT_PASSWORD` — `currentPassword` did not match.',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`, `CANNOT_SUSPEND_ADMIN`, `INCORRECT_PASSWORD`.",
+      'Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`, `CANNOT_SUSPEND_ADMIN`.',
   })
   @ApiResponse({
     status: 404,
-    description: "User not found or has been deleted.",
+    description: 'User not found or has been deleted.',
   })
   @ApiResponse({
     status: 409,
-    description: "Conflict — user is already BANNED. Restore them first if needed.",
+    description: 'Conflict — user is already BANNED. Restore them first if needed.',
     schema: {
       example: {
-        code: "USER_ALREADY_BANNED",
-        message: "User is already banned.",
+        code: 'USER_ALREADY_BANNED',
+        message: 'User is already banned.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Post(":userId/suspend")
+  @Post(':userId/suspend')
   @HttpCode(201)
   suspendUser(
-    @CurrentUser("userId") adminId: string,
-    @Param("userId", ParseUUIDPipe) targetUserId: string,
+    @CurrentUser('userId') adminId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
     @Body() dto: SuspendUserDto,
   ) {
     return this.userEnforcementService.suspendUser(adminId, targetUserId, dto);
@@ -255,7 +240,7 @@ export class UserEnforcementController {
 
   // POST /api/v1/admin/users/:userId/ban
   @ApiOperation({
-    summary: "Permanently ban a user",
+    summary: 'Permanently ban a user',
     description: `Permanently bans a user and immediately hides all their visible content. This is the most severe enforcement action.
 
 **When to use:** Confirmed severe violations — illegal content, targeted harassment campaigns, repeated ban evasion, large-scale spam, or when a prior suspension had no effect.
@@ -281,69 +266,69 @@ export class UserEnforcementController {
 **Rate limit:** 30 requests / 60 s`,
   })
   @ApiParam({
-    name: "userId",
-    type: "string",
-    format: "uuid",
-    description: "UUID of the target user.",
-    example: "550e8400-e29b-41d4-a716-446655440000",
+    name: 'userId',
+    type: 'string',
+    format: 'uuid',
+    description: 'UUID of the target user.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @ApiBody({ type: BanUserDto })
   @ApiCreatedResponse({
-    description: "User banned. Returns the moderation action and the number of tracks that were hidden.",
+    description:
+      'User banned. Returns the moderation action and the number of tracks that were hidden.',
     schema: {
       example: {
-        action_id: "d5e6f7a8-c9d0-1e2f-a3b4-c5d6e7f8a9b0",
-        action_type: "BAN_USER",
+        action_id: 'd5e6f7a8-c9d0-1e2f-a3b4-c5d6e7f8a9b0',
+        action_type: 'BAN_USER',
         target_user: {
-          id: "550e8400-e29b-41d4-a716-446655440000",
-          display_name: "Jane Doe",
-          handle: "janedoe",
-          account_status: "BANNED",
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          display_name: 'Jane Doe',
+          handle: 'janedoe',
+          account_status: 'BANNED',
         },
-        admin_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        notes: "Severe and repeated abuse of the platform.",
+        admin_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        notes: 'Severe and repeated abuse of the platform.',
         tracks_hidden: 12,
-        created_at: "2025-06-01T12:00:00.000Z",
+        created_at: '2025-06-01T12:00:00.000Z',
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Validation error — `reason` missing or shorter than 10 characters.",
+    description: 'Validation error — `reason` missing or shorter than 10 characters.',
   })
   @ApiResponse({
     status: 401,
-    description: "Not authenticated — missing or expired `access_token` cookie.",
+    description: 'Not authenticated — missing or expired `access_token` cookie, or `INCORRECT_PASSWORD` — `currentPassword` did not match.',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`, `CANNOT_BAN_ADMIN`, `INCORRECT_PASSWORD`.",
+      'Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`, `CANNOT_BAN_ADMIN`.',
   })
   @ApiResponse({
     status: 404,
-    description: "User not found or has been deleted.",
+    description: 'User not found or has been deleted.',
   })
   @ApiResponse({
     status: 409,
-    description: "Conflict — user is already BANNED.",
+    description: 'Conflict — user is already BANNED.',
     schema: {
       example: {
-        code: "USER_ALREADY_BANNED",
-        message: "User is already banned.",
+        code: 'USER_ALREADY_BANNED',
+        message: 'User is already banned.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Post(":userId/ban")
+  @Post(':userId/ban')
   @HttpCode(201)
   banUser(
-    @CurrentUser("userId") adminId: string,
-    @Param("userId", ParseUUIDPipe) targetUserId: string,
+    @CurrentUser('userId') adminId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
     @Body() dto: BanUserDto,
   ) {
     return this.userEnforcementService.banUser(adminId, targetUserId, dto);
@@ -351,7 +336,7 @@ export class UserEnforcementController {
 
   // POST /api/v1/admin/users/:userId/restore
   @ApiOperation({
-    summary: "Restore a suspended or banned user",
+    summary: 'Restore a suspended or banned user',
     description: `Lifts an active suspension or ban, restoring the user's account to ACTIVE status. Optionally re-publishes the user's admin-hidden tracks and playlists.
 
 **When to use:**
@@ -376,70 +361,68 @@ export class UserEnforcementController {
 **Rate limit:** 30 requests / 60 s`,
   })
   @ApiParam({
-    name: "userId",
-    type: "string",
-    format: "uuid",
-    description: "UUID of the target user.",
-    example: "550e8400-e29b-41d4-a716-446655440000",
+    name: 'userId',
+    type: 'string',
+    format: 'uuid',
+    description: 'UUID of the target user.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @ApiBody({ type: RestoreUserDto })
   @ApiCreatedResponse({
-    description: "User restored. Returns the moderation action with content restoration counts.",
+    description: 'User restored. Returns the moderation action with content restoration counts.',
     schema: {
       example: {
-        action_id: "e6f7a8b9-d0e1-2f3a-b4c5-d6e7f8a9b0c1",
-        action_type: "RESTORE_CONTENT",
+        action_id: 'e6f7a8b9-d0e1-2f3a-b4c5-d6e7f8a9b0c1',
+        action_type: 'RESTORE_CONTENT',
         target_user: {
-          id: "550e8400-e29b-41d4-a716-446655440000",
-          display_name: "Jane Doe",
-          handle: "janedoe",
-          account_status: "ACTIVE",
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          display_name: 'Jane Doe',
+          handle: 'janedoe',
+          account_status: 'ACTIVE',
         },
-        admin_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        notes: "Appeal accepted. Suspension was applied in error.",
+        admin_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        notes: 'Appeal accepted. Suspension was applied in error.',
         tracks_restored: 5,
         playlists_restored: 2,
-        created_at: "2025-06-01T12:00:00.000Z",
+        created_at: '2025-06-01T12:00:00.000Z',
       },
     },
   })
   @ApiResponse({
     status: 400,
-    description:
-      "Validation error — `reason` missing or shorter than 10 characters.",
+    description: 'Validation error — `reason` missing or shorter than 10 characters.',
   })
   @ApiResponse({
     status: 401,
-    description: "Not authenticated — missing or expired `access_token` cookie.",
+    description: 'Not authenticated — missing or expired `access_token` cookie.',
   })
   @ApiResponse({
     status: 403,
-    description:
-      "Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`.",
+    description: 'Forbidden. Error codes: `INSUFFICIENT_PERMISSIONS`, `CANNOT_SELF_ENFORCE`.',
   })
   @ApiResponse({
     status: 404,
-    description: "User not found or has been deleted.",
+    description: 'User not found or has been deleted.',
   })
   @ApiResponse({
     status: 409,
-    description: "Conflict — user account is already ACTIVE.",
+    description: 'Conflict — user account is already ACTIVE.',
     schema: {
       example: {
-        code: "USER_ALREADY_ACTIVE",
-        message: "User is already active.",
+        code: 'USER_ALREADY_ACTIVE',
+        message: 'User is already active.',
       },
     },
   })
   @ApiResponse({
     status: 429,
-    description: "Rate limit exceeded — max 30 requests per 60 seconds.",
+    description: 'Rate limit exceeded — max 30 requests per 60 seconds.',
   })
-  @Post(":userId/restore")
+  @Post(':userId/restore')
   @HttpCode(201)
   restoreUser(
-    @CurrentUser("userId") adminId: string,
-    @Param("userId", ParseUUIDPipe) targetUserId: string,
+    @CurrentUser('userId') adminId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
     @Body() dto: RestoreUserDto,
   ) {
     return this.userEnforcementService.restoreUser(adminId, targetUserId, dto);

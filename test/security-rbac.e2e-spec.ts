@@ -50,8 +50,7 @@ import { PrismaService } from "../src/prisma/prisma.service";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 64+ char secret so env validation passes. */
-const TEST_JWT_SECRET =
-  "test-jwt-secret-must-be-at-least-64-chars-for-security-purposes-e2e";
+const TEST_JWT_SECRET = "test-jwt-secret-must-be-at-least-64-chars-for-security-purposes-e2e";
 
 const USER_A_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const ADMIN_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -63,10 +62,7 @@ const CONVO_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff"; // B+C conversation
 // JWT helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function signToken(
-  payload: Record<string, unknown>,
-  options: jwt.SignOptions = {},
-): string {
+function signToken(payload: Record<string, unknown>, options: jwt.SignOptions = {}): string {
   return jwt.sign(payload, TEST_JWT_SECRET, {
     issuer: "spotly-api",
     audience: "spotly-client",
@@ -187,15 +183,10 @@ async function buildRbacApp(
 ): Promise<INestApplication> {
   const adminUsersSvc = overrides.adminUsersSvc ?? buildAdminUsersServiceMock();
   const reportsSvc = overrides.reportsSvc ?? buildReportsServiceMock();
-  const enforcementSvc =
-    overrides.enforcementSvc ?? buildEnforcementServiceMock();
+  const enforcementSvc = overrides.enforcementSvc ?? buildEnforcementServiceMock();
 
   const moduleFixture: TestingModule = await Test.createTestingModule({
-    controllers: [
-      AdminUsersController,
-      AdminReportsController,
-      UserEnforcementController,
-    ],
+    controllers: [AdminUsersController, AdminReportsController, UserEnforcementController],
     providers: [
       { provide: AdminUsersService, useValue: adminUsersSvc },
       { provide: ReportsService, useValue: reportsSvc },
@@ -238,9 +229,7 @@ async function buildJwtApp(
   const mockPrisma = {
     user: { findUnique: jest.fn().mockResolvedValue(userRow) },
     userSession: {
-      findUnique: jest.fn().mockResolvedValue(
-        sessionRow !== undefined ? sessionRow : null,
-      ),
+      findUnique: jest.fn().mockResolvedValue(sessionRow !== undefined ? sessionRow : null),
     },
   };
 
@@ -330,15 +319,11 @@ describe("Suite 1 — Access Control", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("GET /admin/reports with USER role → 403", async () => {
-    await request(userApp.getHttpServer())
-      .get("/admin/reports")
-      .expect(403);
+    await request(userApp.getHttpServer()).get("/admin/reports").expect(403);
   });
 
   it("GET /admin/users with MODERATOR role → 403 (ADMIN only)", async () => {
-    await request(moderatorApp.getHttpServer())
-      .get("/admin/users")
-      .expect(403);
+    await request(moderatorApp.getHttpServer()).get("/admin/users").expect(403);
   });
 
   it("POST /admin/users/:id/ban with MODERATOR role → 403 (ADMIN only)", async () => {
@@ -349,9 +334,7 @@ describe("Suite 1 — Access Control", () => {
   });
 
   it("GET /admin/users without authentication → 401", async () => {
-    const res = await request(noAuthApp.getHttpServer())
-      .get("/admin/users")
-      .expect(401);
+    const res = await request(noAuthApp.getHttpServer()).get("/admin/users").expect(401);
 
     const body = res.body as { message?: { code?: string }; code?: string };
     const code = body.message?.code ?? body.code;
@@ -430,10 +413,7 @@ describe("Suite 2 — Re-authentication (admin password verification)", () => {
       code?: string;
     };
     const rawMessage = body.message;
-    const code =
-      typeof rawMessage === "object"
-        ? rawMessage?.code
-        : body.code ?? rawMessage;
+    const code = typeof rawMessage === "object" ? rawMessage?.code : (body.code ?? rawMessage);
     expect(String(code)).toMatch(/INCORRECT_PASSWORD/i);
   });
 });
@@ -521,8 +501,7 @@ describe("Suite 4 — IDOR Prevention", () => {
       code?: string;
     };
     const rawMessage = body.message;
-    const code =
-      typeof rawMessage === "object" ? rawMessage?.code : body.code;
+    const code = typeof rawMessage === "object" ? rawMessage?.code : body.code;
     expect(code).toBe("FORBIDDEN");
 
     // Service was called with USER_A's userId — ownership check happens in the service
@@ -538,9 +517,7 @@ describe("Suite 4 — IDOR Prevention", () => {
       }),
     );
 
-    await request(app.getHttpServer())
-      .get(`/messages/conversations/${CONVO_ID}`)
-      .expect(404);
+    await request(app.getHttpServer()).get(`/messages/conversations/${CONVO_ID}`).expect(404);
 
     // The service is called with USER_A's userId — non-participant check happens inside
     expect(messagesSvc.getConversationMessages).toHaveBeenCalledWith(

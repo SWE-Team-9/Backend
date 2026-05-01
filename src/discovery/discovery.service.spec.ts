@@ -7,6 +7,7 @@ import {
   TrackStatus,
   TrackVisibility,
 } from "@prisma/client";
+import { NotFoundException } from "@nestjs/common";
 import { DiscoveryService } from "./discovery.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -24,6 +25,10 @@ describe("DiscoveryService", () => {
             track: {
               findMany: jest.fn(),
               findFirst: jest.fn(),
+              count: jest.fn(),
+            },
+            genre: {
+              findUnique: jest.fn(),
             },
             userProfile: {
               findMany: jest.fn(),
@@ -33,6 +38,9 @@ describe("DiscoveryService", () => {
             playlist: {
               findMany: jest.fn(),
               findFirst: jest.fn(),
+            },
+            like: {
+              findMany: jest.fn(),
             },
             $queryRaw: jest.fn(),
           },
@@ -74,6 +82,17 @@ describe("DiscoveryService", () => {
         },
       ];
 
+      const mockUsersRaw = [
+        {
+          user_id: "user-1",
+          handle: "testuser",
+          display_name: "Test User",
+          avatar_url: "https://example.com/avatar.jpg",
+          bio: "A test user",
+          total_count: BigInt(1),
+        },
+      ];
+
       const mockPlaylists = [
         {
           id: "playlist-1",
@@ -89,11 +108,8 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce(mockUsersRaw)
         .mockResolvedValueOnce(mockPlaylists);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockUsers as any);
-      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(1);
 
       const result = await service.search(query);
 
@@ -133,9 +149,8 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(0);
 
       const result = await service.search("nonexistent");
 
@@ -157,14 +172,47 @@ describe("DiscoveryService", () => {
       jest
         .spyOn(prisma, "$queryRaw" as any)
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
-      jest.spyOn(prisma.userProfile, "count").mockResolvedValueOnce(0);
 
       await service.search("  multiple   words  ");
-
-      // Verify $queryRaw was called for tsvector search
+      // Verify $queryRaw was called for tsvector/search
       expect((prisma.$queryRaw as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("should match partial user input (e.g. 'mo' -> 'Mohammed')", async () => {
+      const partial = "mo";
+
+      const mockTracks: any[] = [];
+      const mockPlaylists: any[] = [];
+      const mockUsersRaw = [
+        {
+          user_id: "user-xyz",
+          handle: "mohammed",
+          display_name: "Mohammed",
+          avatar_url: null,
+          bio: null,
+          total_count: BigInt(1),
+        },
+      ];
+
+      jest
+        .spyOn(prisma, "$queryRaw" as any)
+        .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce(mockUsersRaw)
+        .mockResolvedValueOnce(mockPlaylists);
+
+      const result = await service.search(partial);
+
+      expect(result.data.users).toEqual([
+        {
+          userId: "user-xyz",
+          handle: "mohammed",
+          displayName: "Mohammed",
+          avatarUrl: null,
+          bio: null,
+        },
+      ]);
     });
   });
 
@@ -191,12 +239,8 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockProfiles as any);
 
       const result = await service.trending();
 
@@ -217,6 +261,7 @@ describe("DiscoveryService", () => {
             recentPlays: 100,
             recentLikes: 50,
             velocityScore: 200,
+            liked: false,
           },
         ],
       });
@@ -244,14 +289,11 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma.like, "findMany").mockResolvedValueOnce([]);
 
-      const result = await service.trending(10, 30);
+      const result = await service.trending(10, 30, "user-123");
 
       expect(result.windowDays).toBe(30);
       expect(result.items).toHaveLength(1);
@@ -269,6 +311,7 @@ describe("DiscoveryService", () => {
         recentPlays: 50,
         recentLikes: 25,
         velocityScore: 100,
+        liked: false,
       });
     });
 
@@ -286,9 +329,7 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
       jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce([]);
 
       const result = await service.trending();
@@ -341,12 +382,8 @@ describe("DiscoveryService", () => {
         },
       ];
 
-      jest
-        .spyOn(prisma, "$queryRaw" as any)
-        .mockResolvedValueOnce(mockRawRows);
-      jest
-        .spyOn(prisma.userProfile, "findMany")
-        .mockResolvedValueOnce(mockProfiles as any);
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce(mockRawRows);
+      jest.spyOn(prisma.userProfile, "findMany").mockResolvedValueOnce(mockProfiles as any);
 
       const result = await service.trending();
 
@@ -376,9 +413,7 @@ describe("DiscoveryService", () => {
           handle: "johndoe",
         };
 
-        jest
-          .spyOn(prisma.userProfile, "findFirst")
-          .mockResolvedValueOnce(mockUserProfile as any);
+        jest.spyOn(prisma.userProfile, "findFirst").mockResolvedValueOnce(mockUserProfile as any);
 
         const result = await service.resolveResource("johndoe");
 
@@ -396,9 +431,7 @@ describe("DiscoveryService", () => {
       });
 
       it("should return not matched when user is not found", async () => {
-        jest
-          .spyOn(prisma.userProfile, "findFirst")
-          .mockResolvedValueOnce(null);
+        jest.spyOn(prisma.userProfile, "findFirst").mockResolvedValueOnce(null);
 
         const result = await service.resolveResource("nonexistent");
 
@@ -411,9 +444,7 @@ describe("DiscoveryService", () => {
           handle: "jane",
         };
 
-        jest
-          .spyOn(prisma.userProfile, "findFirst")
-          .mockResolvedValueOnce(mockUserProfile as any);
+        jest.spyOn(prisma.userProfile, "findFirst").mockResolvedValueOnce(mockUserProfile as any);
 
         const result = await service.resolveResource("/jane");
 
@@ -433,9 +464,7 @@ describe("DiscoveryService", () => {
           slug: "my-track",
         };
 
-        jest
-          .spyOn(prisma.track, "findFirst")
-          .mockResolvedValueOnce(mockTrack as any);
+        jest.spyOn(prisma.track, "findFirst").mockResolvedValueOnce(mockTrack as any);
 
         const result = await service.resolveResource("johndoe/my-track");
 
@@ -461,9 +490,7 @@ describe("DiscoveryService", () => {
 
       it("should return not matched when track is not found", async () => {
         jest.spyOn(prisma.track, "findFirst").mockResolvedValueOnce(null);
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(null);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(null);
 
         const result = await service.resolveResource("johndoe/nonexistent");
 
@@ -478,9 +505,7 @@ describe("DiscoveryService", () => {
           slug: "my-playlist",
         };
 
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(mockPlaylist as any);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(mockPlaylist as any);
 
         const result = await service.resolveResource("johndoe/sets/my-playlist");
 
@@ -511,13 +536,9 @@ describe("DiscoveryService", () => {
         };
 
         jest.spyOn(prisma.track, "findFirst").mockResolvedValueOnce(null);
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(mockPlaylist as any);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(mockPlaylist as any);
 
-        const result = await service.resolveResource(
-          "johndoe/another-playlist"
-        );
+        const result = await service.resolveResource("johndoe/another-playlist");
 
         expect(result).toEqual({
           matched: true,
@@ -528,9 +549,7 @@ describe("DiscoveryService", () => {
       });
 
       it("should return not matched when playlist is not found", async () => {
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(null);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(null);
 
         const result = await service.resolveResource("johndoe/sets/nonexistent");
 
@@ -611,9 +630,7 @@ describe("DiscoveryService", () => {
           slug: "test-playlist",
         };
 
-        jest
-          .spyOn(prisma.playlist, "findFirst")
-          .mockResolvedValueOnce(mockPlaylist as any);
+        jest.spyOn(prisma.playlist, "findFirst").mockResolvedValueOnce(mockPlaylist as any);
 
         const result = await service.resolveResource("user/SETS/test-playlist");
 
@@ -623,6 +640,341 @@ describe("DiscoveryService", () => {
           id: "playlist-303",
           slug: "test-playlist",
         });
+      });
+    });
+  });
+
+  // ─── getTrendingTracksByGenre ─────────────────────────────────────────────
+
+  describe("getTrendingTracksByGenre", () => {
+    const mockGenre = { slug: "electronic", name: "Electronic" };
+
+    const makeTrack = (overrides: Record<string, unknown> = {}) => ({
+      id: "track-uuid-1",
+      title: "A Track",
+      slug: "a-track",
+      durationMs: 210000,
+      waveformData: [0.1, 0.5, 0.9],
+      coverArtUrl: "https://example.com/cover.png",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      publishedAt: new Date("2026-01-01T01:00:00.000Z"),
+      uploader: {
+        id: "artist-uuid-1",
+        profile: {
+          displayName: "Artist One",
+          handle: "artist-one",
+          avatarUrl: "https://example.com/avatar.png",
+        },
+      },
+      primaryGenre: { slug: "electronic", name: "Electronic" },
+      _count: { likes: 42, reposts: 7 },
+      ...overrides,
+    });
+
+    it("returns tracks for a valid genre slug", async () => {
+      const track = makeTrack();
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([track] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(result.genre).toEqual({ slug: "electronic", name: "Electronic" });
+      expect(result.total).toBe(1);
+      expect(result.tracks).toHaveLength(1);
+    });
+
+    it("throws NotFoundException when genre does not exist", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(null);
+
+      await expect(
+        service.getTrendingTracksByGenre("no-such-genre", 5),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("includes genre slug in 404 message", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(null);
+
+      await expect(
+        service.getTrendingTracksByGenre("missing-slug", 5),
+      ).rejects.toThrow('Genre "missing-slug" not found.');
+    });
+
+    it("returns tracks: [] when genre exists but has no matching tracks", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(result.genre).toEqual({ slug: "electronic", name: "Electronic" });
+      expect(result.total).toBe(0);
+      expect(result.tracks).toEqual([]);
+    });
+
+    it("uses the requested genre slug and real name from DB (not hardcoded)", async () => {
+      const customGenre = { slug: "ambient", name: "Ambient" };
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(customGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      const result = await service.getTrendingTracksByGenre("ambient", 5);
+
+      expect(result.genre.slug).toBe("ambient");
+      expect(result.genre.name).toBe("Ambient");
+    });
+
+    it("applies default limit of 5 to findMany", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 5 }),
+      );
+    });
+
+    it("respects smaller valid limit", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 3);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 3 }),
+      );
+    });
+
+    it("filters only PUBLIC tracks", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ visibility: TrackVisibility.PUBLIC }),
+        }),
+      );
+    });
+
+    it("filters only FINISHED tracks", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: TrackStatus.FINISHED }),
+        }),
+      );
+    });
+
+    it("excludes deleted tracks (deletedAt: null)", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ deletedAt: null }),
+        }),
+      );
+    });
+
+    it("excludes hidden/removed tracks (moderationState: VISIBLE)", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            moderationState: ModerationState.VISIBLE,
+          }),
+        }),
+      );
+    });
+
+    it("filters by exact genre slug", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            primaryGenre: { slug: "electronic" },
+          }),
+        }),
+      );
+    });
+
+    it("sorts by likesCount descending", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(prisma.track.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { likes: { _count: "desc" } },
+        }),
+      );
+    });
+
+    it("returns total count independently of limit", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([makeTrack()] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(12);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(result.total).toBe(12);
+      expect(result.tracks).toHaveLength(1);
+    });
+
+    it("maps artist fields correctly", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([makeTrack()] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+      const artist = result.tracks[0].artist;
+
+      expect(artist.id).toBe("artist-uuid-1");
+      expect(artist.displayName).toBe("Artist One");
+      expect(artist.handle).toBe("artist-one");
+      expect(artist.avatarUrl).toBe("https://example.com/avatar.png");
+    });
+
+    it("maps genre fields correctly in track", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([makeTrack()] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+      const genre = result.tracks[0].genre;
+
+      expect(genre.slug).toBe("electronic");
+      expect(genre.name).toBe("Electronic");
+    });
+
+    it("maps trackId (not id) in response", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([makeTrack()] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+      const track = result.tracks[0];
+
+      expect(track).toHaveProperty("trackId", "track-uuid-1");
+      expect(track).not.toHaveProperty("id");
+    });
+
+    it("maps likesCount and repostsCount correctly", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([makeTrack()] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+      const track = result.tracks[0];
+
+      expect(track.likesCount).toBe(42);
+      expect(track.repostsCount).toBe(7);
+    });
+
+    it("does not expose secretToken in response", async () => {
+      const trackWithSecret = makeTrack({ secretToken: "super-secret" });
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([trackWithSecret] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+      const track = result.tracks[0];
+
+      expect(track).not.toHaveProperty("secretToken");
+      expect(JSON.stringify(track)).not.toContain("super-secret");
+    });
+
+    it("does not expose uploader email in response", async () => {
+      const trackWithEmail = makeTrack({
+        uploader: {
+          id: "artist-uuid-1",
+          email: "private@example.com",
+          profile: { displayName: "A", handle: "a", avatarUrl: null },
+        },
+      });
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([trackWithEmail] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(JSON.stringify(result)).not.toContain("private@example.com");
+    });
+
+    it("handles uploader with no profile gracefully", async () => {
+      const trackNoProfile = makeTrack({
+        uploader: { id: "artist-uuid-2", profile: null },
+      });
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([trackNoProfile] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+      const artist = result.tracks[0].artist;
+
+      expect(artist.displayName).toBeNull();
+      expect(artist.handle).toBeNull();
+      expect(artist.avatarUrl).toBeNull();
+    });
+
+    it("returns the limit value in the response", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([]);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(0);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 3);
+
+      expect(result.limit).toBe(3);
+    });
+
+    it("response shape matches the required contract", async () => {
+      jest.spyOn(prisma.genre, "findUnique" as any).mockResolvedValueOnce(mockGenre);
+      jest.spyOn(prisma.track, "findMany").mockResolvedValueOnce([makeTrack()] as any);
+      jest.spyOn(prisma.track, "count").mockResolvedValueOnce(1);
+
+      const result = await service.getTrendingTracksByGenre("electronic", 5);
+
+      expect(result).toMatchObject({
+        genre: { slug: expect.any(String), name: expect.any(String) },
+        limit: expect.any(Number),
+        total: expect.any(Number),
+        tracks: expect.arrayContaining([
+          expect.objectContaining({
+            trackId: expect.any(String),
+            title: expect.any(String),
+            slug: expect.any(String),
+            artist: expect.objectContaining({ id: expect.any(String) }),
+            genre: expect.objectContaining({ slug: expect.any(String) }),
+            likesCount: expect.any(Number),
+            repostsCount: expect.any(Number),
+          }),
+        ]),
       });
     });
   });

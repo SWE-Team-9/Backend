@@ -53,6 +53,27 @@ export class FeedService {
           createdAt: true,
           publishedAt: true,
           uploaderId: true,
+          status: true,
+          visibility: true,
+          durationMs: true,
+          waveformData: true,
+          primaryGenreId: true,
+          primaryGenre: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          tags: {
+            select: {
+              tag: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
           uploader: {
             select: {
               profile: {
@@ -64,6 +85,12 @@ export class FeedService {
               },
             },
           },
+          _count: {
+            select: {
+              likes: true,
+              reposts: true,
+            },
+          },
         },
         orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
         skip: computedOffset,
@@ -71,8 +98,63 @@ export class FeedService {
       }),
     ]);
 
+    // Fetch user's likes and reposts for these tracks
+    const userLikeMap = new Map<string, boolean>();
+    const userRepostMap = new Map<string, boolean>();
+
+    if (tracks.length > 0) {
+      const trackIds = tracks.map((t) => t.id);
+
+      const userLikes = await this.prisma.like.findMany({
+        where: {
+          userId,
+          trackId: { in: trackIds },
+        },
+        select: { trackId: true },
+      });
+
+      const userReposts = await this.prisma.repost.findMany({
+        where: {
+          userId,
+          trackId: { in: trackIds },
+        },
+        select: { trackId: true },
+      });
+
+      userLikes.forEach((like) => {
+        userLikeMap.set(like.trackId, true);
+      });
+
+      userReposts.forEach((repost) => {
+        userRepostMap.set(repost.trackId, true);
+      });
+    }
+
+    // Transform tracks to match frontend expectations
+    const transformedTracks = tracks.map((track) => ({
+      id: track.id,
+      title: track.title,
+      slug: track.slug,
+      description: track.description,
+      coverArtUrl: track.coverArtUrl,
+      createdAt: track.createdAt,
+      publishedAt: track.publishedAt,
+      uploaderId: track.uploaderId,
+      uploader: track.uploader,
+      status: track.status,
+      visibility: track.visibility,
+      durationMs: track.durationMs,
+      genre: track.primaryGenre?.name || null,
+      tags: track.tags.map((t) => t.tag.name),
+      waveformData: track.waveformData,
+      likesCount: track._count.likes,
+      repostsCount: track._count.reposts,
+      liked: userLikeMap.get(track.id) ?? false,
+      reposted: userRepostMap.get(track.id) ?? false,
+    }));
+
     return {
-      data: tracks,
+      data: transformedTracks,
       pagination: {
         page,
         limit,

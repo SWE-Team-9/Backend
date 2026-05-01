@@ -8,16 +8,10 @@ export {
   RecentPlaylistOwnerDto,
 } from "./get-recent-playlists.dto";
 export { UploadPlaylistCoverResponseDto } from "./upload-playlist-cover-response.dto";
-export {
-  AddTrackToPlaylistDto,
-  AddTrackToPlaylistResponseDto,
-} from "./add-track-to-playlist.dto";
+export { AddTrackToPlaylistDto, AddTrackToPlaylistResponseDto } from "./add-track-to-playlist.dto";
 export { ReorderPlaylistTracksDto } from "./reorder-playlist-tracks.dto";
 export { PlaylistPaginationQueryDto } from "./pagination-query.dto";
-export {
-  GetMyPlaylistsResponseDto,
-  MyPlaylistItemDto,
-} from "./get-my-playlists-response.dto";
+export { GetMyPlaylistsResponseDto, MyPlaylistItemDto } from "./get-my-playlists-response.dto";
 export { GetPlaylistDetailsParamsDto } from "./get-playlist-details-params.dto";
 export {
   ResolveSecretPlaylistParamsDto,
@@ -39,3 +33,7 @@ export {
   PlaylistDetailsTrackDto,
 } from "./get-playlist-details-response.dto";
 export { PlaylistTracksQueryDto } from "./get-playlist-details-query.dto";
+export { LikePlaylistResponseDto } from "./like-playlist-response.dto";
+export { GetTopPlaylistsResponseDto, TopPlaylistItemDto } from "./get-top-playlists-response.dto";
+export { UnlikePlaylistResponseDto } from "./unlike-playlist-response.dto";
+export { PlaylistRecentQueryDto } from "./playlist-recent-query.dto";

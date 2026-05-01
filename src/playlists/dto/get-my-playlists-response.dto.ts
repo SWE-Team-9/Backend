@@ -1,17 +1,20 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 
 export class MyPlaylistItemDto {
-  @ApiProperty({ example: "pl_101" })
+  @ApiProperty({ example: 'pl_101' })
   playlistId!: string;
 
-  @ApiProperty({ example: "Late Night Drive" })
+  @ApiProperty({ example: 'Late Night Drive' })
   title!: string;
 
-  @ApiProperty({ example: "PUBLIC" })
+  @ApiProperty({ example: 'PUBLIC' })
   visibility!: string;
 
   @ApiProperty({ example: 12 })
   tracksCount!: number;
+
+  @ApiProperty({ example: 10 })
+  likesCount!: number;
 }
 
 export class GetMyPlaylistsResponseDto {

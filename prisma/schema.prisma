@@ -906,6 +906,7 @@ model Playlist {
   releaseDate     DateTime?          @map("release_date") @db.Date
   genreId         Int?               @map("genre_id") @db.SmallInt
   tags            String[]           @default([])
+  likesCount      Int                @default(0) @map("likes_count")
   visibility      PlaylistVisibility @default(PUBLIC)
   moderationState ModerationState    @default(VISIBLE) @map("moderation_state")
   secretToken     String?            @map("secret_token")
