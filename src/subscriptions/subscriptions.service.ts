@@ -216,6 +216,8 @@ export class SubscriptionsService {
   // ── GET /subscriptions/me ─────────────────────────────────────────────────
 
   async getMySubscription(userId: string) {
+    await this.finalizeExpiredCancelAtPeriodEndSubscriptions(userId);
+
     const sub = await this.findActiveSubscription(userId);
     const uploadedTracks = await this.prisma.track.count({
       where: { uploaderId: userId, deletedAt: null },
@@ -537,6 +539,8 @@ export class SubscriptionsService {
   // ── POST /subscriptions/portal ────────────────────────────────────────────
 
   async createBillingPortal(userId: string, dto?: PaymentMethodPortalDto) {
+    await this.finalizeExpiredCancelAtPeriodEndSubscriptions(userId);
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { email: true, profile: { select: { displayName: true } } },
@@ -1326,6 +1330,53 @@ export class SubscriptionsService {
         payload,
       },
     });
+  }
+
+  private async finalizeExpiredCancelAtPeriodEndSubscriptions(
+    userId: string,
+  ): Promise<void> {
+    const now = new Date();
+    const expiredCancelingSubs = await this.prisma.userSubscription.findMany({
+      where: {
+        userId,
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: { lt: now },
+        status: {
+          in: [
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.TRIALING,
+            SubscriptionStatus.PAST_DUE,
+          ],
+        },
+      },
+      select: {
+        id: true,
+        userId: true,
+        plan: { select: { name: true } },
+      },
+    });
+
+    for (const sub of expiredCancelingSubs) {
+      await this.prisma.userSubscription.update({
+        where: { id: sub.id },
+        data: {
+          status: SubscriptionStatus.CANCELED,
+          cancelAtPeriodEnd: false,
+          endedAt: now,
+        },
+      });
+
+      await this.revokeOfflineDownloads(sub.userId);
+      await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
+
+      await this.logPaymentEvent(sub.id, 'subscription.cancel_period_end_finalized', {
+        finalizedAt: now.toISOString(),
+      });
+
+      this.logger.warn(
+        `[SUBSCRIPTION FINALIZE] Auto-finalized expired cancel-at-period-end subscription ${sub.id}`,
+      );
+    }
   }
 
   private buildSubscriptionResponse(opts: {
