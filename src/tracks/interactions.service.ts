@@ -4,12 +4,12 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from "@nestjs/common";
-import { Prisma, TrackStatus } from "@prisma/client";
-import { EventEmitter2 } from "@nestjs/event-emitter";
+} from '@nestjs/common';
+import { Prisma, TrackStatus } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
-import { PrismaService } from "../prisma/prisma.service";
-import { InteractionsGateway } from "./interactions.gateway";
+import { PrismaService } from '../prisma/prisma.service';
+import { InteractionsGateway } from './interactions.gateway';
 
 type PaginationResult = {
   page: number;
@@ -50,6 +50,7 @@ type CommentResponse = {
   id: string;
   content: string;
   timestampAt: number;
+  createdAt: Date;
   user: UserProfileSummary;
 };
 
@@ -74,8 +75,8 @@ export class InteractionsService {
 
   async likeTrack(userId: string, trackId: string): Promise<void> {
     const track = await this.ensureTrackExists(trackId);
-    this.assertTrackIsFinished(track.status, "like this track");
-    this.assertNotOwnTrack(userId, track.uploaderId, "like this track");
+    this.assertTrackIsFinished(track.status, 'like this track');
+    this.assertNotOwnTrack(userId, track.uploaderId, 'like this track');
 
     const existingLike = await this.prisma.like.findUnique({
       where: {
@@ -91,8 +92,8 @@ export class InteractionsService {
 
     if (existingLike) {
       throw new ConflictException({
-        code: "TRACK_ALREADY_LIKED",
-        message: "You already liked this track.",
+        code: 'TRACK_ALREADY_LIKED',
+        message: 'You already liked this track.',
       });
     }
 
@@ -102,18 +103,18 @@ export class InteractionsService {
       });
 
       this.interactionsGateway.emitTrackInteraction(trackId, {
-        type: "LIKE",
+        type: 'LIKE',
         userId,
         trackId,
         createdAt: new Date().toISOString(),
       });
-      this.eventEmitter.emit("track.liked", {
+      this.eventEmitter.emit('track.liked', {
         trackId,
         actorId: userId,
         ownerId: track.uploaderId,
       });
     } catch (error: unknown) {
-      this.handlePrismaWriteError(error, "TRACK_ALREADY_LIKED");
+      this.handlePrismaWriteError(error, 'TRACK_ALREADY_LIKED');
     }
   }
 
@@ -126,16 +127,16 @@ export class InteractionsService {
 
     if (result.count === 0) {
       throw new NotFoundException({
-        code: "TRACK_LIKE_NOT_FOUND",
-        message: "You have not liked this track.",
+        code: 'TRACK_LIKE_NOT_FOUND',
+        message: 'You have not liked this track.',
       });
     }
   }
 
   async repostTrack(userId: string, trackId: string): Promise<void> {
     const track = await this.ensureTrackExists(trackId);
-    this.assertTrackIsFinished(track.status, "repost this track");
-    this.assertNotOwnTrack(userId, track.uploaderId, "repost this track");
+    this.assertTrackIsFinished(track.status, 'repost this track');
+    this.assertNotOwnTrack(userId, track.uploaderId, 'repost this track');
 
     const existingRepost = await this.prisma.repost.findUnique({
       where: {
@@ -151,8 +152,8 @@ export class InteractionsService {
 
     if (existingRepost) {
       throw new ConflictException({
-        code: "TRACK_ALREADY_REPOSTED",
-        message: "You already reposted this track.",
+        code: 'TRACK_ALREADY_REPOSTED',
+        message: 'You already reposted this track.',
       });
     }
 
@@ -162,18 +163,18 @@ export class InteractionsService {
       });
 
       this.interactionsGateway.emitTrackInteraction(trackId, {
-        type: "REPOST",
+        type: 'REPOST',
         userId,
         trackId,
         createdAt: new Date().toISOString(),
       });
-      this.eventEmitter.emit("track.reposted", {
+      this.eventEmitter.emit('track.reposted', {
         trackId,
         actorId: userId,
         ownerId: track.uploaderId,
       });
     } catch (error: unknown) {
-      this.handlePrismaWriteError(error, "TRACK_ALREADY_REPOSTED");
+      this.handlePrismaWriteError(error, 'TRACK_ALREADY_REPOSTED');
     }
   }
 
@@ -223,8 +224,8 @@ export class InteractionsService {
 
     if (result.count === 0) {
       throw new NotFoundException({
-        code: "TRACK_REPOST_NOT_FOUND",
-        message: "You have not reposted this track.",
+        code: 'TRACK_REPOST_NOT_FOUND',
+        message: 'You have not reposted this track.',
       });
     }
   }
@@ -243,7 +244,7 @@ export class InteractionsService {
       this.prisma.like.count({ where }),
       this.prisma.like.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: normalizedLimit,
         select: {
@@ -298,7 +299,7 @@ export class InteractionsService {
       this.prisma.repost.count({ where }),
       this.prisma.repost.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: normalizedLimit,
         select: {
@@ -353,7 +354,7 @@ export class InteractionsService {
       this.prisma.like.count({ where }),
       this.prisma.like.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: normalizedLimit,
         select: {
@@ -408,7 +409,7 @@ export class InteractionsService {
       this.prisma.repost.count({ where }),
       this.prisma.repost.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: normalizedLimit,
         select: {
@@ -461,7 +462,7 @@ export class InteractionsService {
       this.prisma.like.count({ where }),
       this.prisma.like.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: normalizedLimit,
         select: {
@@ -507,7 +508,7 @@ export class InteractionsService {
       this.prisma.repost.count({ where }),
       this.prisma.repost.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: normalizedLimit,
         select: {
@@ -549,8 +550,8 @@ export class InteractionsService {
   ): Promise<CommentResponse> {
     if (timestampAt < 0) {
       throw new BadRequestException({
-        code: "INVALID_COMMENT_TIMESTAMP",
-        message: "timestampAt must be greater than or equal to 0.",
+        code: 'INVALID_COMMENT_TIMESTAMP',
+        message: 'timestampAt must be greater than or equal to 0.',
       });
     }
 
@@ -567,6 +568,7 @@ export class InteractionsService {
         id: true,
         content: true,
         timestampAt: true,
+        createdAt: true,
         user: {
           select: {
             id: true,
@@ -582,7 +584,7 @@ export class InteractionsService {
     });
 
     this.interactionsGateway.emitTrackInteraction(trackId, {
-      type: "COMMENT",
+      type: 'COMMENT',
       userId,
       trackId,
       createdAt: new Date().toISOString(),
@@ -596,7 +598,7 @@ export class InteractionsService {
       select: { uploaderId: true },
     });
     if (trackRecord) {
-      this.eventEmitter.emit("track.commented", {
+      this.eventEmitter.emit('track.commented', {
         trackId,
         actorId: userId,
         ownerId: trackRecord.uploaderId,
@@ -608,6 +610,7 @@ export class InteractionsService {
       id: comment.id,
       content: comment.content,
       timestampAt: comment.timestampAt,
+      createdAt: comment.createdAt,
       user: {
         userId: comment.user.id,
         displayName: comment.user.profile?.displayName ?? null,
@@ -624,21 +627,21 @@ export class InteractionsService {
 
     if (!comment) {
       throw new NotFoundException({
-        code: "COMMENT_NOT_FOUND",
-        message: "Comment not found.",
+        code: 'COMMENT_NOT_FOUND',
+        message: 'Comment not found.',
       });
     }
 
     if (comment.userId !== userId) {
       throw new ForbiddenException({
-        code: "COMMENT_NOT_OWNED",
-        message: "You can only delete your own comments.",
+        code: 'COMMENT_NOT_OWNED',
+        message: 'You can only delete your own comments.',
       });
     }
 
     await this.prisma.comment.delete({ where: { id: commentId } });
 
-    return { message: "Comment deleted successfully" };
+    return { message: 'Comment deleted successfully' };
   }
 
   async getTrackComments(trackId: string): Promise<CommentResponse[]> {
@@ -646,11 +649,12 @@ export class InteractionsService {
 
     const comments = await this.prisma.comment.findMany({
       where: { trackId },
-      orderBy: { timestampAt: "asc" },
+      orderBy: { timestampAt: 'asc' },
       select: {
         id: true,
         content: true,
         timestampAt: true,
+        createdAt: true,
         user: {
           select: {
             id: true,
@@ -669,6 +673,7 @@ export class InteractionsService {
       id: comment.id,
       content: comment.content,
       timestampAt: comment.timestampAt,
+      createdAt: comment.createdAt,
       user: {
         userId: comment.user.id,
         displayName: comment.user.profile?.displayName ?? null,
@@ -680,8 +685,8 @@ export class InteractionsService {
   private normalizePage(page: number): number {
     if (!Number.isInteger(page) || page < 1) {
       throw new BadRequestException({
-        code: "INVALID_PAGE",
-        message: "page must be a positive integer.",
+        code: 'INVALID_PAGE',
+        message: 'page must be a positive integer.',
       });
     }
 
@@ -691,8 +696,8 @@ export class InteractionsService {
   private normalizeLimit(limit: number): number {
     if (!Number.isInteger(limit) || limit < 1) {
       throw new BadRequestException({
-        code: "INVALID_LIMIT",
-        message: "limit must be a positive integer.",
+        code: 'INVALID_LIMIT',
+        message: 'limit must be a positive integer.',
       });
     }
 
@@ -762,8 +767,8 @@ export class InteractionsService {
 
     if (!track) {
       throw new NotFoundException({
-        code: "TRACK_NOT_FOUND",
-        message: "Track not found.",
+        code: 'TRACK_NOT_FOUND',
+        message: 'Track not found.',
       });
     }
 
@@ -773,7 +778,7 @@ export class InteractionsService {
   private assertTrackIsFinished(status: TrackStatus, action: string): void {
     if (status !== TrackStatus.FINISHED) {
       throw new ConflictException({
-        code: "TRACK_NOT_FINISHED",
+        code: 'TRACK_NOT_FINISHED',
         message: `You can only ${action} after the track is finished.`,
       });
     }
@@ -782,7 +787,7 @@ export class InteractionsService {
   private assertNotOwnTrack(userId: string, uploaderId: string, action: string): void {
     if (userId === uploaderId) {
       throw new ForbiddenException({
-        code: "TRACK_OWNED_BY_USER",
+        code: 'TRACK_OWNED_BY_USER',
         message: `You cannot ${action} your own track.`,
       });
     }
@@ -790,10 +795,10 @@ export class InteractionsService {
 
   private handlePrismaWriteError(error: unknown, conflictCode: string): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === "P2002") {
+      if (error.code === 'P2002') {
         throw new ConflictException({
           code: conflictCode,
-          message: "You already performed this action on the track.",
+          message: 'You already performed this action on the track.',
         });
       }
     }

@@ -1,26 +1,26 @@
-﻿import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
-import { PrismaService } from "../prisma/prisma.service";
-import { StorageService, UploadType } from "../common/storage/storage.service";
-import { isSafeExternalUrl } from "../common/utils/security.utils";
-import { UpdateExternalLinksDto, UpdateProfileDto } from "./dto/profile.dto";
+import { PrismaService } from '../prisma/prisma.service';
+import { StorageService, UploadType } from '../common/storage/storage.service';
+import { isSafeExternalUrl } from '../common/utils/security.utils';
+import { UpdateExternalLinksDto, UpdateProfileDto } from './dto/profile.dto';
 
 const PLATFORM_SLUG_TO_ENUM: Record<string, string> = {
-  website: "WEBSITE",
-  twitter: "X",
-  instagram: "INSTAGRAM",
-  facebook: "FACEBOOK",
-  youtube: "YOUTUBE",
-  tiktok: "TIKTOK",
-  spotify: "OTHER",
-  "apple-music": "OTHER",
-  bandcamp: "OTHER",
-  soundcloud: "OTHER",
-  patreon: "OTHER",
-  twitch: "OTHER",
-  discord: "OTHER",
-  linkedin: "OTHER",
-  github: "OTHER",
+  website: 'WEBSITE',
+  twitter: 'X',
+  instagram: 'INSTAGRAM',
+  facebook: 'FACEBOOK',
+  youtube: 'YOUTUBE',
+  tiktok: 'TIKTOK',
+  spotify: 'OTHER',
+  'apple-music': 'OTHER',
+  bandcamp: 'OTHER',
+  soundcloud: 'OTHER',
+  patreon: 'OTHER',
+  twitch: 'OTHER',
+  discord: 'OTHER',
+  linkedin: 'OTHER',
+  github: 'OTHER',
 };
 
 const FULL_PROFILE_SELECT = {
@@ -60,11 +60,11 @@ export class UsersService {
     });
 
     if (!profile) {
-      throw new NotFoundException("Profile not found.");
+      throw new NotFoundException('Profile not found.');
     }
 
     const isOwner = requesterId === profile.userId;
-    if (profile.visibility === "PRIVATE" && !isOwner) {
+    if (profile.visibility === 'PRIVATE' && !isOwner) {
       return {
         handle: profile.handle,
         display_name: profile.displayName,
@@ -81,9 +81,9 @@ export class UsersService {
       }),
       this.prisma.userSocialLink.findMany({
         where: { userId: profile.userId },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: 'asc' },
       }),
-      profile.accountType === "ARTIST"
+      profile.accountType === 'ARTIST'
         ? this.prisma.track.count({
             where: { uploaderId: profile.userId, deletedAt: null },
           })
@@ -113,7 +113,7 @@ export class UsersService {
     });
 
     if (!profile) {
-      throw new NotFoundException("Profile not found.");
+      throw new NotFoundException('Profile not found.');
     }
     //Menna
     const [genres, socialLinks, trackCount, followersCount, followingCount] = await Promise.all([
@@ -123,9 +123,9 @@ export class UsersService {
       }),
       this.prisma.userSocialLink.findMany({
         where: { userId },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: 'asc' },
       }),
-      profile.accountType === "ARTIST"
+      profile.accountType === 'ARTIST'
         ? this.prisma.track.count({
             where: { uploaderId: userId, deletedAt: null },
           })
@@ -159,13 +159,13 @@ export class UsersService {
 
     if (dto.website !== undefined) {
       if (dto.website && !isSafeExternalUrl(dto.website)) {
-        throw new BadRequestException("Website URL is not allowed.");
+        throw new BadRequestException('Website URL is not allowed.');
       }
       data.websiteUrl = dto.website || null;
     }
 
     if (dto.is_private !== undefined) {
-      data.visibility = dto.is_private ? "PRIVATE" : "PUBLIC";
+      data.visibility = dto.is_private ? 'PRIVATE' : 'PUBLIC';
     }
 
     if (dto.favorite_genres !== undefined) {
@@ -192,7 +192,7 @@ export class UsersService {
     // playlists, play events, sessions, etc.) is removed automatically via
     // the onDelete: Cascade constraints defined in schema.prisma.
     await this.prisma.user.delete({ where: { id: userId } });
-    return { message: "Account deleted successfully." };
+    return { message: 'Account deleted successfully.' };
   }
 
   async checkHandleAvailability(handle: string) {
@@ -242,9 +242,40 @@ export class UsersService {
 
       return tx.userSocialLink.findMany({
         where: { userId },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: 'asc' },
       });
     });
+  }
+
+  async deleteProfileImage(userId: string, type: 'avatar' | 'cover') {
+    const column = type === 'avatar' ? 'avatarUrl' : 'coverPhotoUrl';
+
+    const profile = await this.prisma.userProfile.findUnique({
+      where: { userId },
+      select: { [column]: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Profile not found.');
+    }
+
+    const existingUrl: string | null = (profile as any)[column];
+
+    await this.prisma.userProfile.update({
+      where: { userId },
+      data: { [column]: null },
+    });
+
+    if (existingUrl) {
+      const key = this.extractKeyFromUrl(existingUrl);
+      if (key) {
+        this.storage.delete(key).catch((err) => {
+          this.logger.warn(`${type} image cleanup failed: ${err}`);
+        });
+      }
+    }
+
+    return { message: `${type} image removed successfully.` };
   }
 
   async uploadProfileImage(userId: string, type: UploadType, file: Express.Multer.File) {
@@ -254,7 +285,7 @@ export class UsersService {
     });
 
     if (!profile) {
-      throw new NotFoundException("Profile not found.");
+      throw new NotFoundException('Profile not found.');
     }
 
     const result = await this.storage.upload(file.buffer, {
@@ -264,13 +295,13 @@ export class UsersService {
       originalName: file.originalname,
     });
 
-    const column = type === "avatar" ? "avatarUrl" : "coverPhotoUrl";
+    const column = type === 'avatar' ? 'avatarUrl' : 'coverPhotoUrl';
     await this.prisma.userProfile.update({
       where: { userId },
       data: { [column]: result.url },
     });
 
-    const oldUrl = type === "avatar" ? profile.avatarUrl : profile.coverPhotoUrl;
+    const oldUrl = type === 'avatar' ? profile.avatarUrl : profile.coverPhotoUrl;
     if (oldUrl) {
       const oldKey = this.extractKeyFromUrl(oldUrl);
       if (oldKey) {
@@ -293,7 +324,7 @@ export class UsersService {
     if (genres.length !== slugs.length) {
       const found = new Set(genres.map((g: any) => g.slug));
       const invalid = slugs.filter((s) => !found.has(s));
-      throw new BadRequestException(`Invalid genre slugs: ${invalid.join(", ")}`);
+      throw new BadRequestException(`Invalid genre slugs: ${invalid.join(', ')}`);
     }
 
     return genres;
@@ -330,7 +361,7 @@ export class UsersService {
       visibility: profile.visibility,
       likes_visible: profile.likesVisible,
       website_url: profile.websiteUrl,
-      is_private: profile.visibility === "PRIVATE",
+      is_private: profile.visibility === 'PRIVATE',
       is_verified: profile.user?.isVerified ?? false,
       created_at: profile.user?.createdAt ?? null,
       updated_at: profile.updatedAt,
@@ -353,7 +384,7 @@ export class UsersService {
   private extractKeyFromUrl(url: string): string | null {
     try {
       const parsed = new URL(url);
-      const key = parsed.pathname.replace(/^\//, "");
+      const key = parsed.pathname.replace(/^\//, '');
       return key || null;
     } catch {
       return null;

@@ -73,8 +73,13 @@ export class UsersController {
         is_verified: true,
         created_at: '2026-03-01T00:00:00.000Z',
         updated_at: '2026-04-01T00:00:00.000Z',
-        favorite_genres: [{ slug: 'electronic', name: 'Electronic' }, { slug: 'lo-fi', name: 'Lo-Fi' }],
-        social_links: [{ platform: 'OTHER', url: 'https://soundcloud.com/yahia_dev', sort_order: 0 }],
+        favorite_genres: [
+          { slug: 'electronic', name: 'Electronic' },
+          { slug: 'lo-fi', name: 'Lo-Fi' },
+        ],
+        social_links: [
+          { platform: 'OTHER', url: 'https://soundcloud.com/yahia_dev', sort_order: 0 },
+        ],
         followers_count: 340,
         following_count: 89,
         track_count: 12,
@@ -262,6 +267,40 @@ Rate Limited: Default (100 req/min).`,
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   deleteAccount(@CurrentUser('userId') userId: string) {
     return this.usersService.deleteAccount(userId);
+  }
+
+  // DELETE /profiles/me/:type (avatar | cover)
+  @Delete('me/:type')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({
+    name: 'type',
+    enum: ['avatar', 'cover'],
+    description: 'Image type to delete.',
+  })
+  @ApiOperation({
+    summary: 'Delete profile image (avatar or cover)',
+    description: `Remove the current avatar or cover photo from the authenticated user's profile.
+
+Image types:
+- avatar: Profile picture
+- cover: Header/banner image
+
+Behavior:
+- Sets the image field to null in the database
+- Deletes the file from storage (S3 or local)
+- If no image is currently set, the operation still succeeds (idempotent)
+
+Authentication: Requires valid access token.`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Image removed successfully.',
+    schema: { example: { message: 'avatar image removed successfully.' } },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'Profile not found.' })
+  deleteImage(@CurrentUser('userId') userId: string, @Param() params: UploadImageParamsDto) {
+    return this.usersService.deleteProfileImage(userId, params.type);
   }
 
   // POST /profiles/me/:type (avatar | cover)
