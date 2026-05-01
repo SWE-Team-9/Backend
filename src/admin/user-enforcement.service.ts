@@ -203,7 +203,7 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "ACCOUNT_SUSPENDED",
+      eventType: "ACCOUNT_SUSPENDED" as any,
       metadata: { reason: dto.reason, suspendedUntil: suspendedUntil.toISOString() },
     });
 
@@ -296,7 +296,7 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "ACCOUNT_BANNED",
+      eventType: "ACCOUNT_BANNED" as any,
       metadata: { reason: dto.reason },
     });
 
@@ -379,7 +379,7 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "ACCOUNT_RESTORED",
+      eventType: "ACCOUNT_RESTORED" as any,
       metadata: {},
     });
 

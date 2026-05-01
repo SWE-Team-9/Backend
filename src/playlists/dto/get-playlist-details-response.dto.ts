@@ -1,19 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PlaylistDetailsTrackDto, ArtistPreviewDto } from './track-details.dto';
 
 export class PlaylistDetailsOwnerDto {
   @ApiProperty({ example: 'usr_1' })
   id!: string;
 
   @ApiProperty({ example: 'Ahmed Hassan' })
-  display_name!: string;
-}
-
-export class PlaylistDetailsTrackDto {
-  @ApiProperty({ example: 'trk_123' })
-  trackId!: string;
-
-  @ApiProperty({ example: 'Layali' })
-  title!: string;
+  displayName!: string;
 }
 
 export class GetPlaylistDetailsResponseDto {
@@ -41,6 +34,12 @@ export class GetPlaylistDetailsResponseDto {
     nullable: true,
   })
   genre!: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-03-01T00:00:00.000Z',
+    nullable: true,
+  })
+  releaseDate!: string | null;
 
   @ApiProperty({ type: () => PlaylistDetailsOwnerDto })
   owner!: PlaylistDetailsOwnerDto;

@@ -8,7 +8,6 @@ import {
 } from "@nestjs/common";
 import { PlaylistType, PlaylistVisibility, Prisma } from "@prisma/client";
 import { randomBytes, randomUUID } from "crypto";
-import { instanceToPlain, plainToInstance } from "class-transformer";
 
 import { StorageService } from "../common/storage/storage.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -17,6 +16,7 @@ import {
   AddTrackToPlaylistDto,
   AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
+  CreatePlaylistResponseDto,
   GetPlaylistDetailsResponseDto,
   GetPlaylistEditResponseDto,
   GetPlaylistEmbedCodeQueryDto,
@@ -28,10 +28,11 @@ import {
   RemoveTrackFromPlaylistResponseDto,
   ReorderPlaylistTracksDto,
   ResolveSecretPlaylistResponseDto,
+  PlaylistItemDto,
+  GetPlaylistLikedResponseDto,
   UpdatePlaylistDto,
   UploadPlaylistCoverResponseDto,
 } from "./dto";
-import { PlaylistEntity } from "./entities/playlist.entity";
 
 @Injectable()
 export class PlaylistsService {
@@ -46,10 +47,21 @@ export class PlaylistsService {
     private readonly storageService: StorageService,
   ) {}
 
-  async create(userId: string, dto: CreatePlaylistDto) {
+  async create(userId: string, dto: CreatePlaylistDto): Promise<CreatePlaylistResponseDto> {
     const { visibility } = dto;
     const secretToken =
       visibility === PlaylistVisibility.SECRET ? randomBytes(24).toString("hex") : null;
+    const owner = await this.prisma.user.findFirst({
+      where: { id: userId },
+      select: {
+        id: true,
+        profile: {
+          select: {
+            displayName: true,
+          },
+        },
+      },
+    });
 
     const uniqueTrackIds = this.validateTrackIdArray(dto.trackIds, "trackIds", true);
 
@@ -86,6 +98,8 @@ export class PlaylistsService {
       title: string;
       visibility: PlaylistVisibility;
       secretToken: string | null;
+      createdAt: Date | string;
+      releaseDate?: Date | string | null;
     } | null = null;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -106,6 +120,7 @@ export class PlaylistsService {
             select: {
               id: true,
               title: true,
+              createdAt: true,
               visibility: true,
               secretToken: true,
             },
@@ -146,7 +161,16 @@ export class PlaylistsService {
       title: playlist.title,
       visibility: playlist.visibility,
       secretToken: playlist.secretToken,
+      coverImageUrl: null,
       genre: dto.genre ?? null,
+      releaseDate: playlist.createdAt ? new Date(playlist.createdAt).toISOString() : null,
+      tracksCount: uniqueTrackIds.length,
+      likesCount: 0,
+      isLiked: false,
+      owner: {
+        id: owner?.id ?? userId,
+        displayName: owner?.profile?.displayName ?? "Unknown User",
+      },
     };
   }
 
@@ -233,47 +257,56 @@ export class PlaylistsService {
       visibility: PlaylistVisibility;
       secretToken: string | null;
       ownerId: string;
-      genre: { name: string } | null;
+      genre: { slug: string } | null;
+      releaseDate?: Date | string | null;
       owner: { id: string; profile: { displayName: string } | null };
-      tracks: Array<{ track: { id: string; title: string } }>;
+      tracks: Array<{
+        track: {
+          id: string;
+          title: string;
+          coverArtUrl: string | null;
+          durationMs: number | null;
+          _count?: { likes: number; reposts: number };
+          uploader: {
+            id: string;
+            profile: { displayName: string | null; handle: string | null } | null;
+          };
+        };
+      }>;
     },
     requesterUserId?: string,
   ): GetPlaylistDetailsResponseDto {
-    const entity = plainToInstance(
-      PlaylistEntity,
-      {
-        playlistId: playlist.id,
-        title: playlist.title,
-        description: playlist.description,
-        visibility: playlist.visibility,
-        secretToken: playlist.secretToken,
-        genre: playlist.genre?.name ?? null,
-        owner: {
-          id: playlist.owner.id,
-          display_name: playlist.owner.profile?.displayName ?? "Unknown User",
-        },
-        tracks: playlist.tracks.map(({ track }) => ({
+    return {
+      playlistId: playlist.id,
+      title: playlist.title,
+      description: playlist.description,
+      visibility: playlist.visibility,
+      releaseDate: playlist.releaseDate ? new Date(playlist.releaseDate).toISOString() : null,
+      ...(requesterUserId === playlist.ownerId && playlist.secretToken
+        ? { secretToken: playlist.secretToken }
+        : {}),
+      genre: playlist.genre?.slug ?? null,
+      owner: {
+        id: playlist.owner.id,
+        displayName: playlist.owner.profile?.displayName ?? "Unknown User",
+      },
+      tracks: playlist.tracks.map(({ track }) => {
+        const uploaderProfile = track.uploader.profile;
+        return {
           trackId: track.id,
           title: track.title,
-        })),
-      },
-      { excludeExtraneousValues: true },
-    );
-
-    const groups = requesterUserId === playlist.ownerId ? ["owner"] : [];
-    const plain = instanceToPlain(entity, {
-      groups,
-    }) as GetPlaylistDetailsResponseDto & {
-      secretToken?: string | null;
+          coverArtUrl: track.coverArtUrl,
+          durationMs: track.durationMs ?? 0,
+          likesCount: track._count?.likes ?? 0,
+          repostsCount: track._count?.reposts ?? 0,
+          artist: {
+            id: track.uploader.id,
+            name: uploaderProfile?.displayName ?? uploaderProfile?.handle ?? 'Unknown User',
+            handle: uploaderProfile?.handle ?? null,
+          },
+        };
+      }),
     };
-
-    if (requesterUserId === playlist.ownerId) {
-      plain.secretToken = playlist.secretToken;
-    } else {
-      delete plain.secretToken;
-    }
-
-    return plain;
   }
 
   async findOne(
@@ -300,9 +333,10 @@ export class PlaylistsService {
           description: true,
           visibility: true,
           secretToken: true,
+          releaseDate: true,
           genre: {
             select: {
-              name: true,
+              slug: true,
             },
           },
           owner: {
@@ -334,6 +368,20 @@ export class PlaylistsService {
             select: {
               id: true,
               title: true,
+              coverArtUrl: true,
+              durationMs: true,
+              _count: { select: { likes: true, reposts: true } },
+              uploader: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      displayName: true,
+                      handle: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -459,13 +507,13 @@ export class PlaylistsService {
       data.releaseDate = new Date(dto.releaseDate);
     }
 
-    if (dto.genreId !== undefined) {
-      if (dto.genreId === null) {
+    if (dto.genre !== undefined) {
+      if (dto.genre === null) {
         data.genreId = null;
       } else {
         const genre = await this.prisma.genre.findFirst({
           where: {
-            id: dto.genreId,
+            slug: dto.genre,
           },
           select: {
             id: true,
@@ -501,9 +549,10 @@ export class PlaylistsService {
         description: true,
         visibility: true,
         secretToken: true,
+        releaseDate: true,
         genre: {
           select: {
-            name: true,
+            slug: true,
           },
         },
         owner: {
@@ -530,6 +579,20 @@ export class PlaylistsService {
               select: {
                 id: true,
                 title: true,
+                coverArtUrl: true,
+                durationMs: true,
+                _count: { select: { likes: true, reposts: true } },
+                uploader: {
+                  select: {
+                    id: true,
+                    profile: {
+                      select: {
+                        displayName: true,
+                        handle: true,
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -670,11 +733,13 @@ export class PlaylistsService {
       select: {
         id: true,
         title: true,
+        visibility: true,
         coverImageUrl: true,
         coverArtUrl: true,
+        likesCount: true,
         genre: {
           select: {
-            name: true,
+            slug: true,
           },
         },
         owner: {
@@ -687,8 +752,27 @@ export class PlaylistsService {
             },
           },
         },
+        _count: {
+          select: {
+            tracks: true,
+          },
+        },
       },
     });
+
+    // Get liked playlists by current user
+    const likedPlaylists = await this.prisma.playlistLike.findMany({
+      where: {
+        userId,
+        playlistId: {
+          in: playlistIds,
+        },
+      },
+      select: {
+        playlistId: true,
+      },
+    });
+    const likedPlaylistIds = new Set(likedPlaylists.map((like) => like.playlistId));
 
     const playlistMap = new Map(playlists.map((playlist) => [playlist.id, playlist]));
 
@@ -699,17 +783,21 @@ export class PlaylistsService {
         .map((playlist) => ({
           playlistId: playlist.id,
           title: playlist.title,
+          visibility: playlist.visibility,
           coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
-          genre: playlist.genre?.name ?? null,
+          likesCount: playlist.likesCount,
+          isLiked: likedPlaylistIds.has(playlist.id),
+          genre: playlist.genre?.slug ?? null,
+          tracksCount: playlist._count.tracks,
           owner: {
             id: playlist.owner.id,
-            display_name: playlist.owner.profile?.displayName ?? "Unknown User",
+            displayName: playlist.owner.profile?.displayName ?? "Unknown User",
           },
         })),
     };
   }
 
-  async getTopPlaylists(): Promise<GetTopPlaylistsResponseDto> {
+  async getTopPlaylists(userId?: string): Promise<GetTopPlaylistsResponseDto> {
     const noGenreLabel = "No Genre";
 
     const playlists = await this.prisma.playlist.findMany({
@@ -722,43 +810,80 @@ export class PlaylistsService {
         id: true,
         title: true,
         visibility: true,
+        coverImageUrl: true,
+        coverArtUrl: true,
         likesCount: true,
         genre: {
           select: {
-            name: true,
+            slug: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            tracks: true,
           },
         },
       },
     });
 
+    // Get liked playlists by current user if authenticated
+    let likedPlaylistIds = new Set<string>();
+    if (userId) {
+      const likedPlaylists = await this.prisma.playlistLike.findMany({
+        where: {
+          userId,
+          playlistId: {
+            in: playlists.map((p) => p.id),
+          },
+        },
+        select: {
+          playlistId: true,
+        },
+      });
+      likedPlaylistIds = new Set(likedPlaylists.map((like) => like.playlistId));
+    }
+
     const groupedGenres = new Map<
       string,
       {
         genre: string;
-        playlists: Array<{
-          playlistId: string;
-          title: string;
-          visibility: PlaylistVisibility;
-          likesCount: number;
-        }>;
+        playlists: PlaylistItemDto[];
       }
     >();
 
     for (const playlist of playlists) {
-      const genreName = playlist.genre?.name ?? noGenreLabel;
+      const genreName = playlist.genre?.slug ?? noGenreLabel;
       const groupedGenre =
         groupedGenres.get(genreName) ??
         {
           genre: genreName,
-          playlists: [],
+          playlists: [] as PlaylistItemDto[],
         };
 
       if (groupedGenre.playlists.length < 10) {
-        const playlistItem = {
+        const playlistItem: PlaylistItemDto = {
           playlistId: playlist.id,
           title: playlist.title,
           visibility: playlist.visibility,
+          coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
           likesCount: playlist.likesCount,
+          isLiked: likedPlaylistIds.has(playlist.id),
+          genre: playlist.genre?.slug ?? null,
+          tracksCount: playlist._count.tracks,
+          owner: {
+            id: playlist.owner.id,
+            displayName: playlist.owner.profile?.displayName ?? "Unknown User",
+          },
         };
 
         groupedGenre.playlists.push(playlistItem);
@@ -790,11 +915,17 @@ export class PlaylistsService {
         },
         select: {
           id: true,
+          ownerId: true,
         },
       });
 
       if (!playlist) {
         throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
+      }
+
+      // Prevent user from liking their own playlist
+      if (playlist.ownerId === userId) {
+        throw this.forbidden("CANNOT_LIKE_OWN_PLAYLIST", "You cannot like your own playlist.");
       }
 
       const existingLike = await tx.playlistLike.findUnique({
@@ -865,6 +996,126 @@ export class PlaylistsService {
         "Playlist cover image must be 5 MB or smaller.",
       );
     }
+  }
+
+  async getMeLikedPlaylists(userId: string, query: PlaylistPaginationQueryDto): Promise<GetPlaylistLikedResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      userId,
+    };
+
+    const [total, playlistLikes] = await this.prisma.$transaction([
+      this.prisma.playlistLike.count({ where }),
+      this.prisma.playlistLike.findMany({
+        where,
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip,
+        take: limit,
+        select: {
+          playlist: {
+            select: {
+              id: true,
+              title: true,
+              visibility: true,
+              coverImageUrl: true,
+              coverArtUrl: true,
+              likesCount: true,
+              genre: {
+                select: {
+                  slug: true,
+                },
+              },
+              owner: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      displayName: true,
+                    },
+                  },
+                },
+              },
+              _count: {
+                select: {
+                  tracks: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      playlists: playlistLikes.map((like) => {
+        const playlist = like.playlist;
+        return {
+          playlistId: playlist.id,
+          title: playlist.title,
+          visibility: playlist.visibility,
+          coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+          likesCount: playlist.likesCount,
+          isLiked: true, // User has already liked this playlist
+          genre: playlist.genre?.slug ?? null,
+          tracksCount: playlist._count.tracks,
+          owner: {
+            id: playlist.owner.id,
+            displayName: playlist.owner.profile?.displayName ?? "Unknown User",
+          },
+        };
+      }),
+    };
+  }
+
+  async play(userId: string, playlistId: string): Promise<{ message: string }> {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!playlist) {
+      throw this.notFound("PLAYLIST_NOT_FOUND", "Playlist not found.");
+    }
+
+    // Record the playback event. PlayEvent requires a trackId, so use the
+    // first track in the playlist (if any) as the tracked item for this play.
+    const firstTrack = await this.prisma.playlistTrack.findFirst({
+      where: { playlistId: playlist.id },
+      orderBy: { position: 'asc' },
+      select: { trackId: true },
+    });
+
+    if (firstTrack) {
+      await this.prisma.playEvent.create({
+        data: {
+          userId,
+          trackId: firstTrack.trackId,
+          playlistId: playlist.id,
+          source: 'PLAYLIST',
+          deviceType: 'WEB',
+          startedAt: new Date(),
+        },
+      });
+    }
+
+    this.logAudit("playlist.play", userId, playlist.id);
+
+    return {
+      message: "Playback recorded successfully",
+    };
   }
 
   async unlikePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
@@ -1000,6 +1251,7 @@ export class PlaylistsService {
         artist: {
           id: track.uploader.id,
           name: track.uploader.profile?.displayName ?? track.uploader.profile?.handle ?? "Unknown Artist",
+          handle: track.uploader.profile?.handle ?? null,
         },
       };
     });
@@ -1179,24 +1431,45 @@ export class PlaylistsService {
         select: {
           id: true,
           title: true,
-          slug: true,
+          visibility: true,
           coverImageUrl: true,
           coverArtUrl: true,
-          visibility: true,
           likesCount: true,
           genre: {
             select: {
-              name: true,
+              slug: true,
+            },
+          },
+          owner: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  displayName: true,
+                },
+              },
             },
           },
           _count: {
             select: {
               tracks: true,
+              likes: true,
             },
           },
         },
       }),
     ]);
+
+    // Get liked playlists by current user
+    const likedPlaylists = await this.prisma.playlistLike.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        playlistId: true,
+      },
+    });
+    const likedPlaylistIds = new Set(likedPlaylists.map((like) => like.playlistId));
 
     return {
       page,
@@ -1205,12 +1478,16 @@ export class PlaylistsService {
       playlists: playlists.map((playlist) => ({
         playlistId: playlist.id,
         title: playlist.title,
-        slug: playlist.slug,
-        coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
         visibility: playlist.visibility,
+        coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
         likesCount: playlist.likesCount,
-        genre: playlist.genre?.name ?? null,
+        isLiked: likedPlaylistIds.has(playlist.id),
+          genre: playlist.genre?.slug ?? null,
         tracksCount: playlist._count.tracks,
+        owner: {
+          id: playlist.owner.id,
+          displayName: playlist.owner.profile?.displayName ?? "Unknown User",
+        },
       })),
     };
   }

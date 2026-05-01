@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AddTrackToPlaylistDto {
@@ -10,6 +10,7 @@ export class AddTrackToPlaylistDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @IsUUID()
   trackId!: string;
 }
 
@@ -30,10 +31,12 @@ export class AddTrackToPlaylistResponseDto {
     example: {
       id: 'usr_1',
       name: 'Artist Name',
+      handle: 'artist-name',
     },
   })
   artist!: {
     id: string;
     name: string;
+    handle: string | null;
   };
 }

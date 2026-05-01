@@ -7,13 +7,27 @@ const request = require("supertest") as typeof import("supertest");
 import { PlaylistsController } from "./playlists.controller";
 import { PlaylistsService } from "./playlists.service";
 
+const playlistId = "b521ecbb-85e1-4083-9fb5-ea91114abc99";
+const trackId = "95ea95c7-9277-46a8-8e44-7e31c3d11c58";
+const artistId = "a4b9c2d6-0714-4e88-96c0-599b1f82c413";
+
 function buildServiceMock() {
   return {
     create: jest.fn().mockResolvedValue({
-      playlistId: "pl_101",
+      playlistId,
       title: "Late Night Drive",
       visibility: "PUBLIC",
       secretToken: null,
+      releaseDate: null,
+      coverImageUrl: null,
+      tracksCount: 2,
+      likesCount: 0,
+      isLiked: false,
+      genre: null,
+      owner: {
+        id: artistId,
+        displayName: "Ahmed Hassan",
+      },
     }),
     getTopPlaylists: jest.fn().mockResolvedValue({
       genres: [
@@ -37,14 +51,14 @@ function buildServiceMock() {
       playlists: [],
     }),
     resolveSecret: jest.fn().mockResolvedValue({
-      playlistId: "pl_101",
+      playlistId,
       title: "Late Night Drive",
       visibility: "PRIVATE",
       message: "Access granted via secret token",
     }),
     getRecentPlaylists: jest.fn().mockResolvedValue({ playlists: [] }),
     getEditDetails: jest.fn().mockResolvedValue({
-      playlistId: "pl_101",
+      playlistId,
       title: "Late Night Drive",
       description: "chill tracks",
       visibility: "PUBLIC",
@@ -57,7 +71,7 @@ function buildServiceMock() {
     }),
     uploadCover: jest.fn().mockResolvedValue({
       message: "Playlist cover uploaded successfully",
-      coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+      coverImageUrl: "https://cdn.example.com/playlists/b521ecbb-85e1-4083-9fb5-ea91114abc99/cover.jpg",
     }),
     likePlaylist: jest.fn().mockResolvedValue({
       message: "Playlist liked successfully",
@@ -66,17 +80,18 @@ function buildServiceMock() {
       message: "Playlist unliked successfully",
     }),
     getEmbedCode: jest.fn().mockResolvedValue({
-      playlistId: "pl_101",
-      embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+      playlistId,
+      embedCode: `<iframe src="https://example.com/embed/playlists/${playlistId}"></iframe>`,
     }),
     addTrack: jest.fn().mockResolvedValue({
       message: "Track added to playlist successfully",
-      playlistId: "pl_101",
-      trackId: "trk_123",
+      playlistId,
+      trackId,
       coverArtUrl: "https://example.com/cover.jpg",
       artist: {
-        id: "usr_2",
+        id: artistId,
         name: "Artist Name",
+        handle: "artist-name",
       },
     }),
     removeTrack: jest.fn().mockResolvedValue({
@@ -86,13 +101,14 @@ function buildServiceMock() {
       message: "Playlist reordered successfully",
     }),
     getDetails: jest.fn().mockResolvedValue({
-      playlistId: "pl_101",
+      playlistId,
       title: "Late Night Drive",
       description: "chill tracks",
       visibility: "PUBLIC",
       genre: "Electronic",
-      owner: { id: "usr_1", display_name: "Ahmed Hassan" },
-      tracks: [{ trackId: "trk_123", title: "Layali" }],
+      releaseDate: null,
+      owner: { id: artistId, displayName: "Ahmed Hassan" },
+      tracks: [{ trackId, title: "Layali", coverArtUrl: null, durationMs: 0, likesCount: 0, repostsCount: 0, artist: { id: artistId, name: "Ahmed Hassan", handle: "test-user" } }],
     }),
     update: jest.fn().mockResolvedValue({ message: "Playlist updated successfully" }),
     remove: jest.fn().mockResolvedValue(undefined),
@@ -146,12 +162,15 @@ describe("PlaylistsController", () => {
       const payload = {
         title: "Late Night Drive",
         visibility: "PUBLIC",
-        trackIds: ["trk_123", "trk_456"],
+        trackIds: [
+          "95ea95c7-9277-46a8-8e44-7e31c3d11c58",
+          "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
+        ],
       };
 
       const res = await request(app.getHttpServer()).post("/playlists").send(payload).expect(201);
 
-      expect(res.body).toHaveProperty("playlistId", "pl_101");
+      expect(res.body).toHaveProperty("playlistId", playlistId);
       expect(service.create).toHaveBeenCalledWith("usr_1", payload);
     });
 
@@ -217,9 +236,9 @@ describe("PlaylistsController", () => {
 
   describe("GET /playlists/:playlistId/edit", () => {
     it("returns owner edit payload", async () => {
-      const res = await request(app.getHttpServer()).get("/playlists/pl_101/edit").expect(200);
+      const res = await request(app.getHttpServer()).get(`/playlists/${playlistId}/edit`).expect(200);
 
-      expect(service.getEditDetails).toHaveBeenCalledWith("usr_1", "pl_101");
+      expect(service.getEditDetails).toHaveBeenCalledWith("usr_1", playlistId);
       expect(res.body).toHaveProperty("slug", "late-night-drive");
     });
   });
@@ -227,7 +246,7 @@ describe("PlaylistsController", () => {
   describe("POST /playlists/:playlistId/cover", () => {
     it("uploads playlist cover image", async () => {
       const res = await request(app.getHttpServer())
-        .post("/playlists/pl_101/cover")
+        .post(`/playlists/${playlistId}/cover`)
         .attach("file", Buffer.from([0xff, 0xd8, 0xff]), {
           filename: "cover.jpg",
           contentType: "image/jpeg",
@@ -241,37 +260,37 @@ describe("PlaylistsController", () => {
 
   describe("POST /playlists/:playlistId/like", () => {
     it("likes playlist", async () => {
-      await request(app.getHttpServer()).post("/playlists/pl_101/like").expect(201);
+      await request(app.getHttpServer()).post(`/playlists/${playlistId}/like`).expect(201);
 
-      expect(service.likePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
+      expect(service.likePlaylist).toHaveBeenCalledWith("usr_1", playlistId);
     });
   });
 
   describe("DELETE /playlists/:playlistId/like", () => {
     it("unlikes playlist", async () => {
-      await request(app.getHttpServer()).delete("/playlists/pl_101/like").expect(200);
+      await request(app.getHttpServer()).delete(`/playlists/${playlistId}/like`).expect(200);
 
-      expect(service.unlikePlaylist).toHaveBeenCalledWith("usr_1", "pl_101");
+      expect(service.unlikePlaylist).toHaveBeenCalledWith("usr_1", playlistId);
     });
   });
 
   describe("GET /playlists/:playlistId/embed", () => {
     it("returns embed code", async () => {
-      await request(app.getHttpServer()).get("/playlists/pl_101/embed").expect(200);
+      await request(app.getHttpServer()).get(`/playlists/${playlistId}/embed`).expect(200);
 
-      expect(service.getEmbedCode).toHaveBeenCalledWith("usr_1", "pl_101", {});
+      expect(service.getEmbedCode).toHaveBeenCalledWith("usr_1", playlistId, {});
     });
   });
 
   describe("POST /playlists/:playlistId/tracks", () => {
     it("adds track to playlist", async () => {
       const res = await request(app.getHttpServer())
-        .post("/playlists/pl_101/tracks")
-        .send({ trackId: "trk_123" })
+        .post(`/playlists/${playlistId}/tracks`)
+        .send({ trackId })
         .expect(201);
 
-      expect(service.addTrack).toHaveBeenCalledWith("usr_1", "pl_101", {
-        trackId: "trk_123",
+      expect(service.addTrack).toHaveBeenCalledWith("usr_1", playlistId, {
+        trackId,
       });
       expect(res.body).toEqual({
         message: expect.any(String),
@@ -281,13 +300,14 @@ describe("PlaylistsController", () => {
         artist: {
           id: expect.any(String),
           name: expect.any(String),
+          handle: expect.any(String),
         },
       });
     });
 
     it("returns 400 when body is invalid", async () => {
       await request(app.getHttpServer())
-        .post("/playlists/pl_101/tracks")
+        .post(`/playlists/${playlistId}/tracks`)
         .send({ trackId: "" })
         .expect(400);
     });
@@ -295,54 +315,61 @@ describe("PlaylistsController", () => {
 
   describe("DELETE /playlists/:playlistId/tracks/:trackId", () => {
     it("removes track from playlist", async () => {
-      await request(app.getHttpServer()).delete("/playlists/pl_101/tracks/trk_123").expect(200);
+      await request(app.getHttpServer())
+        .delete(`/playlists/${playlistId}/tracks/${trackId}`)
+        .expect(200);
 
-      expect(service.removeTrack).toHaveBeenCalledWith("usr_1", "pl_101", "trk_123");
+      expect(service.removeTrack).toHaveBeenCalledWith("usr_1", playlistId, trackId);
     });
   });
 
   describe("PATCH /playlists/:playlistId/reorder", () => {
     it("reorders tracks", async () => {
-      const payload = { orderedTrackIds: ["trk_3", "trk_8"] };
+      const payload = {
+        orderedTrackIds: [
+          "95ea95c7-9277-46a8-8e44-7e31c3d11c58",
+          "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
+        ],
+      };
 
       await request(app.getHttpServer())
-        .patch("/playlists/pl_101/reorder")
+        .patch(`/playlists/${playlistId}/reorder`)
         .send(payload)
         .expect(200);
 
-      expect(service.reorderTracks).toHaveBeenCalledWith("usr_1", "pl_101", payload);
+      expect(service.reorderTracks).toHaveBeenCalledWith("usr_1", playlistId, payload);
     });
 
     it("returns 400 for invalid reorder body", async () => {
       await request(app.getHttpServer())
-        .patch("/playlists/pl_101/reorder")
-        .send({ orderedTrackIds: ["trk_3", ""] })
+        .patch(`/playlists/${playlistId}/reorder`)
+        .send({ orderedTrackIds: ["95ea95c7-9277-46a8-8e44-7e31c3d11c58", ""] })
         .expect(400);
     });
   });
 
   describe("GET /playlists/:playlistId", () => {
     it("returns playlist details", async () => {
-      await request(app.getHttpServer()).get("/playlists/pl_101").expect(200);
-      expect(service.getDetails).toHaveBeenCalledWith("pl_101", "usr_1", {});
+      await request(app.getHttpServer()).get(`/playlists/${playlistId}`).expect(200);
+      expect(service.getDetails).toHaveBeenCalledWith(playlistId, "usr_1", {});
     });
   });
 
   describe("PATCH /playlists/:playlistId", () => {
     it("updates playlist", async () => {
       await request(app.getHttpServer())
-        .patch("/playlists/pl_101")
+        .patch(`/playlists/${playlistId}`)
         .send({ title: "Vol 2" })
         .expect(200);
 
-      expect(service.update).toHaveBeenCalledWith("usr_1", "pl_101", {
+      expect(service.update).toHaveBeenCalledWith("usr_1", playlistId, {
         title: "Vol 2",
       });
     });
 
     it("returns 400 for invalid visibility", async () => {
       await request(app.getHttpServer())
-        .patch("/playlists/pl_101")
+        .patch(`/playlists/${playlistId}`)
         .send({ visibility: "FRIENDS_ONLY" })
         .expect(400);
     });
@@ -350,20 +377,9 @@ describe("PlaylistsController", () => {
 
   describe("DELETE /playlists/:playlistId", () => {
     it("returns 204 and delegates removal", async () => {
-      await request(app.getHttpServer()).delete("/playlists/pl_101").expect(204);
-      expect(service.remove).toHaveBeenCalledWith("usr_1", "pl_101");
+      await request(app.getHttpServer()).delete(`/playlists/${playlistId}`).expect(204);
+      expect(service.remove).toHaveBeenCalledWith("usr_1", playlistId);
     });
   });
 });
-// "FRIENDS_ONLY" })
-//         .expect(400);
-//     });
-//   });
 
-//   describe("DELETE /playlists/:playlistId", () => {
-//     it("returns 204 and delegates removal", async () => {
-//       await request(app.getHttpServer()).delete("/playlists/pl_101").expect(204);
-//       expect(service.remove).toHaveBeenCalledWith("usr_1", "pl_101");
-//     });
-//   });
-// });

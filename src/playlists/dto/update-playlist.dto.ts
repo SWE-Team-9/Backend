@@ -1,15 +1,13 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
   IsIn,
-  IsInt,
   IsOptional,
   IsString,
   MaxLength,
-  Min,
   MinLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -78,14 +76,12 @@ export class UpdatePlaylistDto {
   releaseDate?: string;
 
   @ApiPropertyOptional({
-    description: 'Existing genre identifier from the genres table',
-    example: 12,
+    description: 'Genre slug (must exist in predefined genres)',
+    example: 'electronic',
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  genreId?: number;
+  @IsString()
+  genre?: string;
 
   @ApiPropertyOptional({
     description: 'Simple string tags',
