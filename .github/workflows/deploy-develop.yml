@@ -61,15 +61,41 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Deploy to EC2 and Clean Up
+      - name: Deploy to EC2 and Verify
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            set -e 
+
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            
             cd /home/ec2-user/dev
+            
             docker-compose pull
-            docker-compose up -d --force-recreate --remove-orphans
-            docker image prune -a -f || true
+            docker-compose down --remove-orphans
+            docker-compose up -d
+            
+            echo "Waiting 15 seconds for the application to boot and stabilize..."
+            sleep 15
+            
+            # Print status to the GitHub Actions log for visibility
+            docker-compose ps
+            
+           
+           
+            CONTAINER_ID=$(docker-compose ps -q backend)
+            IS_RUNNING=$(docker inspect -f '{{.State.Running}}' $CONTAINER_ID)
+            
+            if [ "$IS_RUNNING" != "true" ]; then
+              echo "❌ ERROR: The backend container crashed on boot! Likely an unhandled exception."
+              echo "--- PRINTING CRASH LOGS FOR BACKEND TEAM ---"
+              docker-compose logs backend
+              exit 1 # This explicitly fails the GitHub Actions pipeline
+            fi
+            
+            echo "✅ Backend successfully booted and is stable."
+            docker image prune -a -f
