@@ -75,25 +75,25 @@ jobs:
             
             cd /home/ec2-user/dev
             
-            docker compose pull
-            docker compose down --remove-orphans
-            docker compose up -d
+            docker-compose pull
+            docker-compose down --remove-orphans
+            docker-compose up -d
             
             echo "Waiting 15 seconds for the application to boot and stabilize..."
             sleep 15
             
             # Print status to the GitHub Actions log for visibility
-            docker compose ps
+            docker-compose ps
             
            
            
-            CONTAINER_ID=$(docker compose ps -q backend)
+            CONTAINER_ID=$(docker-compose ps -q backend)
             IS_RUNNING=$(docker inspect -f '{{.State.Running}}' $CONTAINER_ID)
             
             if [ "$IS_RUNNING" != "true" ]; then
               echo "❌ ERROR: The backend container crashed on boot! Likely an unhandled exception."
               echo "--- PRINTING CRASH LOGS FOR BACKEND TEAM ---"
-              docker compose logs backend
+              docker-compose logs backend
               exit 1 # This explicitly fails the GitHub Actions pipeline
             fi
             
