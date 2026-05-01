@@ -1,0 +1,4 @@
+
+> iqa3-backend@0.0.1 test
+> jest --runInBand subscriptions/subscriptions.service.spec.ts
+

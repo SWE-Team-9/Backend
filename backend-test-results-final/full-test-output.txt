@@ -1,0 +1,32 @@
+
+> iqa3-backend@0.0.1 test
+> jest --runInBand
+
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:12 PM [95m  DEBUG[39m [38;5;3m[RealStripeBillingProvider] [39m[95m[Stripe] Existing customer cus_existing for user user-1[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:12 PM [95m  DEBUG[39m [38;5;3m[RealStripeBillingProvider] [39m[95m[Stripe] Created customer cus_new for user user-1[39m
+[32m[Nest] 11344  - [39m05/01/2026, 11:47:12 PM [32m    LOG[39m [38;5;3m[RealStripeBillingProvider] [39m[32m[Stripe] Checkout session cs_test_123 created for plan=GO_PLUS trial=false[39m
+[32m[Nest] 11344  - [39m05/01/2026, 11:47:12 PM [32m    LOG[39m [38;5;3m[RealStripeBillingProvider] [39m[32m[Stripe] Checkout session cs_test_123 created for plan=PRO trial=true[39m
+[33m[Nest] 11344  - [39m05/01/2026, 11:47:13 PM [33m   WARN[39m [38;5;3m[StripeService] [39m[33mStripeService initialized with BILLING_PROVIDER=mock_stripe. Real Stripe network calls must not be used in mock mode.[39m
+[33m[Nest] 11344  - [39m05/01/2026, 11:47:13 PM [33m   WARN[39m [38;5;3m[StripeService] [39m[33mStripeService initialized with BILLING_PROVIDER=mock_stripe. Real Stripe network calls must not be used in mock mode.[39m
+[33m[Nest] 11344  - [39m05/01/2026, 11:47:13 PM [33m   WARN[39m [38;5;3m[StripeService] [39m[33mStripeService initialized with BILLING_PROVIDER=mock_stripe. Real Stripe network calls must not be used in mock mode.[39m
+[33m[Nest] 11344  - [39m05/01/2026, 11:47:13 PM [33m   WARN[39m [38;5;3m[StripeService] [39m[33mStripeService initialized with BILLING_PROVIDER=mock_stripe. Real Stripe network calls must not be used in mock mode.[39m
+[33m[Nest] 11344  - [39m05/01/2026, 11:47:13 PM [33m   WARN[39m [38;5;3m[StripeService] [39m[33mStripeService initialized with BILLING_PROVIDER=mock_stripe. Real Stripe network calls must not be used in mock mode.[39m
+[33m[Nest] 11344  - [39m05/01/2026, 11:47:13 PM [33m   WARN[39m [38;5;3m[StripeService] [39m[33mStripeService initialized with BILLING_PROVIDER=mock_stripe. Real Stripe network calls must not be used in mock mode.[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Created customer cus_mock_1e13558792fd4d23 for user user-1[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Created customer cus_mock_465cdbda72884ae1 for user user-1[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Created customer cus_mock_162561c1940a41fb for user user-1[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Created customer cus_mock_35071bf5817c415c for user user-2[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_8066c1de98034a03 for plan PRO, trial=true[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_64dc8c3ff1bb4f79 for plan PRO, trial=false[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_a3791e7a1f4945f2 for plan PRO, trial=true[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_e0001d66e53d4e9a for plan PRO, trial=false[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_3208c904700a41b9 for plan GO_PLUS, trial=false[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_b7eca4a9118c400d for plan PRO, trial=true[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_17801f1564bd4a99 for plan PRO, trial=true[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_70cd84f253be459d for plan PRO, trial=false[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Checkout session cs_mock_d51bf036884d4321 for plan PRO, trial=false[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Cancelled subscription sub-unknown cancelAtPeriodEnd=true[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Cancelled subscription sub-unknown cancelAtPeriodEnd=false[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Resumed subscription sub-unknown[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Changed plan for sub-1 -> GO_PLUS[39m
+[95m[Nest] 11344  - [39m05/01/2026, 11:47:23 PM [95m  DEBUG[39m [38;5;3m[MockStripeBillingProvider] [39m[95m[MOCK] Changed plan for sub-unknown -> GO_PLUS[39m
