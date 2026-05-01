@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   ModerationState,
   PlaylistVisibility,
@@ -393,5 +393,91 @@ export class DiscoveryService {
     }
 
     return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  }
+
+  // ─── GET /trending/genres/:genreSlug/tracks ───────────────────────────────
+
+  async getTrendingTracksByGenre(genreSlug: string, limit: number) {
+    const genre = await this.prisma.genre.findUnique({
+      where: { slug: genreSlug },
+      select: { slug: true, name: true },
+    });
+
+    if (!genre) {
+      throw new NotFoundException(`Genre "${genreSlug}" not found.`);
+    }
+
+    const where = {
+      deletedAt: null,
+      visibility: TrackVisibility.PUBLIC,
+      status: TrackStatus.FINISHED,
+      moderationState: ModerationState.VISIBLE,
+      primaryGenre: { slug: genreSlug },
+    };
+
+    const [tracks, total] = await Promise.all([
+      this.prisma.track.findMany({
+        where,
+        orderBy: { likes: { _count: "desc" } },
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          durationMs: true,
+          waveformData: true,
+          coverArtUrl: true,
+          createdAt: true,
+          publishedAt: true,
+          uploader: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  handle: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+          primaryGenre: {
+            select: { slug: true, name: true },
+          },
+          _count: {
+            select: { likes: true, reposts: true },
+          },
+        },
+      }),
+      this.prisma.track.count({ where }),
+    ]);
+
+    return {
+      genre: { slug: genre.slug, name: genre.name },
+      limit,
+      total,
+      tracks: tracks.map((track) => ({
+        trackId: track.id,
+        title: track.title,
+        slug: track.slug,
+        artist: {
+          id: track.uploader.id,
+          displayName: track.uploader.profile?.displayName ?? null,
+          handle: track.uploader.profile?.handle ?? null,
+          avatarUrl: track.uploader.profile?.avatarUrl ?? null,
+        },
+        genre: {
+          slug: track.primaryGenre?.slug ?? genre.slug,
+          name: track.primaryGenre?.name ?? genre.name,
+        },
+        coverArtUrl: track.coverArtUrl,
+        durationMs: track.durationMs,
+        waveformData: track.waveformData,
+        likesCount: track._count.likes,
+        repostsCount: track._count.reposts,
+        createdAt: track.createdAt,
+        publishedAt: track.publishedAt,
+      })),
+    };
   }
 }
