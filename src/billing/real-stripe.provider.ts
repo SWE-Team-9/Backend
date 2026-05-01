@@ -27,9 +27,7 @@ function addOneMonth(date: Date): Date {
   return result;
 }
 
-function mapStripeSubscription(
-  sub: Stripe.Subscription,
-): ProviderSubscriptionResult {
+function mapStripeSubscription(sub: Stripe.Subscription): ProviderSubscriptionResult {
   // Stripe API 2025-08-27.basil renamed / moved some subscription fields.
   // Use a typed-any access to handle the period dates safely across API versions.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,13 +87,9 @@ export class RealStripeBillingProvider implements IBillingProvider {
     name?: string;
   }): Promise<string> {
     // Check for existing customer via metadata search (idempotent)
-    const existingId = await this.stripeService.searchCustomersByUserId(
-      params.userId,
-    );
+    const existingId = await this.stripeService.searchCustomersByUserId(params.userId);
     if (existingId) {
-      this.logger.debug(
-        `[Stripe] Existing customer ${existingId} for user ${params.userId}`,
-      );
+      this.logger.debug(`[Stripe] Existing customer ${existingId} for user ${params.userId}`);
       return existingId;
     }
 
@@ -104,9 +98,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
       name: params.name,
       metadata: { userId: params.userId },
     });
-    this.logger.debug(
-      `[Stripe] Created customer ${customer.id} for user ${params.userId}`,
-    );
+    this.logger.debug(`[Stripe] Created customer ${customer.id} for user ${params.userId}`);
     return customer.id;
   }
 
@@ -139,8 +131,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
       );
     }
 
-    const frontendUrl =
-      this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
+    const frontendUrl = this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
 
     // success_url: {CHECKOUT_SESSION_ID} is replaced by Stripe automatically
     const successUrl =
@@ -183,8 +174,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
       },
     };
 
-    const session =
-      await this.stripeService.createCheckoutSession(sessionCreateParams);
+    const session = await this.stripeService.createCheckoutSession(sessionCreateParams);
 
     const trialEnd = trialEligible ? addDays(now, trialDays) : undefined;
     const renewsAt = trialEnd ?? addOneMonth(now);
@@ -223,13 +213,10 @@ export class RealStripeBillingProvider implements IBillingProvider {
     returnUrl?: string;
   }): Promise<BillingPortalResult> {
     if (!params.providerCustomerId) {
-      throw new Error(
-        "providerCustomerId is required to create a billing portal session.",
-      );
+      throw new Error("providerCustomerId is required to create a billing portal session.");
     }
 
-    const frontendUrl =
-      this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
+    const frontendUrl = this.config.get<string>("app.clientUrl") ?? "http://localhost:3000";
 
     const returnUrl =
       params.returnUrl ??
@@ -245,9 +232,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
     // This is best-effort — failure is non-fatal.
     let paymentMethodSummary: PaymentMethodSummary | null = null;
     try {
-      const pms = await this.stripeService.listCustomerPaymentMethods(
-        params.providerCustomerId,
-      );
+      const pms = await this.stripeService.listCustomerPaymentMethods(params.providerCustomerId);
       const pm = pms.find((p) => p.card) ?? pms[0];
       if (pm?.card) {
         paymentMethodSummary = {
@@ -300,12 +285,8 @@ export class RealStripeBillingProvider implements IBillingProvider {
     );
   }
 
-  async resumeSubscription(params: {
-    providerSubscriptionId: string;
-  }): Promise<void> {
-    await this.stripeService.reactivateSubscription(
-      params.providerSubscriptionId,
-    );
+  async resumeSubscription(params: { providerSubscriptionId: string }): Promise<void> {
+    await this.stripeService.reactivateSubscription(params.providerSubscriptionId);
     this.logger.debug(`[Stripe] Resumed ${params.providerSubscriptionId}`);
   }
 
@@ -326,9 +307,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
     }
 
     // Retrieve current subscription to get the subscription item ID
-    const existing = await this.stripeService.retrieveSubscription(
-      params.providerSubscriptionId,
-    );
+    const existing = await this.stripeService.retrieveSubscription(params.providerSubscriptionId);
     const itemId = existing.items.data[0]?.id;
     if (!itemId) {
       throw new Error(
@@ -336,13 +315,10 @@ export class RealStripeBillingProvider implements IBillingProvider {
       );
     }
 
-    const updated = await this.stripeService.updateSubscription(
-      params.providerSubscriptionId,
-      {
-        items: [{ id: itemId, price: params.newProviderPriceId }],
-        proration_behavior: "create_prorations",
-      },
-    );
+    const updated = await this.stripeService.updateSubscription(params.providerSubscriptionId, {
+      items: [{ id: itemId, price: params.newProviderPriceId }],
+      proration_behavior: "create_prorations",
+    });
 
     this.logger.debug(
       `[Stripe] Changed plan ${params.providerSubscriptionId} → ${params.newPlanCode}`,
@@ -351,12 +327,8 @@ export class RealStripeBillingProvider implements IBillingProvider {
     return mapStripeSubscription(updated);
   }
 
-  async retrieveSubscription(
-    providerSubscriptionId: string,
-  ): Promise<ProviderSubscriptionResult> {
-    const sub = await this.stripeService.retrieveSubscription(
-      providerSubscriptionId,
-    );
+  async retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionResult> {
+    const sub = await this.stripeService.retrieveSubscription(providerSubscriptionId);
     return mapStripeSubscription(sub);
   }
 
@@ -368,11 +340,7 @@ export class RealStripeBillingProvider implements IBillingProvider {
    */
   constructWebhookEvent(rawBody: Buffer, signature: string): WebhookEvent {
     const webhookSecret = this.config.get<string>("stripe.webhookSecret") ?? "";
-    const event = this.stripeService.constructWebhookEvent(
-      rawBody,
-      signature,
-      webhookSecret,
-    );
+    const event = this.stripeService.constructWebhookEvent(rawBody, signature, webhookSecret);
     return {
       id: event.id,
       type: event.type,

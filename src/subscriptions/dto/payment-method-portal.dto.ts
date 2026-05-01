@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /**
  * Body for POST /subscriptions/portal.
@@ -16,10 +16,9 @@ import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
  */
 export class PaymentMethodPortalDto {
   @ApiPropertyOptional({
-    description:
-      "URL to redirect the user to after they finish in the billing portal.",
+    description: 'URL to redirect the user to after they finish in the billing portal.',
     maxLength: 500,
-    example: "https://app.example.com/settings/billing",
+    example: 'https://app.example.com/settings/billing',
   })
   @IsOptional()
   @IsString()
@@ -30,10 +29,10 @@ export class PaymentMethodPortalDto {
     description:
       "Billing portal flow to open. 'payment_methods' focuses on adding/updating/removing " +
       "payment methods. 'billing' opens the general billing management page.",
-    enum: ["payment_methods", "billing"],
-    example: "payment_methods",
+    enum: ['payment_methods', 'billing'],
+    example: 'payment_methods',
   })
   @IsOptional()
-  @IsIn(["payment_methods", "billing"])
-  flow?: "payment_methods" | "billing";
+  @IsIn(['payment_methods', 'billing'])
+  flow?: 'payment_methods' | 'billing';
 }

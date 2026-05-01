@@ -1,7 +1,7 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
-import { Strategy, VerifyCallback, Profile } from "passport-google-oauth20";
+import { Profile, Strategy, VerifyCallback } from "passport-google-oauth20";
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
@@ -18,21 +18,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     const callbackUrl = configService.get<string>("GOOGLE_CALLBACK_URL");
 
     if (!callbackUrl) {
-      throw new InternalServerErrorException(
-        "GOOGLE_CALLBACK_URL is not configured.",
-      );
+      throw new InternalServerErrorException("GOOGLE_CALLBACK_URL is not configured.");
     }
 
     return callbackUrl;
   }
 
   // Called after Google sends back user info
-  validate(
-    _accessToken: string,
-    _refreshToken: string,
-    profile: Profile,
-    done: VerifyCallback,
-  ) {
+  validate(_accessToken: string, _refreshToken: string, profile: Profile, done: VerifyCallback) {
     // Pull out the fields we need
     const googleUser = {
       googleId: profile.id,

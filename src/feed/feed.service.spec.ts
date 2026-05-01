@@ -28,10 +28,7 @@ describe("FeedService", () => {
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        FeedService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [FeedService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
 
     service = module.get<FeedService>(FeedService);
@@ -61,9 +58,7 @@ describe("FeedService", () => {
     });
 
     it("filters out private tracks and only returns public finished visible tracks", async () => {
-      prisma.userFollow.findMany.mockResolvedValueOnce([
-        { followingId: "artist-1" },
-      ]);
+      prisma.userFollow.findMany.mockResolvedValueOnce([{ followingId: "artist-1" }]);
 
       prisma.$transaction.mockResolvedValueOnce([
         1,
@@ -83,10 +78,7 @@ describe("FeedService", () => {
             waveformData: [0.1, 0.2, 0.15],
             primaryGenreId: 1,
             primaryGenre: { id: 1, name: "electronic" },
-            tags: [
-              { tag: { id: 1, name: "ambient" } },
-              { tag: { id: 2, name: "lofi" } },
-            ],
+            tags: [{ tag: { id: 1, name: "ambient" } }, { tag: { id: 2, name: "lofi" } }],
             uploader: {
               profile: {
                 handle: "artist",
@@ -137,9 +129,7 @@ describe("FeedService", () => {
     });
 
     it("uses offset and pagination defaults correctly", async () => {
-      prisma.userFollow.findMany.mockResolvedValueOnce([
-        { followingId: "artist-1" },
-      ]);
+      prisma.userFollow.findMany.mockResolvedValueOnce([{ followingId: "artist-1" }]);
 
       prisma.$transaction.mockResolvedValueOnce([0, []]);
 

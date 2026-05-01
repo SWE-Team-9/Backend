@@ -1,13 +1,10 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import { NotificationEntityType, NotificationEventType } from "@prisma/client";
-import { PrismaService } from "../prisma/prisma.service";
-import { NotificationsQueryDto } from "./dto/notifications-query.dto";
-import { NotificationPreferencesDto } from "./dto/notification-preferences.dto";
-import { RegisterDeviceDto } from "./dto/register-device.dto";
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { NotificationEntityType, NotificationEventType } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsQueryDto } from './dto/notifications-query.dto';
+import { NotificationPreferencesDto } from './dto/notification-preferences.dto';
+import { RegisterDeviceDto } from './dto/register-device.dto';
+import { FcmService } from './fcm.service';
 
 export interface INotificationsGateway {
   emitToUser(userId: string, event: string, payload: unknown): void;
@@ -29,7 +26,10 @@ export interface CreateNotificationData {
 export class NotificationsService {
   private gateway?: INotificationsGateway;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fcm: FcmService,
+  ) {}
 
   setGateway(gateway: INotificationsGateway): void {
     this.gateway = gateway;
@@ -49,7 +49,7 @@ export class NotificationsService {
         commentId: data.commentId ?? null,
         messageId: data.messageId ?? null,
         metadata: data.metadata
-          ? (data.metadata as import("@prisma/client").Prisma.InputJsonValue)
+          ? (data.metadata as import('@prisma/client').Prisma.InputJsonValue)
           : undefined,
       },
       select: { id: true, eventType: true, entityType: true, createdAt: true },
@@ -57,13 +57,41 @@ export class NotificationsService {
 
     const unreadCount = await this.getUnreadCountForUser(data.recipientId);
 
-    this.gateway?.emitToUser(data.recipientId, "new_notification", {
-      type: "NEW_NOTIFICATION",
+    this.gateway?.emitToUser(data.recipientId, 'new_notification', {
+      type: 'NEW_NOTIFICATION',
       notificationId: notification.id,
       eventType: notification.eventType,
       entityType: notification.entityType,
       currentUnreadCount: unreadCount,
     });
+
+    // ── FCM push notification ────────────────────────────────────────────────
+    const devices = await this.prisma.userDevice.findMany({
+      where: { userId: data.recipientId, isActive: true, pushToken: { not: null } },
+      select: { id: true, pushToken: true },
+    });
+
+    if (devices.length > 0) {
+      const tokens = devices.map((d) => d.pushToken as string);
+      const body = this.buildFcmBody(notification.eventType, data);
+
+      const invalidTokens = await this.fcm.sendMulticast(tokens, {
+        title: 'Spotly',
+        body,
+        data: {
+          notificationId: notification.id,
+          eventType: notification.eventType,
+          entityType: notification.entityType,
+        },
+      });
+
+      if (invalidTokens.length > 0) {
+        await this.prisma.userDevice.updateMany({
+          where: { userId: data.recipientId, pushToken: { in: invalidTokens } },
+          data: { isActive: false },
+        });
+      }
+    }
   }
 
   // ─── Get notifications ───────────────────────────────────────────────────────
@@ -84,7 +112,7 @@ export class NotificationsService {
       this.prisma.notification.count({ where }),
       this.prisma.notification.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
         select: {
@@ -124,8 +152,7 @@ export class NotificationsService {
         actorHandle: n.actor?.profile?.handle ?? null,
         actorAvatarUrl: n.actor?.profile?.avatarUrl ?? null,
         entityType: n.entityType.toLowerCase(),
-        entityId:
-          n.trackId ?? n.playlistId ?? n.commentId ?? n.messageId ?? null,
+        entityId: n.trackId ?? n.playlistId ?? n.commentId ?? n.messageId ?? null,
         isRead: n.readAt !== null,
         createdAt: n.createdAt,
       })),
@@ -144,27 +171,47 @@ export class NotificationsService {
     } | null;
     metadata?: unknown;
   }): string {
-    const name = n.actor?.profile?.displayName ?? "Someone";
+    const name = n.actor?.profile?.displayName ?? 'Someone';
     const meta = n.metadata as Record<string, unknown> | null | undefined;
     switch (n.eventType) {
-      case "LIKE":
+      case 'LIKE':
         return `${name} liked your track`;
-      case "REPOST":
+      case 'REPOST':
         return `${name} reposted your track`;
-      case "COMMENT":
+      case 'COMMENT':
         return `${name} commented on your track`;
-      case "FOLLOW":
+      case 'FOLLOW':
         return `${name} started following you`;
-      case "MESSAGE":
+      case 'MESSAGE':
         return `${name} sent you a message`;
-      case "REPORT_RESOLVED":
-        return "Your report has been resolved";
-      case "SUBSCRIPTION":
-        return "Your subscription was updated";
+      case 'REPORT_RESOLVED':
+        return 'Your report has been resolved';
+      case 'SUBSCRIPTION':
+        return 'Your subscription was updated';
       default:
-        return (
-          (meta?.["batchMessage"] as string) ?? "You have a new notification"
-        );
+        return (meta?.['batchMessage'] as string) ?? 'You have a new notification';
+    }
+  }
+
+  private buildFcmBody(eventType: NotificationEventType, data: CreateNotificationData): string {
+    const meta = data.metadata as Record<string, unknown> | undefined;
+    switch (eventType) {
+      case 'LIKE':
+        return (meta?.['batchMessage'] as string) ?? 'Someone liked your track';
+      case 'REPOST':
+        return 'Someone reposted your track';
+      case 'COMMENT':
+        return 'Someone commented on your track';
+      case 'FOLLOW':
+        return 'You have a new follower';
+      case 'MESSAGE':
+        return (meta?.['fcmBody'] as string) ?? 'You have a new message';
+      case 'REPORT_RESOLVED':
+        return (meta?.['batchMessage'] as string) ?? 'Your report has been resolved';
+      case 'SUBSCRIPTION':
+        return 'Your subscription was updated';
+      default:
+        return (meta?.['batchMessage'] as string) ?? 'You have a new notification';
     }
   }
 
@@ -191,15 +238,15 @@ export class NotificationsService {
 
     if (!notification) {
       throw new NotFoundException({
-        code: "NOTIFICATION_NOT_FOUND",
-        message: "Notification not found.",
+        code: 'NOTIFICATION_NOT_FOUND',
+        message: 'Notification not found.',
       });
     }
 
     if (notification.recipientId !== userId) {
       throw new ForbiddenException({
-        code: "FORBIDDEN",
-        message: "Not your notification.",
+        code: 'FORBIDDEN',
+        message: 'Not your notification.',
       });
     }
 
@@ -209,9 +256,9 @@ export class NotificationsService {
     });
 
     const unreadCount = await this.getUnreadCountForUser(userId);
-    this.gateway?.emitToUser(userId, "unread_count_updated", { unreadCount });
+    this.gateway?.emitToUser(userId, 'unread_count_updated', { unreadCount });
 
-    return { message: "Notification marked as read" };
+    return { message: 'Notification marked as read' };
   }
 
   // ─── Mark all read ───────────────────────────────────────────────────────────
@@ -222,11 +269,11 @@ export class NotificationsService {
       data: { readAt: new Date() },
     });
 
-    this.gateway?.emitToUser(userId, "unread_count_updated", {
+    this.gateway?.emitToUser(userId, 'unread_count_updated', {
       unreadCount: 0,
     });
 
-    return { message: "All notifications marked as read" };
+    return { message: 'All notifications marked as read' };
   }
 
   // ─── Delete notification ─────────────────────────────────────────────────────
@@ -239,20 +286,20 @@ export class NotificationsService {
 
     if (!notification) {
       throw new NotFoundException({
-        code: "NOTIFICATION_NOT_FOUND",
-        message: "Notification not found.",
+        code: 'NOTIFICATION_NOT_FOUND',
+        message: 'Notification not found.',
       });
     }
 
     if (notification.recipientId !== userId) {
       throw new ForbiddenException({
-        code: "FORBIDDEN",
-        message: "Not your notification.",
+        code: 'FORBIDDEN',
+        message: 'Not your notification.',
       });
     }
 
     await this.prisma.notification.delete({ where: { id: notificationId } });
-    return { message: "Notification deleted" };
+    return { message: 'Notification deleted' };
   }
 
   // ─── Preferences ─────────────────────────────────────────────────────────────
@@ -263,9 +310,7 @@ export class NotificationsService {
       select: { likes: true, comments: true, follows: true, reposts: true },
     });
 
-    return (
-      prefs ?? { likes: true, comments: true, follows: true, reposts: true }
-    );
+    return prefs ?? { likes: true, comments: true, follows: true, reposts: true };
   }
 
   async updatePreferences(userId: string, dto: NotificationPreferencesDto) {
@@ -286,7 +331,7 @@ export class NotificationsService {
       },
     });
 
-    return { message: "Notification preferences updated" };
+    return { message: 'Notification preferences updated' };
   }
 
   // ─── Push device ─────────────────────────────────────────────────────────────
@@ -315,7 +360,7 @@ export class NotificationsService {
       });
     }
 
-    return { message: "Device registered for push notifications" };
+    return { message: 'Device registered for push notifications' };
   }
 
   async removeDevice(userId: string, deviceId: string) {
@@ -324,10 +369,10 @@ export class NotificationsService {
       select: { id: true, userId: true },
     });
 
-    if (!device || device.userId !== userId) {
+    if (device?.userId !== userId) {
       throw new NotFoundException({
-        code: "DEVICE_NOT_FOUND",
-        message: "Device not found.",
+        code: 'DEVICE_NOT_FOUND',
+        message: 'Device not found.',
       });
     }
 
@@ -336,6 +381,6 @@ export class NotificationsService {
       data: { isActive: false },
     });
 
-    return { message: "Device removed successfully" };
+    return { message: 'Device removed successfully' };
   }
 }

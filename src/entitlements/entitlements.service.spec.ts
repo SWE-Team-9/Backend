@@ -19,10 +19,7 @@ import { EntitlementsService } from "./entitlements.service";
 const USER_ID = "user-uuid-ent";
 const FUTURE = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-function makeActiveSub(
-  tier: SubscriptionTier,
-  overrides: Record<string, unknown> = {},
-) {
+function makeActiveSub(tier: SubscriptionTier, overrides: Record<string, unknown> = {}) {
   return {
     id: "sub-ent-1",
     userId: USER_ID,
@@ -186,12 +183,8 @@ describe("EntitlementsService", () => {
     it("calls getUploadQuota and findActiveSubscription in parallel", async () => {
       await service.getUserEntitlements(USER_ID);
 
-      expect(mockSubscriptionsService.getUploadQuota).toHaveBeenCalledWith(
-        USER_ID,
-      );
-      expect(
-        mockSubscriptionsService.findActiveSubscription,
-      ).toHaveBeenCalledWith(USER_ID);
+      expect(mockSubscriptionsService.getUploadQuota).toHaveBeenCalledWith(USER_ID);
+      expect(mockSubscriptionsService.findActiveSubscription).toHaveBeenCalledWith(USER_ID);
     });
 
     it("trialEnd is null for non-trialing subscriptions", async () => {
@@ -253,9 +246,7 @@ describe("EntitlementsService", () => {
         uploadedCount: 2,
       });
 
-      await expect(
-        service.assertCanUploadTrack(USER_ID),
-      ).resolves.toBeUndefined();
+      await expect(service.assertCanUploadTrack(USER_ID)).resolves.toBeUndefined();
     });
 
     it("throws ForbiddenException(UPLOAD_LIMIT_REACHED) when at limit", async () => {
@@ -264,9 +255,7 @@ describe("EntitlementsService", () => {
         uploadedCount: 3,
       });
 
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(ForbiddenException);
     });
 
     it("PRO: 101st upload blocked (uploadedCount=100, uploadLimit=100)", async () => {
@@ -275,14 +264,10 @@ describe("EntitlementsService", () => {
         uploadedCount: 100,
       });
 
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject(
-        {
-          response: expect.objectContaining({ code: "UPLOAD_LIMIT_REACHED" }),
-        },
-      );
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(ForbiddenException);
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "UPLOAD_LIMIT_REACHED" }),
+      });
     });
 
     it("GO_PLUS: 1001st upload blocked (uploadedCount=1000, uploadLimit=1000)", async () => {
@@ -291,14 +276,10 @@ describe("EntitlementsService", () => {
         uploadedCount: 1000,
       });
 
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject(
-        {
-          response: expect.objectContaining({ code: "UPLOAD_LIMIT_REACHED" }),
-        },
-      );
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toThrow(ForbiddenException);
+      await expect(service.assertCanUploadTrack(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "UPLOAD_LIMIT_REACHED" }),
+      });
     });
 
     it("thrown exception includes UPLOAD_LIMIT_REACHED code", async () => {

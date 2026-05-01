@@ -98,9 +98,7 @@ describe("UserTracksController", () => {
   // ── GET /users/:userId/tracks ──────────────────────────────────────────
   describe("GET /users/:userId/tracks", () => {
     it("should return 200 and call getUserTracks with defaults", async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/users/${UUID}/tracks`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/users/${UUID}/tracks`).expect(200);
 
       expect(svc.getUserTracks).toHaveBeenCalledWith(
         UUID,
@@ -113,34 +111,21 @@ describe("UserTracksController", () => {
     });
 
     it("should forward custom page and limit query params", async () => {
-      await request(app.getHttpServer())
-        .get(`/users/${UUID}/tracks?page=3&limit=10`)
-        .expect(200);
+      await request(app.getHttpServer()).get(`/users/${UUID}/tracks?page=3&limit=10`).expect(200);
 
-      expect(svc.getUserTracks).toHaveBeenCalledWith(
-        UUID,
-        "requester-1",
-        3,
-        10,
-      );
+      expect(svc.getUserTracks).toHaveBeenCalledWith(UUID, "requester-1", 3, 10);
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .get("/users/not-a-uuid/tracks")
-        .expect(400);
+      await request(app.getHttpServer()).get("/users/not-a-uuid/tracks").expect(400);
     });
 
     it("should return 400 for page < 1", async () => {
-      await request(app.getHttpServer())
-        .get(`/users/${UUID}/tracks?page=0`)
-        .expect(400);
+      await request(app.getHttpServer()).get(`/users/${UUID}/tracks?page=0`).expect(400);
     });
 
     it("should return 400 for non-integer page", async () => {
-      await request(app.getHttpServer())
-        .get(`/users/${UUID}/tracks?page=abc`)
-        .expect(400);
+      await request(app.getHttpServer()).get(`/users/${UUID}/tracks?page=abc`).expect(400);
     });
   });
 });

@@ -80,9 +80,7 @@ function buildServiceMock() {
       message: "Comment deleted successfully",
     }),
     getTrackComments: jest.fn().mockResolvedValue([]),
-    getInteractionStatus: jest
-      .fn()
-      .mockResolvedValue({ isLiked: true, isReposted: false }),
+    getInteractionStatus: jest.fn().mockResolvedValue({ isLiked: true, isReposted: false }),
   };
 }
 
@@ -145,26 +143,20 @@ describe("InteractionsController", () => {
   // ── POST /interactions/tracks/:id/like ─────────────────────────────────
   describe("POST /interactions/tracks/:id/like", () => {
     it("should return 204 and call likeTrack", async () => {
-      await request(app.getHttpServer())
-        .post(`/interactions/tracks/${UUID}/like`)
-        .expect(204);
+      await request(app.getHttpServer()).post(`/interactions/tracks/${UUID}/like`).expect(204);
 
       expect(svc.likeTrack).toHaveBeenCalledWith("user-1", UUID);
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .post("/interactions/tracks/not-a-uuid/like")
-        .expect(400);
+      await request(app.getHttpServer()).post("/interactions/tracks/not-a-uuid/like").expect(400);
     });
   });
 
   // ── DELETE /interactions/tracks/:id/like ────────────────────────────────
   describe("DELETE /interactions/tracks/:id/like", () => {
     it("should return 204 and call unlikeTrack", async () => {
-      await request(app.getHttpServer())
-        .delete(`/interactions/tracks/${UUID}/like`)
-        .expect(204);
+      await request(app.getHttpServer()).delete(`/interactions/tracks/${UUID}/like`).expect(204);
 
       expect(svc.unlikeTrack).toHaveBeenCalledWith("user-1", UUID);
     });
@@ -173,9 +165,7 @@ describe("InteractionsController", () => {
   // ── POST /interactions/tracks/:id/repost ───────────────────────────────
   describe("POST /interactions/tracks/:id/repost", () => {
     it("should return 204 and call repostTrack", async () => {
-      await request(app.getHttpServer())
-        .post(`/interactions/tracks/${UUID}/repost`)
-        .expect(204);
+      await request(app.getHttpServer()).post(`/interactions/tracks/${UUID}/repost`).expect(204);
 
       expect(svc.repostTrack).toHaveBeenCalledWith("user-1", UUID);
     });
@@ -184,9 +174,7 @@ describe("InteractionsController", () => {
   // ── DELETE /interactions/tracks/:id/repost ─────────────────────────────
   describe("DELETE /interactions/tracks/:id/repost", () => {
     it("should return 204 and call unrepostTrack", async () => {
-      await request(app.getHttpServer())
-        .delete(`/interactions/tracks/${UUID}/repost`)
-        .expect(204);
+      await request(app.getHttpServer()).delete(`/interactions/tracks/${UUID}/repost`).expect(204);
 
       expect(svc.unrepostTrack).toHaveBeenCalledWith("user-1", UUID);
     });
@@ -195,9 +183,7 @@ describe("InteractionsController", () => {
   // ── GET /interactions/me/likes ─────────────────────────────────────────
   describe("GET /interactions/me/likes", () => {
     it("should return 200 with liked tracks and pagination", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/interactions/me/likes")
-        .expect(200);
+      const res = await request(app.getHttpServer()).get("/interactions/me/likes").expect(200);
 
       expect(svc.getMyLikedTracks).toHaveBeenCalledWith("user-1", 1, 20);
       expect(res.body).toHaveProperty("items");
@@ -205,9 +191,7 @@ describe("InteractionsController", () => {
     });
 
     it("should forward custom page and limit", async () => {
-      await request(app.getHttpServer())
-        .get("/interactions/me/likes?page=3&limit=10")
-        .expect(200);
+      await request(app.getHttpServer()).get("/interactions/me/likes?page=3&limit=10").expect(200);
 
       expect(svc.getMyLikedTracks).toHaveBeenCalledWith("user-1", 3, 10);
     });
@@ -216,9 +200,7 @@ describe("InteractionsController", () => {
   // ── GET /interactions/me/reposts ───────────────────────────────────────
   describe("GET /interactions/me/reposts", () => {
     it("should return 200 with reposted tracks", async () => {
-      await request(app.getHttpServer())
-        .get("/interactions/me/reposts")
-        .expect(200);
+      await request(app.getHttpServer()).get("/interactions/me/reposts").expect(200);
 
       expect(svc.getMyRepostedTracks).toHaveBeenCalledWith("user-1", 1, 20);
     });
@@ -237,18 +219,14 @@ describe("InteractionsController", () => {
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .get("/interactions/tracks/bad-id/likers")
-        .expect(400);
+      await request(app.getHttpServer()).get("/interactions/tracks/bad-id/likers").expect(400);
     });
   });
 
   // ── GET /interactions/tracks/:id/reposters ─────────────────────────────
   describe("GET /interactions/tracks/:id/reposters", () => {
     it("should return 200 with reposters list", async () => {
-      await request(app.getHttpServer())
-        .get(`/interactions/tracks/${UUID}/reposters`)
-        .expect(200);
+      await request(app.getHttpServer()).get(`/interactions/tracks/${UUID}/reposters`).expect(200);
 
       expect(svc.getTrackReposters).toHaveBeenCalledWith(UUID, 1, 20);
     });
@@ -262,12 +240,7 @@ describe("InteractionsController", () => {
         .send({ content: "Great drop!", timestampAt: 42 })
         .expect(201);
 
-      expect(svc.createComment).toHaveBeenCalledWith(
-        "user-1",
-        UUID,
-        "Great drop!",
-        42,
-      );
+      expect(svc.createComment).toHaveBeenCalledWith("user-1", UUID, "Great drop!", 42);
       expect(res.body).toHaveProperty("id", "comment-uuid");
     });
 
@@ -324,9 +297,7 @@ describe("InteractionsController", () => {
     });
 
     it("should return 400 for invalid UUID", async () => {
-      await request(app.getHttpServer())
-        .delete("/interactions/comments/not-a-uuid")
-        .expect(400);
+      await request(app.getHttpServer()).delete("/interactions/comments/not-a-uuid").expect(400);
     });
   });
 

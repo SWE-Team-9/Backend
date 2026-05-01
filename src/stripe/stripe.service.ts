@@ -33,7 +33,7 @@ export class StripeService {
     try {
       const customer = await this.stripe.customers.retrieve(customerId);
       if (customer.deleted) return null;
-      return customer as Stripe.Customer;
+      return customer;
     } catch {
       return null;
     }
@@ -61,9 +61,7 @@ export class StripeService {
 
   // ── Payment Method ────────────────────────────────────────────────────────
 
-  async retrievePaymentMethod(
-    paymentMethodId: string,
-  ): Promise<Stripe.PaymentMethod> {
+  async retrievePaymentMethod(paymentMethodId: string): Promise<Stripe.PaymentMethod> {
     return this.stripe.paymentMethods.retrieve(paymentMethodId);
   }
 
@@ -80,9 +78,7 @@ export class StripeService {
     await this.stripe.paymentMethods.detach(paymentMethodId);
   }
 
-  async listCustomerPaymentMethods(
-    customerId: string,
-  ): Promise<Stripe.PaymentMethod[]> {
+  async listCustomerPaymentMethods(customerId: string): Promise<Stripe.PaymentMethod[]> {
     const response = await this.stripe.paymentMethods.list({
       customer: customerId,
       type: "card",
@@ -117,10 +113,7 @@ export class StripeService {
     });
   }
 
-  async cancelSubscription(
-    stripeSubscriptionId: string,
-    atPeriodEnd: boolean,
-  ): Promise<void> {
+  async cancelSubscription(stripeSubscriptionId: string, atPeriodEnd: boolean): Promise<void> {
     if (atPeriodEnd) {
       await this.stripe.subscriptions.update(stripeSubscriptionId, {
         cancel_at_period_end: true,
@@ -130,18 +123,14 @@ export class StripeService {
     }
   }
 
-  async reactivateSubscription(
-    stripeSubscriptionId: string,
-  ): Promise<Stripe.Subscription> {
+  async reactivateSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
     // Un-cancel a subscription that was set to cancel at period end
     return this.stripe.subscriptions.update(stripeSubscriptionId, {
       cancel_at_period_end: false,
     });
   }
 
-  async retrieveSubscription(
-    stripeSubscriptionId: string,
-  ): Promise<Stripe.Subscription> {
+  async retrieveSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
     return this.stripe.subscriptions.retrieve(stripeSubscriptionId);
   }
 
@@ -193,10 +182,6 @@ export class StripeService {
     signature: string,
     webhookSecret: string,
   ): Stripe.Event {
-    return this.stripe.webhooks.constructEvent(
-      payload,
-      signature,
-      webhookSecret,
-    );
+    return this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   }
 }

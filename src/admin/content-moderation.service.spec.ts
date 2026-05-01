@@ -72,9 +72,7 @@ describe("ContentModerationService", () => {
       actionType: "HIDE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(
-      undefined,
-    );
+    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
     const result = await service.moderateTrack("admin-1", "track-1", {
       moderationState: "HIDDEN",
@@ -108,9 +106,7 @@ describe("ContentModerationService", () => {
       actionType: "REMOVE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(
-      undefined,
-    );
+    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
     await service.moderateTrack("admin-1", "track-2", {
       moderationState: "REMOVED",

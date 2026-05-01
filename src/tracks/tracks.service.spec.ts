@@ -13,12 +13,7 @@ import { TranscodingService } from "./transcoding.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage/storage.service";
 import { SubscriptionsService } from "../subscriptions/subscriptions.service";
-import {
-  TrackVisibility,
-  TrackStatus,
-  FileRole,
-  FileStatus,
-} from "@prisma/client";
+import { FileRole, FileStatus, TrackStatus, TrackVisibility } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test data factories
@@ -105,9 +100,7 @@ function buildInvalidBuffer(): Buffer {
   return buf;
 }
 
-function buildMulterFile(
-  overrides: Partial<Express.Multer.File> = {},
-): Express.Multer.File {
+function buildMulterFile(overrides: Partial<Express.Multer.File> = {}): Express.Multer.File {
   return {
     fieldname: "audioFile",
     originalname: "test-song.mp3",
@@ -130,9 +123,7 @@ function buildMulterFile(
 function buildPrismaMock() {
   const $transaction = jest
     .fn()
-    .mockImplementation((fn: any) =>
-      typeof fn === "function" ? fn(prismaMock) : Promise.all(fn),
-    );
+    .mockImplementation((fn: any) => (typeof fn === "function" ? fn(prismaMock) : Promise.all(fn)));
 
   const prismaMock: any = {
     $transaction,
@@ -187,9 +178,7 @@ function buildConfigMock() {
   };
 
   return {
-    get: jest.fn(
-      (key: string, defaultValue?: any) => configMap[key] ?? defaultValue,
-    ),
+    get: jest.fn((key: string, defaultValue?: any) => configMap[key] ?? defaultValue),
   };
 }
 
@@ -212,9 +201,7 @@ describe("TracksService", () => {
       processTrack: jest.fn().mockResolvedValue(undefined),
     };
     subscriptionsServiceMock = {
-      getUploadQuota: jest
-        .fn()
-        .mockResolvedValue({ uploadLimit: 100, uploadedCount: 0 }),
+      getUploadQuota: jest.fn().mockResolvedValue({ uploadLimit: 100, uploadedCount: 0 }),
     };
     storageServiceMock = {
       upload: jest.fn().mockResolvedValue({
@@ -267,9 +254,7 @@ describe("TracksService", () => {
 
       // Mock fs for local upload
       jest.spyOn(require("fs").promises, "mkdir").mockResolvedValue(undefined);
-      jest
-        .spyOn(require("fs").promises, "writeFile")
-        .mockResolvedValue(undefined);
+      jest.spyOn(require("fs").promises, "writeFile").mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -305,41 +290,31 @@ describe("TracksService", () => {
     });
 
     it("should reject when no file is provided", async () => {
-      await expect(
-        service.uploadTrack(USER_ID, dto, null as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadTrack(USER_ID, dto, null as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it("should reject when file has no buffer", async () => {
-      const file = buildMulterFile({ buffer: undefined as any });
-      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(
-        BadRequestException,
-      );
+      const file = buildMulterFile({ buffer: undefined });
+      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(BadRequestException);
     });
 
     it("should reject files that exceed 250MB", async () => {
       const file = buildMulterFile({ size: 251 * 1024 * 1024 });
-      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(BadRequestException);
     });
 
     it("should reject non-audio files (invalid magic bytes)", async () => {
       const file = buildMulterFile({ buffer: buildInvalidBuffer() });
-      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(BadRequestException);
     });
 
     it("should reject unknown genre", async () => {
       prisma.genre.findFirst.mockResolvedValue(null);
       const file = buildMulterFile();
       await expect(
-        service.uploadTrack(
-          USER_ID,
-          { title: "Test", genre: "FakeGenre" },
-          file,
-        ),
+        service.uploadTrack(USER_ID, { title: "Test", genre: "FakeGenre" }, file),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -348,11 +323,7 @@ describe("TracksService", () => {
       prisma.genre.upsert.mockResolvedValue({ id: 33 });
 
       const file = buildMulterFile();
-      await service.uploadTrack(
-        USER_ID,
-        { title: "Nasheed", genre: "islamic" },
-        file,
-      );
+      await service.uploadTrack(USER_ID, { title: "Nasheed", genre: "islamic" }, file);
 
       expect(prisma.genre.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -367,11 +338,7 @@ describe("TracksService", () => {
 
     it("should work without optional genre and tags", async () => {
       const file = buildMulterFile();
-      const result = await service.uploadTrack(
-        USER_ID,
-        { title: "Simple" },
-        file,
-      );
+      const result = await service.uploadTrack(USER_ID, { title: "Simple" }, file);
 
       expect(result.trackId).toBe(TRACK_ID);
     });
@@ -397,18 +364,12 @@ describe("TracksService", () => {
 
     it("should reject buffer smaller than 12 bytes", async () => {
       const file = buildMulterFile({ buffer: Buffer.alloc(5) });
-      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.uploadTrack(USER_ID, dto, file)).rejects.toThrow(BadRequestException);
     });
 
     it("should set releaseDate when provided", async () => {
       const file = buildMulterFile();
-      await service.uploadTrack(
-        USER_ID,
-        { title: "With Date", releaseDate: "2026-06-01" },
-        file,
-      );
+      await service.uploadTrack(USER_ID, { title: "With Date", releaseDate: "2026-06-01" }, file);
 
       const createCall = prisma.track.create.mock.calls[0][0];
       expect(createCall.data.releaseDate).toEqual(new Date("2026-06-01"));
@@ -416,11 +377,7 @@ describe("TracksService", () => {
 
     it("should set description when provided", async () => {
       const file = buildMulterFile();
-      await service.uploadTrack(
-        USER_ID,
-        { title: "With Desc", description: "A great song" },
-        file,
-      );
+      await service.uploadTrack(USER_ID, { title: "With Desc", description: "A great song" }, file);
 
       const createCall = prisma.track.create.mock.calls[0][0];
       expect(createCall.data.description).toBe("A great song");
@@ -428,11 +385,7 @@ describe("TracksService", () => {
 
     it("should handle unknown mimetype by defaulting to audio/mpeg", async () => {
       const file = buildMulterFile({ mimetype: "application/octet-stream" });
-      const result = await service.uploadTrack(
-        USER_ID,
-        { title: "Unknown Mime" },
-        file,
-      );
+      const result = await service.uploadTrack(USER_ID, { title: "Unknown Mime" }, file);
       expect(result.trackId).toBe(TRACK_ID);
     });
 
@@ -445,9 +398,9 @@ describe("TracksService", () => {
       });
       const file = buildMulterFile();
 
-      await expect(
-        service.uploadTrack(USER_ID, { title: "Over Limit" }, file),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.uploadTrack(USER_ID, { title: "Over Limit" }, file)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it("should allow upload when free user still has quota remaining (2 of 3 used)", async () => {
@@ -457,11 +410,7 @@ describe("TracksService", () => {
       });
       const file = buildMulterFile();
 
-      const result = await service.uploadTrack(
-        USER_ID,
-        { title: "Under Limit" },
-        file,
-      );
+      const result = await service.uploadTrack(USER_ID, { title: "Under Limit" }, file);
       expect(result.trackId).toBe(TRACK_ID);
     });
 
@@ -472,11 +421,7 @@ describe("TracksService", () => {
       });
       const file = buildMulterFile();
 
-      const result = await service.uploadTrack(
-        USER_ID,
-        { title: "PRO Track 51" },
-        file,
-      );
+      const result = await service.uploadTrack(USER_ID, { title: "PRO Track 51" }, file);
       expect(result.trackId).toBe(TRACK_ID);
     });
 
@@ -487,11 +432,7 @@ describe("TracksService", () => {
       });
       const file = buildMulterFile();
 
-      const result = await service.uploadTrack(
-        USER_ID,
-        { title: "GO+ Track" },
-        file,
-      );
+      const result = await service.uploadTrack(USER_ID, { title: "GO+ Track" }, file);
       expect(result.trackId).toBe(TRACK_ID);
     });
 
@@ -534,11 +475,7 @@ describe("TracksService", () => {
     it("should upload without cover art and have null coverArtUrl", async () => {
       const file = buildMulterFile();
 
-      const result = await service.uploadTrack(
-        USER_ID,
-        { title: "No Cover" },
-        file,
-      );
+      const result = await service.uploadTrack(USER_ID, { title: "No Cover" }, file);
 
       expect(storageServiceMock.upload).not.toHaveBeenCalled();
       expect(result.coverArtUrl).toBeNull();
@@ -572,16 +509,16 @@ describe("TracksService", () => {
       prisma.track.findFirst.mockResolvedValue(
         buildTrackRecord({ visibility: TrackVisibility.PRIVATE }),
       );
-      await expect(
-        service.getTrackById(TRACK_ID, OTHER_USER_ID),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getTrackById(TRACK_ID, OTHER_USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should throw 404 for non-existent track", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
-      await expect(
-        service.getTrackById("nonexistent-id", USER_ID),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getTrackById("nonexistent-id", USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should return a public track for unauthenticated users", async () => {
@@ -605,9 +542,7 @@ describe("TracksService", () => {
     });
 
     it("should handle track with no genre", async () => {
-      prisma.track.findFirst.mockResolvedValue(
-        buildTrackRecord({ primaryGenre: null }),
-      );
+      prisma.track.findFirst.mockResolvedValue(buildTrackRecord({ primaryGenre: null }));
       const result = await service.getTrackById(TRACK_ID, USER_ID);
       expect(result.genre).toBeNull();
     });
@@ -717,9 +652,9 @@ describe("TracksService", () => {
         uploaderId: USER_ID,
         visibility: TrackVisibility.PRIVATE,
       });
-      await expect(
-        service.getTrackStatus(TRACK_ID, OTHER_USER_ID),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getTrackStatus(TRACK_ID, OTHER_USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should allow owner to see private track status", async () => {
@@ -735,9 +670,9 @@ describe("TracksService", () => {
 
     it("should throw 404 for non-existent track", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
-      await expect(
-        service.getTrackStatus("nonexistent", USER_ID),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getTrackStatus("nonexistent", USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should allow unauthenticated users to see public track status", async () => {
@@ -758,9 +693,7 @@ describe("TracksService", () => {
         uploaderId: USER_ID,
         visibility: TrackVisibility.PRIVATE,
       });
-      await expect(service.getTrackStatus(TRACK_ID, undefined)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getTrackStatus(TRACK_ID, undefined)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -804,25 +737,25 @@ describe("TracksService", () => {
         publishedAt: null,
       });
 
-      await expect(
-        service.updateTrack(TRACK_ID, USER_ID, { title: "Hack" }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.updateTrack(TRACK_ID, USER_ID, { title: "Hack" })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it("should throw 404 for non-existent track", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
-      await expect(
-        service.updateTrack("nonexistent", USER_ID, { title: "X" }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateTrack("nonexistent", USER_ID, { title: "X" })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should reject edits while track is PROCESSING", async () => {
       prisma.track.findUnique.mockResolvedValue({
         status: TrackStatus.PROCESSING,
       });
-      await expect(
-        service.updateTrack(TRACK_ID, USER_ID, { title: "Too Early" }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.updateTrack(TRACK_ID, USER_ID, { title: "Too Early" })).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it("should resolve a new genre when updating", async () => {
@@ -874,9 +807,7 @@ describe("TracksService", () => {
     });
 
     it("should remove genre when empty string is provided", async () => {
-      prisma.track.update.mockResolvedValue(
-        buildTrackRecord({ primaryGenre: null }),
-      );
+      prisma.track.update.mockResolvedValue(buildTrackRecord({ primaryGenre: null }));
 
       const result = await service.updateTrack(TRACK_ID, USER_ID, {
         genre: "",
@@ -888,9 +819,7 @@ describe("TracksService", () => {
     });
 
     it("should update description", async () => {
-      prisma.track.update.mockResolvedValue(
-        buildTrackRecord({ description: "Updated desc" }),
-      );
+      prisma.track.update.mockResolvedValue(buildTrackRecord({ description: "Updated desc" }));
 
       const result = await service.updateTrack(TRACK_ID, USER_ID, {
         description: "Updated desc",
@@ -913,9 +842,7 @@ describe("TracksService", () => {
     });
 
     it("should clear releaseDate when null is provided", async () => {
-      prisma.track.update.mockResolvedValue(
-        buildTrackRecord({ releaseDate: null }),
-      );
+      prisma.track.update.mockResolvedValue(buildTrackRecord({ releaseDate: null }));
 
       await service.updateTrack(TRACK_ID, USER_ID, {
         releaseDate: null as any,
@@ -942,9 +869,7 @@ describe("TracksService", () => {
         url: coverUrl,
         key: "cover/updated.png",
       });
-      prisma.track.update.mockResolvedValue(
-        buildTrackRecord({ coverArtUrl: coverUrl }),
-      );
+      prisma.track.update.mockResolvedValue(buildTrackRecord({ coverArtUrl: coverUrl }));
 
       const coverArtFile = buildMulterFile({
         fieldname: "coverArt",
@@ -1017,17 +942,17 @@ describe("TracksService", () => {
         uploaderId: OTHER_USER_ID,
       });
 
-      await expect(
-        service.deleteTrack(TRACK_ID, USER_ID, "USER"),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.deleteTrack(TRACK_ID, USER_ID, "USER")).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it("should throw 404 for non-existent track", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.deleteTrack("nonexistent", USER_ID, "USER"),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deleteTrack("nonexistent", USER_ID, "USER")).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should trigger file cleanup after deletion", async () => {
@@ -1036,9 +961,7 @@ describe("TracksService", () => {
         uploaderId: USER_ID,
       });
       prisma.track.update.mockResolvedValue({});
-      prisma.trackFile.findMany.mockResolvedValue([
-        { storageKey: "tracks/test.mp3" },
-      ]);
+      prisma.trackFile.findMany.mockResolvedValue([{ storageKey: "tracks/test.mp3" }]);
 
       await service.deleteTrack(TRACK_ID, USER_ID, "USER");
 
@@ -1070,11 +993,7 @@ describe("TracksService", () => {
         }),
       );
 
-      const result = await service.changeVisibility(
-        TRACK_ID,
-        USER_ID,
-        TrackVisibility.PUBLIC,
-      );
+      const result = await service.changeVisibility(TRACK_ID, USER_ID, TrackVisibility.PUBLIC);
 
       expect(result.visibility).toBe(TrackVisibility.PUBLIC);
     });
@@ -1089,11 +1008,7 @@ describe("TracksService", () => {
         buildTrackRecord({ visibility: TrackVisibility.PRIVATE }),
       );
 
-      await service.changeVisibility(
-        TRACK_ID,
-        USER_ID,
-        TrackVisibility.PRIVATE,
-      );
+      await service.changeVisibility(TRACK_ID, USER_ID, TrackVisibility.PRIVATE);
 
       const updateCall = prisma.track.update.mock.calls[0][0];
       expect(updateCall.data.secretToken).toBeDefined();
@@ -1323,9 +1238,7 @@ describe("TracksService", () => {
 
     it("should throw 404 for non-existent track", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
-      await expect(service.getWaveform("nonexistent")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getWaveform("nonexistent")).rejects.toThrow(NotFoundException);
     });
 
     it("should return null waveformData when not yet generated", async () => {
@@ -1462,7 +1375,7 @@ describe("TracksService", () => {
         fileUrls: { mp3: "url1", wav: "url2" },
       });
 
-      const calls = prisma.trackFile.create.mock.calls;
+      const { calls } = prisma.trackFile.create.mock;
       const mp3Call = calls.find((c: any) => c[0].data.format === "mp3");
       const wavCall = calls.find((c: any) => c[0].data.format === "wav");
       expect(mp3Call[0].data.fileRole).toBe(FileRole.STREAM);
@@ -1518,9 +1431,7 @@ describe("TracksService", () => {
     it("should return a track by its secret token", async () => {
       prisma.track.findFirst.mockResolvedValue(buildTrackRecord());
 
-      const result = await service.getTrackBySecretToken(
-        "abc123secrettoken1234567",
-      );
+      const result = await service.getTrackBySecretToken("abc123secrettoken1234567");
 
       expect(result.trackId).toBe(TRACK_ID);
       expect(result.title).toBe("Test Track");
@@ -1530,9 +1441,9 @@ describe("TracksService", () => {
     it("should throw 404 for invalid token", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.getTrackBySecretToken("invalid-token"),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getTrackBySecretToken("invalid-token")).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("should include full detail fields plus message", async () => {
@@ -1540,9 +1451,7 @@ describe("TracksService", () => {
         buildTrackRecord({ visibility: TrackVisibility.PRIVATE }),
       );
 
-      const result = await service.getTrackBySecretToken(
-        "abc123secrettoken1234567",
-      );
+      const result = await service.getTrackBySecretToken("abc123secrettoken1234567");
 
       expect(result.visibility).toBe("PRIVATE");
       expect(result.artist).toBe("Test Artist");

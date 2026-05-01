@@ -81,9 +81,7 @@ describe("UserEnforcementService", () => {
     });
 
     it("throws ForbiddenException when target is an ADMIN", async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(
-        makeTargetUser({ systemRole: "ADMIN" }),
-      );
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser({ systemRole: "ADMIN" }));
       await expect(
         service.warnUser(ADMIN_ID, TARGET_ID, {
           reason: "test",
@@ -93,9 +91,7 @@ describe("UserEnforcementService", () => {
     });
 
     it("throws ConflictException when target is already BANNED", async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(
-        makeTargetUser({ accountStatus: "BANNED" }),
-      );
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }));
       await expect(
         service.warnUser(ADMIN_ID, TARGET_ID, {
           reason: "test",
@@ -129,9 +125,7 @@ describe("UserEnforcementService", () => {
         actionType: "WARN_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       const result = await service.warnUser(ADMIN_ID, TARGET_ID, {
         reason: "spamming",
@@ -161,9 +155,7 @@ describe("UserEnforcementService", () => {
         actionType: "WARN_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       await service.warnUser(ADMIN_ID, TARGET_ID, {
         reason: "spam",
@@ -186,9 +178,7 @@ describe("UserEnforcementService", () => {
         actionType: "WARN_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       await service.warnUser(ADMIN_ID, TARGET_ID, {
         reason: "test",
@@ -219,9 +209,7 @@ describe("UserEnforcementService", () => {
     });
 
     it("throws ForbiddenException when target is ADMIN", async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(
-        makeTargetUser({ systemRole: "ADMIN" }),
-      );
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser({ systemRole: "ADMIN" }));
       await expect(
         service.suspendUser(ADMIN_ID, TARGET_ID, {
           reason: "test",
@@ -243,9 +231,7 @@ describe("UserEnforcementService", () => {
         actionType: "SUSPEND_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       const result = await service.suspendUser(ADMIN_ID, TARGET_ID, {
         reason: "abuse",
@@ -267,9 +253,7 @@ describe("UserEnforcementService", () => {
         actionType: "SUSPEND_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       await service.suspendUser(ADMIN_ID, TARGET_ID, {
         reason: "abuse",
@@ -303,9 +287,7 @@ describe("UserEnforcementService", () => {
         actionType: "SUSPEND_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       await service.suspendUser(ADMIN_ID, TARGET_ID, {
         reason: "abuse",
@@ -338,9 +320,7 @@ describe("UserEnforcementService", () => {
     });
 
     it("throws ConflictException when user is already BANNED", async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(
-        makeTargetUser({ accountStatus: "BANNED" }),
-      );
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }));
       await expect(
         service.banUser(ADMIN_ID, TARGET_ID, {
           reason: "test",
@@ -366,9 +346,7 @@ describe("UserEnforcementService", () => {
         actionType: "BAN_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       const result = await service.banUser(ADMIN_ID, TARGET_ID, {
         reason: "severe violation",
@@ -380,9 +358,7 @@ describe("UserEnforcementService", () => {
     });
 
     it("throws ForbiddenException with code CANNOT_BAN_ADMIN when target is an ADMIN", async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(
-        makeTargetUser({ systemRole: "ADMIN" }),
-      );
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser({ systemRole: "ADMIN" }));
 
       await expect(
         service.banUser(ADMIN_ID, TARGET_ID, {
@@ -395,9 +371,7 @@ describe("UserEnforcementService", () => {
     });
 
     it("throws ConflictException with code USER_ALREADY_BANNED when user is already banned", async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(
-        makeTargetUser({ accountStatus: "BANNED" }),
-      );
+      mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }));
 
       await expect(
         service.banUser(ADMIN_ID, TARGET_ID, {
@@ -415,20 +389,13 @@ describe("UserEnforcementService", () => {
         .mockResolvedValueOnce(makeAdmin())
         .mockResolvedValueOnce(makeAdmin());
       (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
-      mockPrisma.$transaction.mockResolvedValueOnce([
-        { count: 2 },
-        { count: 1 },
-        {},
-        { count: 1 },
-      ]);
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 2 }, { count: 1 }, {}, { count: 1 }]);
       mockPrisma.moderationAction.create.mockResolvedValueOnce({
         id: "a4",
         actionType: "BAN_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       await service.banUser(ADMIN_ID, TARGET_ID, {
         reason: "severe violation",
@@ -452,35 +419,30 @@ describe("UserEnforcementService", () => {
 
   describe("restoreUser", () => {
     it("throws ForbiddenException on self-restore", async () => {
-      await expect(
-        service.restoreUser(ADMIN_ID, ADMIN_ID, { reason: "test" }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.restoreUser(ADMIN_ID, ADMIN_ID, { reason: "test" })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it("throws ConflictException when user is already ACTIVE", async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce(makeTargetUser());
-      await expect(
-        service.restoreUser(ADMIN_ID, TARGET_ID, { reason: "test" }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.restoreUser(ADMIN_ID, TARGET_ID, { reason: "test" })).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it("restores user and content when restoreContent=true", async () => {
       mockPrisma.user.findUnique
         .mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }))
         .mockResolvedValueOnce(makeAdmin());
-      mockPrisma.$transaction.mockResolvedValueOnce([
-        { count: 3 },
-        { count: 1 },
-      ]);
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 1 }]);
       mockPrisma.user.update.mockResolvedValueOnce({});
       mockPrisma.moderationAction.create.mockResolvedValueOnce({
         id: "a4",
         actionType: "RESTORE_CONTENT",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       const result = await service.restoreUser(ADMIN_ID, TARGET_ID, {
         reason: "appeal approved",
@@ -511,9 +473,7 @@ describe("UserEnforcementService", () => {
         actionType: "RESTORE_USER",
         createdAt: new Date(),
       });
-      mockNotificationsService.createNotification.mockResolvedValueOnce(
-        undefined,
-      );
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
       await service.restoreUser(ADMIN_ID, TARGET_ID, {
         reason: "appeal",

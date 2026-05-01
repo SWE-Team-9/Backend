@@ -92,7 +92,7 @@ describeIfDb("Discovery search performance", () => {
       });
     }
 
-    await prisma.$executeRawUnsafe('ANALYZE tracks;');
+    await prisma.$executeRawUnsafe("ANALYZE tracks;");
   }, 180_000);
 
   afterAll(async () => {

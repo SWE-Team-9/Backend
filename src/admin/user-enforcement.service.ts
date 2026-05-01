@@ -10,10 +10,10 @@ import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import {
-  WarnUserDto,
-  SuspendUserDto,
   BanUserDto,
   RestoreUserDto,
+  SuspendUserDto,
+  WarnUserDto,
 } from "./dto/user-enforcement.dto";
 
 @Injectable()
@@ -30,7 +30,7 @@ export class UserEnforcementService {
       where: { id: adminId },
       select: { systemRole: true },
     });
-    if (!admin || admin.systemRole !== "ADMIN") {
+    if (admin?.systemRole !== "ADMIN") {
       throw new ForbiddenException({
         code: "INSUFFICIENT_PERMISSIONS",
         message: "Admin role verification failed.",
@@ -38,10 +38,7 @@ export class UserEnforcementService {
     }
   }
 
-  private async verifyAdminPassword(
-    adminId: string,
-    password: string,
-  ): Promise<void> {
+  private async verifyAdminPassword(adminId: string, password: string): Promise<void> {
     const admin = await this.prisma.user.findUnique({
       where: { id: adminId },
       select: { passwordHash: true },
@@ -143,11 +140,7 @@ export class UserEnforcementService {
 
   // ─── Suspend ─────────────────────────────────────────────────────────────────
 
-  async suspendUser(
-    adminId: string,
-    targetUserId: string,
-    dto: SuspendUserDto,
-  ) {
+  async suspendUser(adminId: string, targetUserId: string, dto: SuspendUserDto) {
     if (adminId === targetUserId) {
       throw new ForbiddenException({
         code: "CANNOT_SELF_ENFORCE",
@@ -270,8 +263,8 @@ export class UserEnforcementService {
         data: { revokedAt: new Date() },
       }),
     ]);
-    const tracksResult = txResults[0] as { count: number };
-    const playlistsResult = txResults[1] as { count: number };
+    const tracksResult = txResults[0];
+    const playlistsResult = txResults[1];
     void playlistsResult;
 
     const action = await this.prisma.moderationAction.create({
@@ -310,11 +303,7 @@ export class UserEnforcementService {
 
   // ─── Restore ─────────────────────────────────────────────────────────────────
 
-  async restoreUser(
-    adminId: string,
-    targetUserId: string,
-    dto: RestoreUserDto,
-  ) {
+  async restoreUser(adminId: string, targetUserId: string, dto: RestoreUserDto) {
     if (adminId === targetUserId) {
       throw new ForbiddenException({
         code: "CANNOT_SELF_ENFORCE",
@@ -324,10 +313,7 @@ export class UserEnforcementService {
 
     const target = await this.ensureTargetUser(targetUserId);
 
-    if (
-      target.accountStatus !== "SUSPENDED" &&
-      target.accountStatus !== "BANNED"
-    ) {
+    if (target.accountStatus !== "SUSPENDED" && target.accountStatus !== "BANNED") {
       throw new ConflictException({
         code: "USER_ALREADY_ACTIVE",
         message: "User is already active.",

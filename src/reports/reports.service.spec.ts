@@ -1,9 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { ReportStatus, ReportTargetType } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ReportsService } from "./reports.service";
@@ -246,9 +242,7 @@ describe("ReportsService", () => {
   describe("getReportById", () => {
     it("throws NotFoundException when report does not exist", async () => {
       mockPrisma.report.findUnique.mockResolvedValueOnce(null);
-      await expect(service.getReportById("no-id")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getReportById("no-id")).rejects.toThrow(NotFoundException);
     });
 
     it("returns report with appeals and resolved target info", async () => {
@@ -343,9 +337,7 @@ describe("ReportsService", () => {
     it("throws NotFoundException when admin user not found", async () => {
       mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1" });
       mockPrisma.user.findUnique.mockResolvedValueOnce(null);
-      await expect(service.assignReport("r1", "no-admin")).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.assignReport("r1", "no-admin")).rejects.toThrow(NotFoundException);
     });
 
     it("throws BadRequestException when assignee is not ADMIN", async () => {
@@ -354,9 +346,7 @@ describe("ReportsService", () => {
         id: "u1",
         systemRole: "USER",
       });
-      await expect(service.assignReport("r1", "u1")).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.assignReport("r1", "u1")).rejects.toThrow(BadRequestException);
     });
 
     it("assigns report to valid admin", async () => {
@@ -379,9 +369,7 @@ describe("ReportsService", () => {
 
   describe("bulkUpdateReports", () => {
     it("throws INVALID_TRANSITION when any selected report is already RESOLVED", async () => {
-      mockPrisma.report.findMany.mockResolvedValueOnce([
-        { id: "r2" },
-      ]);
+      mockPrisma.report.findMany.mockResolvedValueOnce([{ id: "r2" }]);
 
       await expect(
         service.bulkUpdateReports("admin-1", {
@@ -397,10 +385,7 @@ describe("ReportsService", () => {
     });
 
     it("updates multiple reports in a transaction", async () => {
-      mockPrisma.$transaction.mockResolvedValueOnce([
-        { count: 3 },
-        { count: 2 },
-      ]);
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 2 }]);
 
       const result = await service.bulkUpdateReports("admin-1", {
         reportIds: ["r1", "r2", "r3"],

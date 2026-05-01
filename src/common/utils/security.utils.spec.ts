@@ -1,12 +1,12 @@
 import { Request } from "express";
 import {
-  extractClientIp,
-  sanitizeHandle,
-  isValidHandle,
-  isSafeExternalUrl,
-  timingSafeStringEqual,
-  normalizeUserAgent,
   assertTokenEntropy,
+  extractClientIp,
+  isSafeExternalUrl,
+  isValidHandle,
+  normalizeUserAgent,
+  sanitizeHandle,
+  timingSafeStringEqual,
 } from "./security.utils";
 
 // =============================================================================
@@ -203,9 +203,7 @@ describe("sanitizeHandle", () => {
   });
 
   it("should handle a typical display name correctly", () => {
-    expect(sanitizeHandle("The Chemical Brothers")).toBe(
-      "the_chemical_brothers",
-    );
+    expect(sanitizeHandle("The Chemical Brothers")).toBe("the_chemical_brothers");
   });
 
   it("should handle numbers in the input", () => {
@@ -387,17 +385,11 @@ describe("isSafeExternalUrl", () => {
     });
 
     it("should return false for the AWS IMDS metadata endpoint", () => {
-      expect(
-        isSafeExternalUrl("https://169.254.169.254/latest/meta-data/"),
-      ).toBe(false);
+      expect(isSafeExternalUrl("https://169.254.169.254/latest/meta-data/")).toBe(false);
     });
 
     it("should return false for the GCP metadata endpoint", () => {
-      expect(
-        isSafeExternalUrl(
-          "https://metadata.google.internal/computeMetadata/v1/",
-        ),
-      ).toBe(false);
+      expect(isSafeExternalUrl("https://metadata.google.internal/computeMetadata/v1/")).toBe(false);
     });
 
     it("should return false for an RFC-1918 10.x.x.x address", () => {
@@ -520,22 +512,18 @@ describe("timingSafeStringEqual", () => {
 
   describe("realistic token comparison scenarios", () => {
     it("should correctly compare two identical SHA-256 hashes", () => {
-      const hash =
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+      const hash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
       expect(timingSafeStringEqual(hash, hash)).toBe(true);
     });
 
     it("should correctly reject two different SHA-256 hashes", () => {
-      const hash1 =
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
-      const hash2 =
-        "b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576b4f4bf0f2a1d9e9c";
+      const hash1 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+      const hash2 = "b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576b4f4bf0f2a1d9e9c";
       expect(timingSafeStringEqual(hash1, hash2)).toBe(false);
     });
 
     it("should correctly compare JWT-like token strings", () => {
-      const token =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.SIGNATURE";
+      const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.SIGNATURE";
       expect(timingSafeStringEqual(token, token)).toBe(true);
     });
   });
@@ -607,8 +595,7 @@ describe("assertTokenEntropy", () => {
     });
 
     it("should not throw for a 64-char SHA-256 hex digest", () => {
-      const hash =
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+      const hash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
       expect(() => assertTokenEntropy(hash)).not.toThrow();
     });
 

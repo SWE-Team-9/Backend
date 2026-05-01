@@ -1,9 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import {
-  InvoiceStatus,
-  SubscriptionStatus,
-  SubscriptionTier,
-} from "@prisma/client";
+import { InvoiceStatus, SubscriptionStatus, SubscriptionTier } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
@@ -147,9 +143,7 @@ describe("TrialSchedulerService", () => {
     it("still records the PaymentEvent even if email delivery fails", async () => {
       const sub = makeTrialSub();
       mockPrisma.userSubscription.findMany.mockResolvedValue([sub]);
-      mockMailService.sendTrialEndingEmail.mockRejectedValueOnce(
-        new Error("SMTP error"),
-      );
+      mockMailService.sendTrialEndingEmail.mockRejectedValueOnce(new Error("SMTP error"));
       mockPrisma.paymentEvent.create.mockResolvedValue({});
 
       await service.sendTrialEndingWarnings();
@@ -332,9 +326,7 @@ describe("TrialSchedulerService", () => {
       mockPrisma.userSubscription.findMany.mockResolvedValue([sub]);
       mockPrisma.userSubscription.update.mockResolvedValue({});
       mockPrisma.paymentEvent.create.mockResolvedValue({});
-      mockMailService.sendPaymentFailedMovedToFreeEmail.mockResolvedValue(
-        undefined,
-      );
+      mockMailService.sendPaymentFailedMovedToFreeEmail.mockResolvedValue(undefined);
 
       await service.cancelExpiredGracePeriodSubscriptions();
 
@@ -361,18 +353,16 @@ describe("TrialSchedulerService", () => {
       mockPrisma.userSubscription.findMany.mockResolvedValue([sub]);
       mockPrisma.userSubscription.update.mockResolvedValue({});
       mockPrisma.paymentEvent.create.mockResolvedValue({});
-      mockMailService.sendPaymentFailedMovedToFreeEmail.mockResolvedValue(
-        undefined,
-      );
+      mockMailService.sendPaymentFailedMovedToFreeEmail.mockResolvedValue(undefined);
 
       await service.cancelExpiredGracePeriodSubscriptions();
 
       // Give the fire-and-forget promise a tick to settle
       await Promise.resolve();
 
-      expect(
-        mockMailService.sendPaymentFailedMovedToFreeEmail,
-      ).toHaveBeenCalledWith(expect.objectContaining({ to: USER_EMAIL }));
+      expect(mockMailService.sendPaymentFailedMovedToFreeEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: USER_EMAIL }),
+      );
     });
 
     it("does nothing when no PAST_DUE subs have exceeded grace period", async () => {
@@ -412,9 +402,7 @@ describe("TrialSchedulerService", () => {
 
       await service.cancelExpiredGracePeriodSubscriptions();
 
-      expect(
-        mockSubscriptionsService.revokeOfflineDownloads,
-      ).toHaveBeenCalledWith("user-abc");
+      expect(mockSubscriptionsService.revokeOfflineDownloads).toHaveBeenCalledWith("user-abc");
     });
 
     it("calls applyPlanLimitToTracks with FREE_UPLOAD_LIMIT (3)", async () => {
@@ -425,9 +413,10 @@ describe("TrialSchedulerService", () => {
 
       await service.cancelExpiredGracePeriodSubscriptions();
 
-      expect(
-        mockSubscriptionsService.applyPlanLimitToTracks,
-      ).toHaveBeenCalledWith("user-abc", FREE_UPLOAD_LIMIT);
+      expect(mockSubscriptionsService.applyPlanLimitToTracks).toHaveBeenCalledWith(
+        "user-abc",
+        FREE_UPLOAD_LIMIT,
+      );
     });
 
     it("GRACE_PERIOD_DAYS is 1 as required", () => {

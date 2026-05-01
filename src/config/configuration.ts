@@ -1,73 +1,76 @@
 export default () => ({
   app: {
-    nodeEnv: process.env.NODE_ENV ?? "development",
+    nodeEnv: process.env.NODE_ENV ?? 'development',
     port: Number(process.env.PORT ?? 3000),
-    clientUrl: process.env.CLIENT_URL ?? "http://localhost:5173",
-    apiUrl: process.env.API_URL ?? "http://localhost:3000/api/v1",
-    transcodingApiKey: process.env.TRANSCODING_API_KEY ?? "",
+    clientUrl: process.env.CLIENT_URL ?? 'http://localhost:5173',
+    apiUrl: process.env.API_URL ?? 'http://localhost:3000/api/v1',
+    transcodingApiKey: process.env.TRANSCODING_API_KEY ?? '',
   },
   security: {
     jwtSecret: process.env.JWT_SECRET,
     jwtRefreshSecret: process.env.JWT_REFRESH_SECRET,
-    jwtAccessExpiry: process.env.JWT_ACCESS_EXPIRY ?? "15m",
-    jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY ?? "7d",
-    jwtIssuer: process.env.JWT_ISSUER ?? "spotly-api",
-    jwtAudience: process.env.JWT_AUDIENCE ?? "spotly-client",
-    captchaEnabled: (process.env.CAPTCHA_ENABLED ?? "false") === "true",
+    jwtAccessExpiry: process.env.JWT_ACCESS_EXPIRY ?? '15m',
+    jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY ?? '7d',
+    jwtIssuer: process.env.JWT_ISSUER ?? 'spotly-api',
+    jwtAudience: process.env.JWT_AUDIENCE ?? 'spotly-client',
+    captchaEnabled: (process.env.CAPTCHA_ENABLED ?? 'false') === 'true',
     recaptchaSecret: process.env.RECAPTCHA_SECRET,
     recaptchaSecretCrossWeb: process.env.RECAPTCHA_SECRET_CROSS_WEB,
     // reCAPTCHA Enterprise (shared config)
     recaptchaEnterpriseApiKey: process.env.RECAPTCHA_ENTERPRISE_API_KEY,
     recaptchaEnterpriseProjectId: process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID,
     // Per-platform Enterprise site keys
-    recaptchaEnterpriseAndroidSiteKey:
-      process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
-    recaptchaEnterpriseWebSiteKey:
-      process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
-    authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? "false") === "true",
+    recaptchaEnterpriseAndroidSiteKey: process.env.RECAPTCHA_ENTERPRISE_ANDROID_SITE_KEY,
+    recaptchaEnterpriseWebSiteKey: process.env.RECAPTCHA_ENTERPRISE_WEB_SITE_KEY,
+    authCookieSecure: (process.env.AUTH_COOKIE_SECURE ?? 'false') === 'true',
   },
   database: {
     url: process.env.DATABASE_URL,
   },
   mail: {
-    host: process.env.MAIL_HOST ?? "smtp.mailtrap.io",
+    host: process.env.MAIL_HOST ?? 'smtp.mailtrap.io',
     port: Number(process.env.MAIL_PORT ?? 2525),
-    secure: (process.env.MAIL_SECURE ?? "false") === "true",
-    user: process.env.MAIL_USER ?? "",
-    pass: process.env.MAIL_PASS ?? "",
-    from: process.env.MAIL_FROM ?? "Spotly <noreply@spotly.app>",
+    secure: (process.env.MAIL_SECURE ?? 'false') === 'true',
+    user: process.env.MAIL_USER ?? '',
+    pass: process.env.MAIL_PASS ?? '',
+    from: process.env.MAIL_FROM ?? 'Spotly <noreply@spotly.app>',
   },
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     callbackUrl: process.env.GOOGLE_CALLBACK_URL,
   },
   storage: {
-    provider: (process.env.STORAGE_PROVIDER ?? "local") as "local" | "s3",
-    localUploadDir: process.env.LOCAL_UPLOAD_DIR ?? "./uploads",
-    localUploadUrl:
-      process.env.LOCAL_UPLOAD_URL ?? "http://localhost:3000/uploads",
-    s3Bucket: process.env.AWS_S3_BUCKET ?? "",
-    s3Region: process.env.AWS_REGION ?? "us-east-1",
-    awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
-    awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
-    cdnUrl: process.env.CDN_URL ?? "",
+    provider: (process.env.STORAGE_PROVIDER ?? 'local') as 'local' | 's3',
+    localUploadDir: process.env.LOCAL_UPLOAD_DIR ?? './uploads',
+    localUploadUrl: process.env.LOCAL_UPLOAD_URL ?? 'http://localhost:3000/uploads',
+    s3Bucket: process.env.AWS_S3_BUCKET ?? '',
+    s3Region: process.env.AWS_REGION ?? 'us-east-1',
+    awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+    awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+    cdnUrl: process.env.CDN_URL ?? '',
     maxAvatarBytes: 5 * 1024 * 1024, // 5 MB
     maxCoverBytes: 15 * 1024 * 1024, // 15 MB
   },
   stripe: {
-    secretKey: process.env.STRIPE_SECRET_KEY ?? "",
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
   },
   billing: {
     // "mock_stripe" (default) = no real Stripe calls
     // "stripe"                = live/test Stripe API
-    provider: process.env.BILLING_PROVIDER ?? "mock_stripe",
+    provider: process.env.BILLING_PROVIDER ?? 'mock_stripe',
     // Stripe Hosted Checkout redirect URLs.
     // {CHECKOUT_SESSION_ID} in success_url is replaced by Stripe automatically.
-    checkoutSuccessUrl: process.env.STRIPE_CHECKOUT_SUCCESS_URL ?? "",
-    checkoutCancelUrl: process.env.STRIPE_CHECKOUT_CANCEL_URL ?? "",
+    checkoutSuccessUrl: process.env.STRIPE_CHECKOUT_SUCCESS_URL ?? '',
+    checkoutCancelUrl: process.env.STRIPE_CHECKOUT_CANCEL_URL ?? '',
     // Stripe Customer Portal return URL (where user lands after managing billing)
-    portalReturnUrl: process.env.STRIPE_BILLING_PORTAL_RETURN_URL ?? "",
+    portalReturnUrl: process.env.STRIPE_BILLING_PORTAL_RETURN_URL ?? '',
+  },
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID ?? '',
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
+    // Private key is stored with escaped newlines in env — replace before use
+    privateKey: (process.env.FIREBASE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
   },
 });
