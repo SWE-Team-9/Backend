@@ -115,7 +115,118 @@ export class MailService {
     });
   }
 
-  async sendPaymentFailedEmail(params: { to: string; displayName?: string }): Promise<void> {
+  async sendAccountSuspendedEmail(params: {
+    to: string;
+    displayName?: string;
+    reason: string;
+    suspendedUntil: Date;
+  }): Promise<void> {
+    const until = params.suspendedUntil.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 account has been suspended",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "Your IQA3 account has been temporarily suspended.",
+        `Reason: ${params.reason}`,
+        `Suspension ends: ${until}`,
+        "",
+        "If you believe this is a mistake, please contact our support team.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>Your IQA3 account has been temporarily suspended.</p>",
+        `<p><strong>Reason:</strong> ${this.escapeHtml(params.reason)}</p>`,
+        `<p><strong>Suspension ends:</strong> ${this.escapeHtml(until)}</p>`,
+        "<p>If you believe this is a mistake, please contact our support team.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendAccountBannedEmail(params: {
+    to: string;
+    displayName?: string;
+    reason: string;
+  }): Promise<void> {
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 account has been permanently banned",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "Your IQA3 account has been permanently banned.",
+        `Reason: ${params.reason}`,
+        "",
+        "If you believe this is a mistake, please contact our support team.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>Your IQA3 account has been permanently banned.</p>",
+        `<p><strong>Reason:</strong> ${this.escapeHtml(params.reason)}</p>`,
+        "<p>If you believe this is a mistake, please contact our support team.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendAccountRestoredEmail(params: {
+    to: string;
+    displayName?: string;
+  }): Promise<void> {
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 account has been restored",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "Your IQA3 account has been restored. You can now log in and access your content.",
+        "",
+        "Thank you for your patience.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>Your IQA3 account has been restored. You can now log in and access your content.</p>",
+        "<p>Thank you for your patience.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendAccountWarnedEmail(params: {
+    to: string;
+    displayName?: string;
+    reason: string;
+  }): Promise<void> {
+    await this.sendMail({
+      to: params.to,
+      subject: "Warning: Policy violation on your IQA3 account",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        "You have received a formal warning on your IQA3 account.",
+        `Reason: ${params.reason}`,
+        "",
+        "Further violations may result in suspension or a permanent ban.",
+        "If you believe this is a mistake, please contact our support team.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        "<p>You have received a formal warning on your IQA3 account.</p>",
+        `<p><strong>Reason:</strong> ${this.escapeHtml(params.reason)}</p>`,
+        "<p>Further violations may result in suspension or a permanent ban.</p>",
+        "<p>If you believe this is a mistake, please contact our support team.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendPaymentFailedEmail(params: {
+    to: string;
+    displayName?: string;
+  }): Promise<void> {
     await this.sendMail({
       to: params.to,
       subject: "Your IQA3 subscription payment failed",

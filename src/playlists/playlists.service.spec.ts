@@ -46,6 +46,7 @@ function buildPrismaMock() {
     },
     genre: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     playEvent: {
       groupBy: jest.fn(),
@@ -191,6 +192,7 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "PUBLIC",
         secretToken: "sec_hidden",
+        genre: { name: "Electronic" },
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
       });
       prisma.playlistTrack.count.mockResolvedValue(1);
@@ -205,6 +207,7 @@ describe("PlaylistsService", () => {
         title: "Late Night Drive",
         description: "chill tracks",
         visibility: "PUBLIC",
+        genre: "Electronic",
         owner: { id: "usr_1", display_name: "Ahmed Hassan" },
         tracks: [{ trackId: "trk_123", title: "Layali" }],
       });
@@ -219,6 +222,7 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
+        genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
       });
       prisma.playlistTrack.count.mockResolvedValue(1);
@@ -234,6 +238,7 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
+        genre: null,
         owner: { id: "usr_1", display_name: "Ahmed Hassan" },
         tracks: [{ trackId: "trk_123", title: "Layali" }],
       });
@@ -260,6 +265,7 @@ describe("PlaylistsService", () => {
         description: null,
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         tracks: [],
       });
@@ -281,6 +287,7 @@ describe("PlaylistsService", () => {
           description: null,
           visibility: PlaylistVisibility.PUBLIC,
           secretToken: null,
+          genre: null,
           owner: { id: "usr_1", display_name: "Ahmed Hassan" },
           tracks: [],
         },
@@ -303,6 +310,7 @@ describe("PlaylistsService", () => {
         description: null,
         visibility: PlaylistVisibility.SECRET,
         secretToken: "placeholder",
+          genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         tracks: [],
       });
@@ -483,6 +491,7 @@ describe("PlaylistsService", () => {
           title: "Late Night Drive",
           coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
           coverArtUrl: null,
+          genre: { name: "Electronic" },
           owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
         },
         {
@@ -490,6 +499,7 @@ describe("PlaylistsService", () => {
           title: "Weekend Mix",
           coverImageUrl: null,
           coverArtUrl: null,
+          genre: null,
           owner: { id: "usr_2", profile: { displayName: "Sara Ali" } },
         },
       ]);
@@ -512,13 +522,113 @@ describe("PlaylistsService", () => {
             playlistId: "pl_101",
             title: "Late Night Drive",
             coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
+            genre: "Electronic",
             owner: { id: "usr_1", display_name: "Ahmed Hassan" },
           },
           {
             playlistId: "pl_102",
             title: "Weekend Mix",
             coverImageUrl: null,
+            genre: null,
             owner: { id: "usr_2", display_name: "Sara Ali" },
+          },
+        ],
+      });
+    });
+  });
+
+  describe("getTopPlaylists", () => {
+    it("returns top public playlists grouped by genre and keeps no-genre playlists only in their bucket", async () => {
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: "pl_101",
+          title: "Late Night Drive",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 48,
+          genre: { name: "Electronic" },
+        },
+        {
+          id: "pl_201",
+          title: "Sunrise Club",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 33,
+          genre: { name: "House" },
+        },
+        {
+          id: "pl_102",
+          title: "Neon Pulse",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 20,
+          genre: { name: "Electronic" },
+        },
+        {
+          id: "pl_301",
+          title: "Midnight Float",
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 12,
+          genre: null,
+        },
+      ]);
+
+      const result = await service.getTopPlaylists();
+
+      expect(prisma.genre.findMany).not.toHaveBeenCalled();
+      expect(prisma.playlist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            visibility: PlaylistVisibility.PUBLIC,
+            deletedAt: null,
+          },
+          orderBy: [{ likesCount: "desc" }, { createdAt: "desc" }],
+          select: expect.objectContaining({
+            genre: {
+              select: {
+                name: true,
+              },
+            },
+          }),
+        }),
+      );
+      expect(result).toEqual({
+        genres: [
+          {
+            genre: "Electronic",
+            playlists: [
+              {
+                playlistId: "pl_101",
+                title: "Late Night Drive",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 48,
+              },
+              {
+                playlistId: "pl_102",
+                title: "Neon Pulse",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 20,
+              },
+            ],
+          },
+          {
+            genre: "House",
+            playlists: [
+              {
+                playlistId: "pl_201",
+                title: "Sunrise Club",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 33,
+              },
+            ],
+          },
+          {
+            genre: "No Genre",
+            playlists: [
+              {
+                playlistId: "pl_301",
+                title: "Midnight Float",
+                visibility: PlaylistVisibility.PUBLIC,
+                likesCount: 12,
+              },
+            ],
           },
         ],
       });
@@ -633,7 +743,17 @@ describe("PlaylistsService", () => {
         id: "pl_101",
         ownerId: "usr_1",
       });
-      prisma.track.findFirst.mockResolvedValue({ id: "trk_123" });
+      prisma.track.findFirst.mockResolvedValue({
+        id: "trk_123",
+        coverArtUrl: "https://example.com/cover.jpg",
+        uploader: {
+          id: "usr_2",
+          profile: {
+            handle: "artist_user",
+            displayName: "Artist Name",
+          },
+        },
+      });
       prisma.playlistTrack.aggregate.mockResolvedValue({
         _count: { _all: 3 },
         _max: { position: 2 },
@@ -651,6 +771,11 @@ describe("PlaylistsService", () => {
         message: "Track added to playlist successfully",
         playlistId: "pl_101",
         trackId: "trk_123",
+        coverArtUrl: "https://example.com/cover.jpg",
+        artist: {
+          id: "usr_2",
+          name: "Artist Name",
+        },
       });
     });
 
@@ -757,9 +882,12 @@ describe("PlaylistsService", () => {
           id: "pl_101",
           title: "Late Night Drive",
           slug: "late-night-drive",
+          coverImageUrl: null,
           coverArtUrl: null,
           visibility: "PUBLIC",
+          genre: { name: "Electronic" },
           _count: { tracks: 12 },
+          likesCount: 10,
         },
       ]);
 
@@ -777,9 +905,11 @@ describe("PlaylistsService", () => {
             playlistId: "pl_101",
             title: "Late Night Drive",
             slug: "late-night-drive",
-            coverArtUrl: null,
+            coverImageUrl: null,
             visibility: "PUBLIC",
             tracksCount: 12,
+            likesCount: 10,
+            genre: "Electronic",
           },
         ],
       });

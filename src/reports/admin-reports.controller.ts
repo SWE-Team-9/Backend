@@ -75,6 +75,10 @@ export class AdminReportsController {
               title: 'Track A',
               owner_handle: 'artist1',
             },
+            offender: {
+              id: 'uuid-of-artist1',
+              account_status: 'ACTIVE',
+            },
             appeals_count: 0,
           },
         ],
@@ -134,6 +138,10 @@ export class AdminReportsController {
           id: '9eb9086e-96fc-4c2f-9ed4-ab59e8aa0bd1',
           title: 'Track A',
           owner_handle: 'artist1',
+        },
+        offender: {
+          id: 'uuid-of-artist1',
+          account_status: 'ACTIVE',
         },
         appeals_count: 0,
         appeals: [

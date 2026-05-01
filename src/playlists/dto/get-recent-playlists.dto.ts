@@ -21,6 +21,12 @@ export class RecentPlaylistItemDto {
   })
   coverImageUrl!: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Electronic',
+    nullable: true,
+  })
+  genre!: string | null;
+
   @ApiProperty({ type: () => RecentPlaylistOwnerDto })
   owner!: RecentPlaylistOwnerDto;
 }

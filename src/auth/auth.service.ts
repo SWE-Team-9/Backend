@@ -509,7 +509,16 @@ export class AuthService {
       throw new ForbiddenException({
         statusCode: 403,
         error: "ACCOUNT_SUSPENDED",
-        message: "Your account has been suspended.",
+        message: `Your account is suspended until ${session.user.suspendedUntil?.toISOString() ?? "further notice"}.`,
+        suspendedUntil: session.user.suspendedUntil ?? null,
+      });
+    }
+
+    if (session.user.accountStatus === "BANNED") {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "ACCOUNT_BANNED",
+        message: "Your account has been permanently banned.",
       });
     }
 

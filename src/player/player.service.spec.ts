@@ -30,6 +30,8 @@ describe("PlayerService", () => {
       create: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
       deleteMany: jest.fn(),
     },
     playerSession: {
@@ -303,6 +305,7 @@ describe("PlayerService", () => {
     it("should save progress successfully", async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
       (prismaMock.playbackProgress.upsert as jest.Mock).mockResolvedValue({});
+      (prismaMock.playEvent.findFirst as jest.Mock).mockResolvedValue(null);
 
       const result = await service.registerProgress("user-uuid", "track-uuid", 97, 240, false);
 

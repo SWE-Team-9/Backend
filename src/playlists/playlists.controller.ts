@@ -105,7 +105,7 @@ export class PlaylistsController {
   @Public()
   @ApiOperation({
     summary: "Get top playlists",
-    description: "Returns the top 10 public playlists ordered by likes count.",
+    description: "Returns the top 10 public playlists per genre ordered by likes count.",
   })
   @ApiResponse({
     status: 200,
@@ -113,12 +113,17 @@ export class PlaylistsController {
     type: GetTopPlaylistsResponseDto,
     schema: {
       example: {
-        playlists: [
+        genres: [
           {
-            playlistId: "pl_101",
-            title: "Late Night Drive",
-            visibility: "PUBLIC",
-            likesCount: 48,
+            genre: "Electronic",
+            playlists: [
+              {
+                playlistId: "pl_101",
+                title: "Late Night Drive",
+                visibility: "PUBLIC",
+                likesCount: 48,
+              },
+            ],
           },
         ],
       },
@@ -149,9 +154,11 @@ export class PlaylistsController {
             playlistId: 'pl_101',
             title: 'Late Night Drive',
             slug: 'late-night-drive',
-            coverArtUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
             visibility: 'PUBLIC',
             tracksCount: 12,
+            likesCount: 10,
+            genre: 'Electronic',
           },
         ],
       },
@@ -217,6 +224,7 @@ export class PlaylistsController {
             playlistId: 'pl_101',
             title: 'Late Night Drive',
             coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
+            genre: 'Electronic',
             owner: {
               id: 'usr_1',
               display_name: 'Ahmed Hassan',
@@ -473,6 +481,18 @@ export class PlaylistsController {
     status: 201,
     description: 'Track added to playlist successfully.',
     type: AddTrackToPlaylistResponseDto,
+    schema: {
+      example: {
+        message: 'Track added to playlist successfully',
+        playlistId: 'pl_101',
+        trackId: 'trk_123',
+        coverArtUrl: 'https://example.com/cover.jpg',
+        artist: {
+          id: 'usr_1',
+          name: 'Artist Name',
+        },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Validation error.' })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
@@ -623,6 +643,7 @@ export class PlaylistsController {
         description: 'My favorite chill tracks',
         visibility: 'PUBLIC',
         secretToken: null,
+        genre: 'Electronic',
         owner: {
           id: 'usr_1',
           display_name: 'Ahmed Hassan',
