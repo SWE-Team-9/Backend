@@ -1,42 +1,13 @@
-name: Deploy Backend Develop to EC2 via ECR
+name: Deploy Backend PROD to EC2
 
 on:
   push:
     branches:
-      - develop
-  pull_request:
-    branches:
-      - develop
+      - main
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Run tests
-        run: npm test
-        env:
-          CI: true
-
   deploy:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,50 +23,27 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build and Push Prod Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: swe-team-9/backend
-          IMAGE_TAG: develop
+          IMAGE_TAG: production # Different tag for prod
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Deploy to EC2 and Verify
+      - name: Deploy to PROD EC2
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.PROD_EC2_HOST }} # New secret for Prod IP
+          username: ec2-user
+          key: ${{ secrets.PROD_EC2_SSH_KEY }}
           script: |
-            set -e 
-
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            
-            cd /home/ec2-user/dev
-            
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            cd /home/ec2-user/prod
             docker-compose pull
             # docker-compose down --remove-orphans
             docker-compose up -d
-            
-            echo "Waiting 15 seconds for the application to boot and stabilize..."
-            sleep 15
-            
-            # Print status to the GitHub Actions log for visibility
-            docker-compose ps
-            
-           
-           
-            CONTAINER_ID=$(docker-compose ps -q backend)
-            IS_RUNNING=$(docker inspect -f '{{.State.Running}}' $CONTAINER_ID)
-            
-            if [ "$IS_RUNNING" != "true" ]; then
-              echo "❌ ERROR: The backend container crashed on boot! Likely an unhandled exception."
-              echo "--- PRINTING CRASH LOGS FOR BACKEND TEAM ---"
-              docker-compose logs backend
-              exit 1 # This explicitly fails the GitHub Actions pipeline
-            fi
-            
-            echo "✅ Backend successfully booted and is stable."
-            docker image prune -a -f
+            docker system prune -a -f
+
+
