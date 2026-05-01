@@ -35,6 +35,7 @@ export class DiscoveryService {
     const shouldFetchPlaylists = type === "all" || type === "playlists";
 
     const ilikePattern = `%${normalized}%`;
+    const isShortQuery = normalized.length <= 3;
 
     const tracksPromise = shouldFetchTracks
       ? this.prisma.$queryRaw<
@@ -45,6 +46,11 @@ export class DiscoveryService {
             description: string | null;
             cover_art_url: string | null;
             uploader_id: string;
+            artist_handle: string;
+            duration_ms: number | null;
+            views: number;
+            exact_prefix_match: boolean;
+            fuzzy_score: number;
             total_count: bigint;
           }>
         >`
@@ -55,8 +61,15 @@ export class DiscoveryService {
             t.description,
             t.cover_art_url,
             t.uploader_id,
+            up.handle AS artist_handle,
+            t.duration_ms,
+            COALESCE(SUM(tds.play_count), 0)::int AS views,
+            (t.title ILIKE ${ilikePattern} AND (t.title ILIKE ${normalized}%)) AS exact_prefix_match,
+            COALESCE(similarity(t.title, ${normalized}), 0) AS fuzzy_score,
             COUNT(*) OVER()::bigint AS total_count
           FROM tracks t
+          LEFT JOIN user_profiles up ON up.user_id = t.uploader_id
+          LEFT JOIN track_daily_stats tds ON tds.track_id = t.id
           WHERE
             t.deleted_at IS NULL
             AND t.visibility = 'PUBLIC'
@@ -68,6 +81,9 @@ export class DiscoveryService {
               OR t.description ILIKE ${ilikePattern}
               OR similarity(t.title, ${normalized}) > 0.3
             )
+          GROUP BY t.id, up.handle
+          ORDER BY
+            ${isShortQuery ? "views DESC, fuzzy_score DESC" : "exact_prefix_match DESC, fuzzy_score DESC"}
           LIMIT ${limit}
           OFFSET ${offset}
         `
@@ -174,6 +190,9 @@ export class DiscoveryService {
       description: t.description,
       coverArtUrl: t.cover_art_url,
       uploaderId: t.uploader_id,
+      artistHandle: t.artist_handle,
+      duration: t.duration_ms ? Math.floor(t.duration_ms / 1000) : null,
+      views: t.views,
     }));
 
     const transformedPlaylists = playlists.map((p) => ({
