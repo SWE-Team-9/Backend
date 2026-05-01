@@ -9,6 +9,7 @@ import * as argon2 from "argon2";
 import { UserEnforcementService } from "./user-enforcement.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { MailService } from "../mail/mail.service";
 
 jest.mock("argon2");
 
@@ -25,11 +26,19 @@ const mockNotificationsService = {
   createNotification: jest.fn(),
 };
 
+const mockMailService = {
+  sendAccountWarnedEmail: jest.fn().mockResolvedValue(undefined),
+  sendAccountSuspendedEmail: jest.fn().mockResolvedValue(undefined),
+  sendAccountBannedEmail: jest.fn().mockResolvedValue(undefined),
+  sendAccountRestoredEmail: jest.fn().mockResolvedValue(undefined),
+};
+
 const ADMIN_ID = "admin-uuid-1";
 const TARGET_ID = "user-uuid-2";
 
 const makeTargetUser = (overrides = {}) => ({
   id: TARGET_ID,
+  email: "alice@example.com",
   accountStatus: "ACTIVE",
   systemRole: "USER",
   profile: { displayName: "Alice", handle: "alice" },
@@ -51,6 +60,7 @@ describe("UserEnforcementService", () => {
         UserEnforcementService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: MailService, useValue: mockMailService },
       ],
     }).compile();
 

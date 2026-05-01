@@ -33,6 +33,8 @@ describe("PlayerService", () => {
       create: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
       deleteMany: jest.fn(),
     },
     playerSession: {
@@ -265,6 +267,7 @@ describe("PlayerService", () => {
         finishedTrack,
       );
       (prismaMock.playbackProgress.upsert as jest.Mock).mockResolvedValue({});
+      (prismaMock.playEvent.findFirst as jest.Mock).mockResolvedValue(null);
 
       const result = await service.registerProgress(
         "user-uuid",
@@ -682,3 +685,4 @@ describe("PlayerService", () => {
       );
     });
   });
+});

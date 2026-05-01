@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -9,6 +8,7 @@ import {
 import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { MailService } from "../mail/mail.service";
 import {
   WarnUserDto,
   SuspendUserDto,
@@ -21,6 +21,7 @@ export class UserEnforcementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
   ) {}
 
   // ─── Re-auth helpers ─────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ export class UserEnforcementService {
       where: { id: userId },
       select: {
         id: true,
+        email: true,
         accountStatus: true,
         systemRole: true,
         profile: { select: { displayName: true, handle: true } },
@@ -124,7 +126,13 @@ export class UserEnforcementService {
       actorId: adminId,
       entityType: "USER",
       eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "WARN_USER", message: dto.reason },
+      metadata: { actionType: "WARN_USER", reason: dto.reason },
+    });
+
+    void this.mailService.sendAccountWarnedEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
+      reason: dto.reason,
     });
 
     return {
@@ -202,8 +210,15 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "SUSPEND_USER", suspendedUntil },
+      eventType: "ACCOUNT_SUSPENDED",
+      metadata: { reason: dto.reason, suspendedUntil: suspendedUntil.toISOString() },
+    });
+
+    void this.mailService.sendAccountSuspendedEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
+      reason: dto.reason,
+      suspendedUntil,
     });
 
     return {
@@ -288,8 +303,14 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "BAN_USER" },
+      eventType: "ACCOUNT_BANNED",
+      metadata: { reason: dto.reason },
+    });
+
+    void this.mailService.sendAccountBannedEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
+      reason: dto.reason,
     });
 
     return {
@@ -372,8 +393,13 @@ export class UserEnforcementService {
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
-      eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "RESTORE_CONTENT" },
+      eventType: "ACCOUNT_RESTORED",
+      metadata: {},
+    });
+
+    void this.mailService.sendAccountRestoredEmail({
+      to: target.email,
+      displayName: target.profile?.displayName,
     });
 
     return {

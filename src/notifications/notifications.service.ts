@@ -161,6 +161,16 @@ export class NotificationsService {
         return "Your report has been resolved";
       case "SUBSCRIPTION":
         return "Your subscription was updated";
+      case "ACCOUNT_SUSPENDED": {
+        const until = (meta?.["suspendedUntil"] as string) ?? null;
+        return until
+          ? `Your account has been suspended until ${new Date(until).toLocaleDateString()}`
+          : "Your account has been suspended";
+      }
+      case "ACCOUNT_BANNED":
+        return "Your account has been permanently banned";
+      case "ACCOUNT_RESTORED":
+        return "Your account has been restored";
       default:
         return (
           (meta?.["batchMessage"] as string) ?? "You have a new notification"
