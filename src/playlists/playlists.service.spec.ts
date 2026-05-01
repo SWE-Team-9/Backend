@@ -54,8 +54,12 @@ function buildPrismaMock() {
     playlistLike: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       upsert: jest.fn(),
       deleteMany: jest.fn(),
+    },
+    user: {
+      findFirst: jest.fn(),
     },
   };
 
@@ -91,12 +95,17 @@ describe("PlaylistsService", () => {
         { id: "trk_123", title: "Layali" },
         { id: "trk_456", title: "Sahar" },
       ]);
+      prisma.user.findFirst.mockResolvedValue({
+        id: "usr_1",
+        profile: { displayName: "Ahmed Hassan" },
+      });
       prisma.playlist.findFirst.mockResolvedValue(null);
       prisma.playlist.create.mockResolvedValue({
         id: "pl_101",
         title: "Late Night Drive",
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
       });
       prisma.playlistTrack.createMany.mockResolvedValue({ count: 2 });
 
@@ -112,7 +121,16 @@ describe("PlaylistsService", () => {
         title: "Late Night Drive",
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        coverImageUrl: null,
+        releaseDate: "2026-03-01T00:00:00.000Z",
         genre: null,
+        tracksCount: 2,
+        likesCount: 0,
+        isLiked: false,
+        owner: {
+          id: "usr_1",
+          displayName: "Ahmed Hassan",
+        },
       });
       expect(prisma.playlistTrack.createMany).toHaveBeenCalledWith({
         data: [
@@ -192,13 +210,30 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "PUBLIC",
         secretToken: "sec_hidden",
-        genre: { name: "Electronic" },
+        coverImageUrl: null,
+        coverArtUrl: null,
+        likesCount: 0,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        releaseDate: null,
+        genre: { slug: "electronic" },
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
       });
-      prisma.playlistTrack.count.mockResolvedValue(1);
       prisma.playlistTrack.findMany.mockResolvedValue([
-        { track: { id: "trk_123", title: "Layali" } },
+        {
+          track: {
+            id: "trk_123",
+            title: "Layali",
+            coverArtUrl: "https://cdn.example.com/trk_123.jpg",
+            durationMs: 240000,
+            _count: { likes: 156, reposts: 42 },
+            uploader: {
+              id: "usr_uploader_1",
+              profile: { displayName: "DJ Ahmed", handle: "dj_ahmed" },
+            },
+          },
+        },
       ]);
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
 
       const result = await service.getDetails("pl_101", "usr_2");
 
@@ -207,9 +242,27 @@ describe("PlaylistsService", () => {
         title: "Late Night Drive",
         description: "chill tracks",
         visibility: "PUBLIC",
-        genre: "Electronic",
-        owner: { id: "usr_1", display_name: "Ahmed Hassan" },
-        tracks: [{ trackId: "trk_123", title: "Layali" }],
+        coverImageUrl: null,
+        likesCount: 0,
+        isLiked: false,
+        releaseDate: "2026-03-01T00:00:00.000Z",
+        genre: "electronic",
+        owner: { id: "usr_1", displayName: "Ahmed Hassan" },
+        tracks: [
+          {
+            trackId: "trk_123",
+            title: "Layali",
+            coverArtUrl: "https://cdn.example.com/trk_123.jpg",
+            durationMs: 240000,
+            likesCount: 156,
+            repostsCount: 42,
+            artist: {
+              id: "usr_uploader_1",
+              name: "DJ Ahmed",
+              handle: "dj_ahmed",
+            },
+          },
+        ],
       });
       expect(result).not.toHaveProperty("secretToken");
     });
@@ -222,13 +275,30 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
+        coverImageUrl: null,
+        coverArtUrl: null,
+        likesCount: 0,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        releaseDate: null,
         genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
       });
-      prisma.playlistTrack.count.mockResolvedValue(1);
       prisma.playlistTrack.findMany.mockResolvedValue([
-        { track: { id: "trk_123", title: "Layali" } },
+        {
+          track: {
+            id: "trk_123",
+            title: "Layali",
+            coverArtUrl: null,
+            durationMs: 240000,
+            _count: { likes: 100, reposts: 20 },
+            uploader: {
+              id: "usr_uploader_1",
+              profile: { displayName: "DJ Ahmed", handle: "dj_ahmed" },
+            },
+          },
+        },
       ]);
+      prisma.playlistLike.findUnique.mockResolvedValue({ userId: "usr_1" });
 
       const result = await service.findOne("pl_101", "usr_1");
 
@@ -238,9 +308,27 @@ describe("PlaylistsService", () => {
         description: "chill tracks",
         visibility: "SECRET",
         secretToken: "sec_owner_visible",
+        coverImageUrl: null,
+        likesCount: 0,
+        isLiked: true,
+        releaseDate: "2026-03-01T00:00:00.000Z",
         genre: null,
-        owner: { id: "usr_1", display_name: "Ahmed Hassan" },
-        tracks: [{ trackId: "trk_123", title: "Layali" }],
+        owner: { id: "usr_1", displayName: "Ahmed Hassan" },
+        tracks: [
+          {
+            trackId: "trk_123",
+            title: "Layali",
+            coverArtUrl: null,
+            durationMs: 240000,
+            likesCount: 100,
+            repostsCount: 20,
+            artist: {
+              id: "usr_uploader_1",
+              name: "DJ Ahmed",
+              handle: "dj_ahmed",
+            },
+          },
+        ],
       });
     });
 
@@ -252,23 +340,27 @@ describe("PlaylistsService", () => {
 
   describe("update", () => {
     it("updates playlist and returns sanitized payload", async () => {
-      prisma.playlist.findFirst.mockResolvedValue({
-        id: "pl_101",
-        ownerId: "usr_1",
-        visibility: PlaylistVisibility.PUBLIC,
-        secretToken: null,
-      });
-      prisma.playlist.update.mockResolvedValue({
+      const findOneMock = {
         id: "pl_101",
         ownerId: "usr_1",
         title: "Vol 2",
         description: null,
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        coverImageUrl: null,
+        coverArtUrl: null,
+        likesCount: 0,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        releaseDate: null,
         genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
-        tracks: [],
-      });
+      };
+      prisma.playlist.findFirst
+        .mockResolvedValueOnce({ id: "pl_101", ownerId: "usr_1", visibility: PlaylistVisibility.PUBLIC, secretToken: null, genreId: null })
+        .mockResolvedValueOnce(findOneMock);
+      prisma.playlistTrack.findMany.mockResolvedValue([]);
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+      prisma.playlist.update.mockResolvedValue({});
 
       const result = await service.update("usr_1", "pl_101", {
         title: "Vol 2",
@@ -277,7 +369,6 @@ describe("PlaylistsService", () => {
       expect(prisma.playlist.update).toHaveBeenCalledWith({
         where: { id: "pl_101" },
         data: { title: "Vol 2" },
-        select: expect.any(Object),
       });
       expect(result).toEqual({
         message: "Playlist updated successfully",
@@ -286,34 +377,40 @@ describe("PlaylistsService", () => {
           title: "Vol 2",
           description: null,
           visibility: PlaylistVisibility.PUBLIC,
-          secretToken: null,
+          coverImageUrl: null,
+          likesCount: 0,
+          isLiked: false,
+          releaseDate: "2026-03-01T00:00:00.000Z",
           genre: null,
-          owner: { id: "usr_1", display_name: "Ahmed Hassan" },
+          owner: { id: "usr_1", displayName: "Ahmed Hassan" },
           tracks: [],
         },
       });
     });
 
     it("maps PRIVATE to SECRET and generates UUID token if needed", async () => {
-      prisma.playlist.findFirst
-        .mockResolvedValueOnce({
-          id: "pl_101",
-          ownerId: "usr_1",
-          visibility: PlaylistVisibility.PUBLIC,
-          secretToken: null,
-        })
-        .mockResolvedValueOnce(null);
-      prisma.playlist.update.mockResolvedValue({
+      const findOneMock = {
         id: "pl_101",
         ownerId: "usr_1",
         title: "Late Night Drive",
         description: null,
         visibility: PlaylistVisibility.SECRET,
         secretToken: "placeholder",
-          genre: null,
+        coverImageUrl: null,
+        coverArtUrl: null,
+        likesCount: 0,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        releaseDate: null,
+        genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
-        tracks: [],
-      });
+      };
+      prisma.playlist.findFirst
+        .mockResolvedValueOnce({ id: "pl_101", ownerId: "usr_1", visibility: PlaylistVisibility.PUBLIC, secretToken: null, genreId: null })
+        .mockResolvedValueOnce(null) // secret token uniqueness check
+        .mockResolvedValueOnce(findOneMock); // findOne after update
+      prisma.playlistTrack.findMany.mockResolvedValue([]);
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+      prisma.playlist.update.mockResolvedValue({});
 
       await service.update("usr_1", "pl_101", {
         visibility: "PRIVATE",
@@ -327,7 +424,6 @@ describe("PlaylistsService", () => {
             /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
           ),
         }),
-        select: expect.any(Object),
       });
     });
 
@@ -363,33 +459,38 @@ describe("PlaylistsService", () => {
     });
 
     it("updates new editable playlist metadata fields", async () => {
-      prisma.playlist.findFirst.mockResolvedValue({
-        id: "pl_101",
-        ownerId: "usr_1",
-        visibility: PlaylistVisibility.PUBLIC,
-        secretToken: null,
-      });
-      prisma.genre.findFirst.mockResolvedValue({ id: 12 });
-      prisma.playlist.update.mockResolvedValue({
+      const findOneMock = {
         id: "pl_101",
         ownerId: "usr_1",
         title: "Vol 2",
         description: "updated",
         visibility: PlaylistVisibility.PUBLIC,
         secretToken: null,
+        coverImageUrl: null,
+        coverArtUrl: null,
+        likesCount: 0,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        releaseDate: null,
+        genre: null,
         owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
-        tracks: [],
-      });
+      };
+      prisma.playlist.findFirst
+        .mockResolvedValueOnce({ id: "pl_101", ownerId: "usr_1", visibility: PlaylistVisibility.PUBLIC, secretToken: null, genreId: null })
+        .mockResolvedValueOnce(findOneMock); // findOne after update
+      prisma.genre.findFirst.mockResolvedValue({ id: 12 });
+      prisma.playlistTrack.findMany.mockResolvedValue([]);
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+      prisma.playlist.update.mockResolvedValue({});
 
       await service.update("usr_1", "pl_101", {
         type: "ALBUM",
         releaseDate: "2026-03-01",
-        genreId: 12,
+        genre: "electronic",
         tags: ["chill", "chill", "night-drive"],
       });
 
       expect(prisma.genre.findFirst).toHaveBeenCalledWith({
-        where: { id: 12 },
+        where: { slug: "electronic" },
         select: { id: true },
       });
       expect(prisma.playlist.update).toHaveBeenCalledWith({
@@ -400,7 +501,6 @@ describe("PlaylistsService", () => {
           genreId: 12,
           tags: ["chill", "night-drive"],
         }),
-        select: expect.any(Object),
       });
     });
   });
@@ -489,20 +589,27 @@ describe("PlaylistsService", () => {
         {
           id: "pl_101",
           title: "Late Night Drive",
+          visibility: "PUBLIC",
           coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
           coverArtUrl: null,
-          genre: { name: "Electronic" },
+          likesCount: 10,
+          genre: { slug: "electronic", name: "Electronic" },
           owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
+          _count: { tracks: 12 },
         },
         {
           id: "pl_102",
           title: "Weekend Mix",
+          visibility: "SECRET",
           coverImageUrl: null,
           coverArtUrl: null,
+          likesCount: 5,
           genre: null,
           owner: { id: "usr_2", profile: { displayName: "Sara Ali" } },
+          _count: { tracks: 8 },
         },
       ]);
+      prisma.playlistLike.findMany.mockResolvedValue([]);
 
       const result = await service.getRecentPlaylists("usr_1", 10);
 
@@ -521,16 +628,24 @@ describe("PlaylistsService", () => {
           {
             playlistId: "pl_101",
             title: "Late Night Drive",
+            visibility: "PUBLIC",
             coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
-            genre: "Electronic",
-            owner: { id: "usr_1", display_name: "Ahmed Hassan" },
+            likesCount: 10,
+            isLiked: false,
+            genre: "electronic",
+            tracksCount: 12,
+            owner: { id: "usr_1", displayName: "Ahmed Hassan" },
           },
           {
             playlistId: "pl_102",
             title: "Weekend Mix",
+            visibility: "SECRET",
             coverImageUrl: null,
+            likesCount: 5,
+            isLiked: false,
             genre: null,
-            owner: { id: "usr_2", display_name: "Sara Ali" },
+            tracksCount: 8,
+            owner: { id: "usr_2", displayName: "Sara Ali" },
           },
         ],
       });
@@ -544,35 +659,51 @@ describe("PlaylistsService", () => {
           id: "pl_101",
           title: "Late Night Drive",
           visibility: PlaylistVisibility.PUBLIC,
+          coverImageUrl: null,
+          coverArtUrl: null,
           likesCount: 48,
-          genre: { name: "Electronic" },
+          genre: { slug: "electronic" },
+          owner: { id: "usr_1", profile: { displayName: "User One" } },
+          _count: { tracks: 12 },
         },
         {
           id: "pl_201",
           title: "Sunrise Club",
           visibility: PlaylistVisibility.PUBLIC,
+          coverImageUrl: null,
+          coverArtUrl: null,
           likesCount: 33,
-          genre: { name: "House" },
+          genre: { slug: "house" },
+          owner: { id: "usr_2", profile: { displayName: "User Two" } },
+          _count: { tracks: 8 },
         },
         {
           id: "pl_102",
           title: "Neon Pulse",
           visibility: PlaylistVisibility.PUBLIC,
+          coverImageUrl: null,
+          coverArtUrl: null,
           likesCount: 20,
-          genre: { name: "Electronic" },
+          genre: { slug: "electronic" },
+          owner: { id: "usr_3", profile: { displayName: "User Three" } },
+          _count: { tracks: 15 },
         },
         {
           id: "pl_301",
           title: "Midnight Float",
           visibility: PlaylistVisibility.PUBLIC,
+          coverImageUrl: null,
+          coverArtUrl: null,
           likesCount: 12,
           genre: null,
+          owner: { id: "usr_4", profile: { displayName: "User Four" } },
+          _count: { tracks: 5 },
         },
       ]);
+      prisma.playlistLike.findMany.mockResolvedValue([]);
 
-      const result = await service.getTopPlaylists();
+      const result = await service.getTopPlaylists("usr_test");
 
-      expect(prisma.genre.findMany).not.toHaveBeenCalled();
       expect(prisma.playlist.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -583,7 +714,7 @@ describe("PlaylistsService", () => {
           select: expect.objectContaining({
             genre: {
               select: {
-                name: true,
+                slug: true,
               },
             },
           }),
@@ -592,30 +723,54 @@ describe("PlaylistsService", () => {
       expect(result).toEqual({
         genres: [
           {
-            genre: "Electronic",
+            genre: "electronic",
             playlists: [
               {
                 playlistId: "pl_101",
                 title: "Late Night Drive",
                 visibility: PlaylistVisibility.PUBLIC,
+                coverImageUrl: null,
                 likesCount: 48,
+                isLiked: false,
+                genre: "electronic",
+                tracksCount: 12,
+                owner: {
+                  id: "usr_1",
+                  displayName: "User One",
+                },
               },
               {
                 playlistId: "pl_102",
                 title: "Neon Pulse",
                 visibility: PlaylistVisibility.PUBLIC,
+                coverImageUrl: null,
                 likesCount: 20,
+                isLiked: false,
+                genre: "electronic",
+                tracksCount: 15,
+                owner: {
+                  id: "usr_3",
+                  displayName: "User Three",
+                },
               },
             ],
           },
           {
-            genre: "House",
+            genre: "house",
             playlists: [
               {
                 playlistId: "pl_201",
                 title: "Sunrise Club",
                 visibility: PlaylistVisibility.PUBLIC,
+                coverImageUrl: null,
                 likesCount: 33,
+                isLiked: false,
+                genre: "house",
+                tracksCount: 8,
+                owner: {
+                  id: "usr_2",
+                  displayName: "User Two",
+                },
               },
             ],
           },
@@ -626,7 +781,15 @@ describe("PlaylistsService", () => {
                 playlistId: "pl_301",
                 title: "Midnight Float",
                 visibility: PlaylistVisibility.PUBLIC,
+                coverImageUrl: null,
                 likesCount: 12,
+                isLiked: false,
+                genre: null,
+                tracksCount: 5,
+                owner: {
+                  id: "usr_4",
+                  displayName: "User Four",
+                },
               },
             ],
           },
@@ -775,7 +938,8 @@ describe("PlaylistsService", () => {
         artist: {
           id: "usr_2",
           name: "Artist Name",
-        },
+          handle: "artist_user",
+        }
       });
     });
 
@@ -881,15 +1045,19 @@ describe("PlaylistsService", () => {
         {
           id: "pl_101",
           title: "Late Night Drive",
-          slug: "late-night-drive",
+          visibility: "PUBLIC",
           coverImageUrl: null,
           coverArtUrl: null,
-          visibility: "PUBLIC",
-          genre: { name: "Electronic" },
+          genre: { slug: "electronic", name: "Electronic" },
+          owner: {
+            id: "usr_2",
+            profile: { displayName: "Ahmed Hassan" },
+          },
           _count: { tracks: 12 },
           likesCount: 10,
         },
       ]);
+      prisma.playlistLike.findMany.mockResolvedValue([]);
 
       const result = await service.getMyPlaylists("usr_1", {
         page: 1,
@@ -904,12 +1072,16 @@ describe("PlaylistsService", () => {
           {
             playlistId: "pl_101",
             title: "Late Night Drive",
-            slug: "late-night-drive",
-            coverImageUrl: null,
             visibility: "PUBLIC",
+            coverImageUrl: null,
             tracksCount: 12,
             likesCount: 10,
-            genre: "Electronic",
+            isLiked: false,
+            genre: "electronic",
+            owner: {
+              id: "usr_2",
+              displayName: "Ahmed Hassan",
+            },
           },
         ],
       });

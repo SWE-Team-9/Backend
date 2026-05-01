@@ -173,7 +173,8 @@ export class NotificationsService {
   }): string {
     const name = n.actor?.profile?.displayName ?? 'Someone';
     const meta = n.metadata as Record<string, unknown> | null | undefined;
-    switch (n.eventType) {
+    const evt = String(n.eventType);
+    switch (evt) {
       case 'LIKE':
         return `${name} liked your track`;
       case 'REPOST':
@@ -205,7 +206,8 @@ export class NotificationsService {
 
   private buildFcmBody(eventType: NotificationEventType, data: CreateNotificationData): string {
     const meta = data.metadata as Record<string, unknown> | undefined;
-    switch (eventType) {
+    const et = String(eventType);
+    switch (et) {
       case 'LIKE':
         return (meta?.['batchMessage'] as string) ?? 'Someone liked your track';
       case 'REPOST':

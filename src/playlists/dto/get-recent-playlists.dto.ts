@@ -1,37 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-export class RecentPlaylistOwnerDto {
-  @ApiProperty({ example: 'usr_1' })
-  id!: string;
-
-  @ApiProperty({ example: 'Ahmed Hassan' })
-  display_name!: string;
-}
-
-export class RecentPlaylistItemDto {
-  @ApiProperty({ example: 'pl_101' })
-  playlistId!: string;
-
-  @ApiProperty({ example: 'Late Night Drive' })
-  title!: string;
-
-  @ApiPropertyOptional({
-    example: 'https://cdn.example.com/playlists/pl_101.jpg',
-    nullable: true,
-  })
-  coverImageUrl!: string | null;
-
-  @ApiPropertyOptional({
-    example: 'Electronic',
-    nullable: true,
-  })
-  genre!: string | null;
-
-  @ApiProperty({ type: () => RecentPlaylistOwnerDto })
-  owner!: RecentPlaylistOwnerDto;
-}
+import { ApiProperty } from '@nestjs/swagger';
+import { PlaylistItemDto } from './playlist-item.dto';
 
 export class GetRecentPlaylistsResponseDto {
-  @ApiProperty({ type: () => RecentPlaylistItemDto, isArray: true })
-  playlists!: RecentPlaylistItemDto[];
+  @ApiProperty({ type: () => PlaylistItemDto, isArray: true })
+  playlists!: PlaylistItemDto[];
 }

@@ -18,7 +18,8 @@ export class FcmService implements OnModuleInit {
   onModuleInit(): void {
     const projectId = this.config.get<string>('firebase.projectId');
     const clientEmail = this.config.get<string>('firebase.clientEmail');
-    const privateKey = this.config.get<string>('firebase.privateKey');
+    const privateKeyRaw = this.config.get<string>('firebase.privateKey');
+    const privateKey = privateKeyRaw ? privateKeyRaw.replace(/\\n/g, '\n') : undefined;
 
     if (!projectId || !clientEmail || !privateKey) {
       this.logger.warn('Firebase credentials not configured — FCM push notifications disabled');
@@ -31,11 +32,15 @@ export class FcmService implements OnModuleInit {
       return;
     }
 
-    this.app = admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-    });
-
-    this.logger.log('Firebase Admin SDK initialized');
+    try {
+      this.app = admin.initializeApp({
+        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+      });
+      this.logger.log('Firebase Admin SDK initialized');
+    } catch (err) {
+      this.logger.error('Failed to initialize Firebase Admin SDK — FCM disabled', err as any);
+      this.app = null;
+    }
   }
 
   /**

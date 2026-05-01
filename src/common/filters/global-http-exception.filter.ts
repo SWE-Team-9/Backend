@@ -4,7 +4,6 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 
@@ -17,8 +16,6 @@ type ExceptionBody = {
 
 @Catch()
 export class GlobalHttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(GlobalHttpExceptionFilter.name);
-
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -26,14 +23,15 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
     const isHttpException = exception instanceof HttpException;
     const status = isHttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const requestPath = request.originalUrl ?? request.url;
 
-    // Log unexpected (non-HTTP) errors so they appear in server logs
-    if (!isHttpException) {
-      this.logger.error(
-        `Unhandled exception on ${request.method} ${request.url}: ${exception instanceof Error ? exception.message : String(exception)}`,
-        exception instanceof Error ? exception.stack : undefined,
-      );
-    }
+    const errorToLog =
+      exception instanceof Error
+        ? exception
+        : new Error(typeof exception === "string" ? exception : JSON.stringify(exception));
+
+    console.error(`[GlobalHttpExceptionFilter] ${request.method} ${requestPath}`);
+    console.error(errorToLog.stack ?? errorToLog.message);
 
     const exceptionResponse = isHttpException
       ? (exception.getResponse() as string | ExceptionBody)
@@ -46,7 +44,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       error: parsed.error,
       message: parsed.message,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: requestPath,
     });
   }
 

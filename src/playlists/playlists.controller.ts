@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -36,6 +37,7 @@ import {
   AddTrackToPlaylistDto,
   AddTrackToPlaylistResponseDto,
   CreatePlaylistDto,
+  CreatePlaylistResponseDto,
   DeletePlaylistParamsDto,
   GetMyPlaylistsResponseDto,
   GetPlaylistDetailsParamsDto,
@@ -46,6 +48,7 @@ import {
   GetPlaylistEmbedCodeResponseDto,
   GetRecentPlaylistsResponseDto,
   GetTopPlaylistsResponseDto,
+  GetPlaylistLikedResponseDto,
   LikePlaylistResponseDto,
   PlaylistPaginationQueryDto,
   PlaylistTracksQueryDto,
@@ -83,6 +86,7 @@ export class PlaylistsController {
   @ApiResponse({
     status: 201,
     description: 'Playlist created successfully.',
+    type: CreatePlaylistResponseDto,
     schema: {
       example: {
         playlistId: 'pl_101',
@@ -90,6 +94,15 @@ export class PlaylistsController {
         visibility: 'PUBLIC',
         secretToken: null,
         genre: null,
+        releaseDate: null,
+        coverImageUrl: null,
+        tracksCount: 2,
+        likesCount: 0,
+        isLiked: false,
+        owner: {
+          id: 'usr_1',
+          displayName: 'Ahmed Hassan',
+        },
       },
     },
   })
@@ -129,8 +142,8 @@ export class PlaylistsController {
       },
     },
   })
-  getTopPlaylists() {
-    return this.playlistsService.getTopPlaylists();
+  getTopPlaylists(@CurrentUser('userId') userId?: string) {
+    return this.playlistsService.getTopPlaylists(userId);
   }
 
   @Get("me")
@@ -170,6 +183,26 @@ export class PlaylistsController {
     @Query() query: PlaylistPaginationQueryDto,
   ) {
     return this.playlistsService.getMyPlaylists(userId, query);
+  }
+
+  @Get('me/liked')
+  @ApiOperation({
+    summary: 'Get liked playlists',
+    description: 'Returns playlists liked by the authenticated user.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiResponse({
+    status: 200,
+    description: 'Liked playlists fetched successfully.',
+    type: GetPlaylistLikedResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  getMeLikedPlaylists(
+    @CurrentUser('userId') userId: string,
+    @Query() query: PlaylistPaginationQueryDto,
+  ) {
+    return this.playlistsService.getMeLikedPlaylists(userId, query);
   }
 
   @Get('secret/:secretToken')
@@ -265,9 +298,9 @@ export class PlaylistsController {
   @ThrottlePolicy(60, 60_000)
   likePlaylist(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
   ) {
-    return this.playlistsService.likePlaylist(userId, params.playlistId);
+    return this.playlistsService.likePlaylist(userId, playlistId);
   }
 
   @Delete(':playlistId/like')
@@ -290,9 +323,39 @@ export class PlaylistsController {
   @ThrottlePolicy(60, 60_000)
   unlikePlaylist(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
   ) {
-    return this.playlistsService.unlikePlaylist(userId, params.playlistId);
+    return this.playlistsService.unlikePlaylist(userId, playlistId);
+  }
+
+  @Post(':playlistId/play')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Record playlist playback',
+    description: 'Records a playback event for the playlist. The playlist will appear in user\'s recent playlists.',
+  })
+  @ApiParam({
+    name: 'playlistId',
+    description: 'Playlist identifier',
+    example: 'pl_101',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Playback recorded successfully.',
+    schema: {
+      example: {
+        message: 'Playback recorded successfully',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'Playlist not found.' })
+  @ThrottlePolicy(60, 60_000)
+  play(
+    @CurrentUser('userId') userId: string,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
+  ) {
+    return this.playlistsService.play(userId, playlistId);
   }
 
   @Get(':playlistId/embed')
@@ -332,10 +395,10 @@ export class PlaylistsController {
   @ThrottlePolicy(30, 60_000)
   getEmbedCode(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistEmbedCodeParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
     @Query() query: GetPlaylistEmbedCodeQueryDto,
   ) {
-    return this.playlistsService.getEmbedCode(userId, params.playlistId, query);
+    return this.playlistsService.getEmbedCode(userId, playlistId, query);
   }
 
   @Get(':playlistId/edit')
@@ -383,9 +446,9 @@ export class PlaylistsController {
   @ThrottlePolicy(30, 60_000)
   getEditDetails(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
   ) {
-    return this.playlistsService.getEditDetails(userId, params.playlistId);
+    return this.playlistsService.getEditDetails(userId, playlistId);
   }
 
   @Post(':playlistId/cover')
@@ -450,11 +513,11 @@ export class PlaylistsController {
   @ThrottlePolicy(20, 60_000)
   uploadCover(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
     @UploadedFile()
     file: Express.Multer.File,
   ) {
-    return this.playlistsService.uploadCover(userId, params.playlistId, file);
+    return this.playlistsService.uploadCover(userId, playlistId, file);
   }
 
   @Post(':playlistId/tracks')
@@ -508,10 +571,10 @@ export class PlaylistsController {
   @ThrottlePolicy(60, 60_000)
   addTrack(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
     @Body() dto: AddTrackToPlaylistDto,
   ) {
-    return this.playlistsService.addTrack(userId, params.playlistId, dto);
+    return this.playlistsService.addTrack(userId, playlistId, dto);
   }
 
   @Delete(':playlistId/tracks/:trackId')
@@ -553,9 +616,10 @@ export class PlaylistsController {
   @ThrottlePolicy(60, 60_000)
   removeTrack(
     @CurrentUser('userId') userId: string,
-    @Param() params: RemoveTrackFromPlaylistParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
+    @Param('trackId', new ParseUUIDPipe()) trackId: string,
   ) {
-    return this.playlistsService.removeTrack(userId, params.playlistId, params.trackId);
+    return this.playlistsService.removeTrack(userId, playlistId, trackId);
   }
 
   @Patch(':playlistId/reorder')
@@ -608,10 +672,10 @@ export class PlaylistsController {
   @ThrottlePolicy(40, 60_000)
   reorderTracks(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
     @Body() dto: ReorderPlaylistTracksDto,
   ) {
-    return this.playlistsService.reorderTracks(userId, params.playlistId, dto);
+    return this.playlistsService.reorderTracks(userId, playlistId, dto);
   }
 
   @Get(':playlistId')
@@ -660,10 +724,10 @@ export class PlaylistsController {
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
   getDetails(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
     @Query() query: PlaylistTracksQueryDto,
   ) {
-    return this.playlistsService.getDetails(params.playlistId, userId, query);
+    return this.playlistsService.getDetails(playlistId, userId, query);
   }
 
   @Patch(':playlistId')
@@ -732,10 +796,10 @@ export class PlaylistsController {
   @ThrottlePolicy(30, 60_000)
   update(
     @CurrentUser('userId') userId: string,
-    @Param() params: GetPlaylistDetailsParamsDto,
+    @Param('playlistId', new ParseUUIDPipe()) playlistId: string,
     @Body() dto: UpdatePlaylistDto,
   ) {
-    return this.playlistsService.update(userId, params.playlistId, dto);
+    return this.playlistsService.update(userId, playlistId, dto);
   }
 
   @Delete(':playlistId')
@@ -764,8 +828,8 @@ export class PlaylistsController {
   })
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
   @ThrottlePolicy(20, 60_000)
-  remove(@CurrentUser('userId') userId: string, @Param() params: DeletePlaylistParamsDto) {
-    this.playlistsService.remove(userId, params.playlistId);
+  remove(@CurrentUser('userId') userId: string, @Param('playlistId', new ParseUUIDPipe()) playlistId: string) {
+    this.playlistsService.remove(userId, playlistId);
   }
 }
 // mmary: "Delete playlist",

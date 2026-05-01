@@ -1,25 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-export class TopPlaylistItemDto {
-  @ApiProperty({ example: 'pl_101' })
-  playlistId!: string;
-
-  @ApiProperty({ example: 'Late Night Drive' })
-  title!: string;
-
-  @ApiProperty({ example: 'PUBLIC' })
-  visibility!: string;
-
-  @ApiProperty({ example: 48 })
-  likesCount!: number;
-}
+import { PlaylistItemDto } from './playlist-item.dto';
 
 export class TopGenrePlaylistsDto {
   @ApiProperty({ example: 'Electronic' })
   genre!: string;
 
-  @ApiProperty({ type: () => TopPlaylistItemDto, isArray: true })
-  playlists!: TopPlaylistItemDto[];
+  @ApiProperty({ type: () => PlaylistItemDto, isArray: true })
+  playlists!: PlaylistItemDto[];
 }
 
 export class GetTopPlaylistsResponseDto {
