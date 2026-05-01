@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
 import { InvoiceStatus, SubscriptionStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
@@ -36,20 +35,10 @@ export class TrialSchedulerService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly subscriptionsService: SubscriptionsService,
-    private readonly config: ConfigService,
   ) {
     this.paymentFeaturesEnabled =
       (process.env.ENABLE_PAYMENT_FEATURES ??
         (process.env.NODE_ENV === "test" ? "true" : "false")) === "true";
-  }
-
-  private isRealStripeBilling(): boolean {
-    const provider =
-      this.config.get<string>("billing.provider") ??
-      this.config.get<string>("BILLING_PROVIDER") ??
-      process.env.BILLING_PROVIDER ??
-      "mock_stripe";
-    return provider === "stripe";
   }
 
   /**
@@ -143,12 +132,6 @@ export class TrialSchedulerService {
       return;
     }
 
-    // Real Stripe handles trial conversion through invoice/customer.subscription webhooks.
-    // Do not create mock invoices/subscription IDs in real billing mode.
-    if (this.isRealStripeBilling()) {
-      return;
-    }
-
     const now = new Date();
     const newPeriodEnd = addOneMonth(now); // +1 calendar month
 
@@ -228,12 +211,6 @@ export class TrialSchedulerService {
   @Cron("0 * * * *")
   async autoRenewActiveSubscriptions(): Promise<void> {
     if (!this.paymentFeaturesEnabled) {
-      return;
-    }
-
-    // Real Stripe renewals are driven by invoice.paid / invoice.payment_failed webhooks.
-    // Do not generate fake renewal invoices or mock subscription IDs in real billing mode.
-    if (this.isRealStripeBilling()) {
       return;
     }
 
@@ -384,6 +361,3 @@ export class TrialSchedulerService {
     }
   }
 }
-
-
-

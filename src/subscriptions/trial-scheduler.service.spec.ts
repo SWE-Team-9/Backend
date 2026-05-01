@@ -1,5 +1,4 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { ConfigService } from "@nestjs/config";
 import { InvoiceStatus, SubscriptionStatus, SubscriptionTier } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -47,14 +46,6 @@ const mockSubscriptionsService = {
   applyPlanLimitToTracks: jest.fn().mockResolvedValue(undefined),
 };
 
-let billingProvider = "mock_stripe";
-const mockConfigService = {
-  get: jest.fn((key: string, fallback?: unknown) => {
-    if (key === "billing.provider" || key === "BILLING_PROVIDER") return billingProvider;
-    return fallback;
-  }),
-};
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Helper builders
 // ──────────────────────────────────────────────────────────────────────────────
@@ -91,7 +82,6 @@ describe("TrialSchedulerService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    billingProvider = "mock_stripe";
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -99,7 +89,6 @@ describe("TrialSchedulerService", () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MailService, useValue: mockMailService },
         { provide: SubscriptionsService, useValue: mockSubscriptionsService },
-        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -315,30 +304,6 @@ describe("TrialSchedulerService", () => {
       await service.autoRenewActiveSubscriptions();
 
       expect(mockPrisma.userSubscription.update).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("real Stripe billing mode", () => {
-    it("skips expired trial auto-renewal because Stripe webhooks handle it", async () => {
-      billingProvider = "stripe";
-      mockPrisma.userSubscription.findMany.mockResolvedValue([makeTrialSub()]);
-
-      await service.autoRenewExpiredTrials();
-
-      expect(mockPrisma.userSubscription.findMany).not.toHaveBeenCalled();
-      expect(mockPrisma.billingInvoice.create).not.toHaveBeenCalled();
-      expect(mockPrisma.userSubscription.update).not.toHaveBeenCalled();
-    });
-
-    it("skips active subscription auto-renewal because Stripe invoice webhooks handle it", async () => {
-      billingProvider = "stripe";
-      mockPrisma.userSubscription.findMany.mockResolvedValue([makeTrialSub()]);
-
-      await service.autoRenewActiveSubscriptions();
-
-      expect(mockPrisma.userSubscription.findMany).not.toHaveBeenCalled();
-      expect(mockPrisma.billingInvoice.create).not.toHaveBeenCalled();
-      expect(mockPrisma.userSubscription.update).not.toHaveBeenCalled();
     });
   });
 
