@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { GetPlaylistDetailsResponseDto } from './get-playlist-details-response.dto';
 import { IsNotEmpty, IsString } from 'class-validator';
 
 export class ResolveSecretPlaylistParamsDto {
@@ -7,16 +7,4 @@ export class ResolveSecretPlaylistParamsDto {
   secretToken!: string;
 }
 
-export class ResolveSecretPlaylistResponseDto {
-  @ApiProperty({ example: 'pl_101' })
-  playlistId!: string;
-
-  @ApiProperty({ example: 'Late Night Drive' })
-  title!: string;
-
-  @ApiProperty({ enum: ['PRIVATE'], example: 'PRIVATE' })
-  visibility!: 'PRIVATE';
-
-  @ApiProperty({ example: 'Access granted via secret token' })
-  message!: string;
-}
+export class ResolveSecretPlaylistResponseDto extends GetPlaylistDetailsResponseDto {}

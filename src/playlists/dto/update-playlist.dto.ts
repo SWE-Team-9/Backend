@@ -44,13 +44,15 @@ export class UpdatePlaylistDto {
 
   @ApiPropertyOptional({
     description: 'Playlist visibility',
-    enum: ['PUBLIC', 'SECRET', 'PRIVATE'],
-    example: 'PRIVATE',
+    enum: ['public', 'secret'],
+    example: 'secret',
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
-  @IsIn(['PUBLIC', 'SECRET', 'PRIVATE'])
-  visibility?: 'PUBLIC' | 'SECRET' | 'PRIVATE';
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @IsIn(['public', 'secret'], {
+    message: 'visibility must be one of the following values: public, secret',
+  })
+  visibility?: 'public' | 'secret';
 
   @ApiPropertyOptional({
     description: 'Playlist type',
