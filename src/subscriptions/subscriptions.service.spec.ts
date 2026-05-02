@@ -697,6 +697,45 @@ describe('SubscriptionsService', () => {
       expect(billing.cancelSubscription).not.toHaveBeenCalled();
       expect(mail.sendCancellationConfirmedEmail).not.toHaveBeenCalled();
     });
+
+    it('converts a scheduled plan change into full cancellation', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        paymentMethod: {
+          brand: 'visa',
+          last4: '4242',
+          pendingDowngrade: {
+            planCode: 'GO_PLUS',
+            planId: 'plan-go-plus',
+            planName: 'Go+',
+            effectiveAt: FUTURE.toISOString(),
+          },
+        },
+      });
+      prisma.userSubscription.findFirst.mockResolvedValue(sub);
+
+      const result = await service.cancelSubscription(USER_ID, dto);
+
+      expect(billing.cancelSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerSubscriptionId: sub.stripeSubscriptionId,
+          cancelAtPeriodEnd: true,
+        }),
+      );
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: sub.id },
+          data: expect.objectContaining({
+            cancelAtPeriodEnd: true,
+            paymentMethod: expect.not.objectContaining({
+              pendingDowngrade: expect.anything(),
+            }),
+          }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.message).toContain('full access');
+    });
   });
 
   describe('cancelPendingPlanChange()', () => {
