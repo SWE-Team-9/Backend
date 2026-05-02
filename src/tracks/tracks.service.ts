@@ -777,6 +777,16 @@ export class TracksService {
     };
   }
 
+  async findTrackShareTarget(identifier: string): Promise<{ id: string } | null> {
+    return this.prisma.track.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [{ id: identifier }, { slug: identifier }],
+      },
+      select: { id: true },
+    });
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ══════════════════════════════════════════════════════════════════════════

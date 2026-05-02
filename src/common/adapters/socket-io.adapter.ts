@@ -30,6 +30,7 @@ export class SocketIoAdapter extends IoAdapter {
 
     this.sharedServer = super.createIOServer(port, {
       ...options,
+      path: '/api/v1/socket.io',
       cors: {
         origin: true, // mirrors the request Origin back (supports all dev origins)
         credentials: true,

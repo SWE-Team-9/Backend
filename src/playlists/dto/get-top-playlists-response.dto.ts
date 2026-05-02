@@ -10,6 +10,9 @@ export class TopGenrePlaylistsDto {
 }
 
 export class GetTopPlaylistsResponseDto {
+  @ApiProperty({ type: () => PlaylistItemDto, isArray: true })
+  topPlaylists!: PlaylistItemDto[];
+
   @ApiProperty({ type: () => TopGenrePlaylistsDto, isArray: true })
   genres!: TopGenrePlaylistsDto[];
 }

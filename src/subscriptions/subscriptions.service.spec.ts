@@ -718,7 +718,6 @@ describe('SubscriptionsService', () => {
       });
       expect(billing.resumeSubscription).not.toHaveBeenCalled();
     });
-
     it('throws SUBSCRIPTION_PROVIDER_ID_MISSING when provider subscription id is absent', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, {
@@ -733,6 +732,34 @@ describe('SubscriptionsService', () => {
       expect(billing.resumeSubscription).not.toHaveBeenCalled();
     });
 
+    it('throws INVALID_PROVIDER_SUBSCRIPTION_ID for malformed Stripe id in real Stripe mode', async () => {
+      const configGet = (service as any).config.get as jest.Mock;
+      configGet.mockImplementation((key: string, fallback?: unknown) => {
+        if (key === 'billing.provider' || key === 'BILLING_PROVIDER') return 'stripe';
+        const cfg: Record<string, unknown> = {
+          'storage.provider': 'local',
+          'storage.localUploadUrl': 'http://localhost:3000/uploads',
+          'storage.s3Bucket': '',
+          'storage.s3Region': 'us-east-1',
+          'storage.awsAccessKeyId': '',
+          'storage.awsSecretAccessKey': '',
+        };
+        return cfg[key] ?? fallback;
+      });
+
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: 'bad_id_123',
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(BadRequestException);
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'INVALID_PROVIDER_SUBSCRIPTION_ID' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
     it('maps provider missing-subscription error to ConflictException instead of 500', async () => {
       const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
         cancelAtPeriodEnd: true,
