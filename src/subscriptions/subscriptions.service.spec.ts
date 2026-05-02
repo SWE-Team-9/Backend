@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -680,6 +681,90 @@ describe('SubscriptionsService', () => {
         }),
       );
       expect(result.planCode).toBe('PRO');
+    });
+
+    it('throws SUBSCRIPTION_PROVIDER_ID_MISSING when provider subscription id is absent', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: null,
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'SUBSCRIPTION_PROVIDER_ID_MISSING' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
+
+    it('throws SUBSCRIPTION_PROVIDER_NOT_READY when provider id is a checkout session id', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: 'cs_test_123',
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'SUBSCRIPTION_PROVIDER_NOT_READY' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_PROVIDER_SUBSCRIPTION_ID for malformed Stripe id in real Stripe mode', async () => {
+      const configGet = (service as any).config.get as jest.Mock;
+      configGet.mockImplementation((key: string, fallback?: unknown) => {
+        if (key === 'billing.provider' || key === 'BILLING_PROVIDER') return 'stripe';
+        const cfg: Record<string, unknown> = {
+          'storage.provider': 'local',
+          'storage.localUploadUrl': 'http://localhost:3000/uploads',
+          'storage.s3Bucket': '',
+          'storage.s3Region': 'us-east-1',
+          'storage.awsAccessKeyId': '',
+          'storage.awsSecretAccessKey': '',
+        };
+        return cfg[key] ?? fallback;
+      });
+
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: 'bad_id_123',
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(BadRequestException);
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'INVALID_PROVIDER_SUBSCRIPTION_ID' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
+
+    it('maps provider missing-subscription error to ConflictException instead of 500', async () => {
+      const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        stripeSubscriptionId: 'sub_missing_123',
+      });
+      prisma.userSubscription.findFirst.mockResolvedValue(canceledSub);
+      billing.resumeSubscription.mockRejectedValue(new Error('No such subscription: sub_missing_123'));
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(ConflictException);
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'PROVIDER_SUBSCRIPTION_NOT_FOUND' }),
+      });
+    });
+
+    it('maps unexpected provider errors to BadGatewayException instead of 500', async () => {
+      const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+      });
+      prisma.userSubscription.findFirst.mockResolvedValue(canceledSub);
+      billing.resumeSubscription.mockRejectedValue(new Error('Stripe timeout'));
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(BadGatewayException);
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'BILLING_PROVIDER_RESUME_FAILED' }),
+      });
     });
   });
 

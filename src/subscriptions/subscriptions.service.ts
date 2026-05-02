@@ -1,9 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -643,9 +645,58 @@ export class SubscriptionsService {
         message: 'Your subscription is not set to cancel.',
       });
     }
-    await this.billing.resumeSubscription({
-      providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
-    });
+
+    const providerSubscriptionId = (sub.stripeSubscriptionId ?? '').trim();
+    if (!providerSubscriptionId) {
+      throw new ConflictException({
+        code: 'SUBSCRIPTION_PROVIDER_ID_MISSING',
+        message:
+          'This subscription cannot be resumed because the billing provider subscription ID is missing.',
+      });
+    }
+
+    if (providerSubscriptionId.startsWith('cs_')) {
+      throw new ConflictException({
+        code: 'SUBSCRIPTION_PROVIDER_NOT_READY',
+        message:
+          'This subscription is still linked to a checkout session and cannot be resumed yet. Please retry shortly.',
+      });
+    }
+
+    if (this.isRealStripeBilling() && !providerSubscriptionId.startsWith('sub_')) {
+      throw new BadRequestException({
+        code: 'INVALID_PROVIDER_SUBSCRIPTION_ID',
+        message: 'Invalid Stripe subscription ID format for resume operation.',
+        details: { expectedPrefix: 'sub_' },
+      });
+    }
+
+    try {
+      await this.billing.resumeSubscription({ providerSubscriptionId });
+    } catch (err: unknown) {
+      if (err instanceof HttpException) throw err;
+
+      const rawMessage = err instanceof Error ? err.message : String(err);
+      const normalized = rawMessage.toLowerCase();
+
+      if (
+        normalized.includes('no such subscription') ||
+        normalized.includes('resource_missing') ||
+        normalized.includes('not found')
+      ) {
+        throw new ConflictException({
+          code: 'PROVIDER_SUBSCRIPTION_NOT_FOUND',
+          message: 'Billing provider subscription was not found; it cannot be resumed.',
+        });
+      }
+
+      throw new BadGatewayException({
+        code: 'BILLING_PROVIDER_RESUME_FAILED',
+        message:
+          'Failed to resume subscription with billing provider. Please try again shortly.',
+      });
+    }
+
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
       data: { cancelAtPeriodEnd: false, canceledAt: null },
