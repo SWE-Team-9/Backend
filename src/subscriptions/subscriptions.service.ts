@@ -589,11 +589,13 @@ export class SubscriptionsService {
     }
 
     if (sub.cancelAtPeriodEnd) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_ALREADY_CANCELED',
-        message: 'Your subscription is already scheduled to cancel.',
-        details: { expiresAt: sub.currentPeriodEnd.toISOString() },
-      });
+      return {
+        message:
+          'Subscription is already scheduled to cancel at end of billing period. You keep full access until then.',
+        cancelledAt: sub.canceledAt?.toISOString() ?? null,
+        expiresAt: sub.currentPeriodEnd.toISOString(),
+        cancelAtPeriodEnd: true,
+      };
     }
 
     const now = new Date();
@@ -970,6 +972,7 @@ export class SubscriptionsService {
     switch (event.type) {
       case 'checkout.session.completed': {
         const realSubId = obj['subscription'] as string | undefined;
+        const realCustomerId = obj['customer'] as string | undefined;
         const metadata = (obj['metadata'] as Record<string, unknown> | undefined) ?? {};
         const trialEligible = metadata['trialEligible'] === 'true';
         const trialDays = Number(metadata['trialDays'] ?? 0);
@@ -988,6 +991,9 @@ export class SubscriptionsService {
 
         if (realSubId && realSubId !== sub.stripeSubscriptionId) {
           updateData.stripeSubscriptionId = realSubId;
+        }
+        if (realCustomerId && realCustomerId !== sub.stripeCustomerId) {
+          updateData.stripeCustomerId = realCustomerId;
         }
 
         await this.prisma.userSubscription.update({
@@ -1120,6 +1126,7 @@ export class SubscriptionsService {
         break;
       }
 
+      case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const newStatus = obj['status'] as string | undefined;
         const cancelAtEnd = obj['cancel_at_period_end'] as boolean | undefined;
@@ -1127,6 +1134,10 @@ export class SubscriptionsService {
         const currentPeriodEnd = obj['current_period_end'] as number | undefined;
         const canceledAt = obj['canceled_at'] as number | null | undefined;
         const updateData: Record<string, unknown> = {};
+        const stripePriceId = (
+          (obj['items'] as { data?: Array<{ price?: { id?: string } }> } | undefined)
+            ?.data?.[0]?.price?.id
+        );
 
         if (newStatus) updateData.status = this.mapStripeStatus(newStatus);
         if (cancelAtEnd !== undefined) updateData.cancelAtPeriodEnd = cancelAtEnd;
@@ -1134,6 +1145,13 @@ export class SubscriptionsService {
         if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd * 1000);
         if (canceledAt !== undefined) {
           updateData.canceledAt = canceledAt ? new Date(canceledAt * 1000) : null;
+        }
+        if (stripePriceId) {
+          const webhookPlan = await this.prisma.subscriptionPlan.findFirst({
+            where: { stripePriceId, isActive: true },
+            select: { id: true },
+          });
+          if (webhookPlan) updateData.planId = webhookPlan.id;
         }
 
         if (Object.keys(updateData).length) {

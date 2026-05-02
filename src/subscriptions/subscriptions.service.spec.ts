@@ -648,14 +648,16 @@ describe('SubscriptionsService', () => {
       expect(result.message).toContain('full access');
     });
 
-    it('throws SUBSCRIPTION_ALREADY_CANCELED if already canceling', async () => {
+    it('is idempotent if cancellation is already scheduled', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true }),
       );
 
-      await expect(service.cancelSubscription(USER_ID, dto)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'SUBSCRIPTION_ALREADY_CANCELED' }),
-      });
+      const result = await service.cancelSubscription(USER_ID, dto);
+
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.expiresAt).toBe(FUTURE.toISOString());
+      expect(billing.cancelSubscription).not.toHaveBeenCalled();
     });
   });
 
@@ -1000,6 +1002,7 @@ describe('SubscriptionsService', () => {
       await service.handleStripeWebhook(
         makeWebhookBuffer('checkout.session.completed', {
           id: 'cs_test_pending',
+          customer: 'cus_test_finalized',
           subscription: 'sub_test_finalized',
           metadata: { trialEligible: 'false', trialDays: '0' },
         }),
@@ -1010,6 +1013,7 @@ describe('SubscriptionsService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             stripeSubscriptionId: 'sub_test_finalized',
+            stripeCustomerId: 'cus_test_finalized',
             status: SubscriptionStatus.ACTIVE,
             cancelAtPeriodEnd: false,
             paymentFailureAt: null,
@@ -1019,7 +1023,12 @@ describe('SubscriptionsService', () => {
       );
     });
 
-    it('customer.subscription.updated syncs cancellation and period fields', async () => {
+    it('customer.subscription.updated syncs cancellation, plan, and period fields', async () => {
+      prisma.subscriptionPlan.findFirst.mockResolvedValueOnce({
+        ...makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
+        stripePriceId: 'price_go_plus',
+      });
+
       await service.handleStripeWebhook(
         makeWebhookBuffer('customer.subscription.updated', {
           id: 'sub_mock_test',
@@ -1028,6 +1037,7 @@ describe('SubscriptionsService', () => {
           current_period_start: 1770000000,
           current_period_end: 1772600000,
           canceled_at: 1769999000,
+          items: { data: [{ price: { id: 'price_go_plus' } }] },
         }),
         '',
       );
@@ -1040,6 +1050,7 @@ describe('SubscriptionsService', () => {
             currentPeriodStart: new Date(1770000000 * 1000),
             currentPeriodEnd: new Date(1772600000 * 1000),
             canceledAt: new Date(1769999000 * 1000),
+            planId: 'plan-go-plus',
           }),
         }),
       );
