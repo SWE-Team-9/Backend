@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, ReportStatus, ReportTargetType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AdminUsersQueryDto,
@@ -11,6 +11,90 @@ import {
 @Injectable()
 export class AdminUsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async buildReportCountMap(userIds: string[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    for (const userId of userIds) counts.set(userId, 0);
+    if (userIds.length === 0) return counts;
+
+    const [tracks, playlists, comments] = await Promise.all([
+      this.prisma.track.findMany({
+        where: { uploaderId: { in: userIds } },
+        select: { id: true, uploaderId: true },
+      }),
+      this.prisma.playlist.findMany({
+        where: { ownerId: { in: userIds } },
+        select: { id: true, ownerId: true },
+      }),
+      this.prisma.comment.findMany({
+        where: { userId: { in: userIds } },
+        select: { id: true, userId: true },
+      }),
+    ]);
+
+    const trackOwnerById = new Map(tracks.map((t) => [t.id, t.uploaderId]));
+    const playlistOwnerById = new Map(playlists.map((p) => [p.id, p.ownerId]));
+    const commentOwnerById = new Map(comments.map((c) => [c.id, c.userId]));
+
+    const orFilters: Prisma.ReportWhereInput[] = [];
+    if (userIds.length > 0) {
+      orFilters.push({
+        targetType: ReportTargetType.USER,
+        targetId: { in: userIds },
+      });
+    }
+    if (tracks.length > 0) {
+      orFilters.push({
+        targetType: ReportTargetType.TRACK,
+        targetId: { in: tracks.map((t) => t.id) },
+      });
+    }
+    if (playlists.length > 0) {
+      orFilters.push({
+        targetType: ReportTargetType.PLAYLIST,
+        targetId: { in: playlists.map((p) => p.id) },
+      });
+    }
+    if (comments.length > 0) {
+      orFilters.push({
+        targetType: ReportTargetType.COMMENT,
+        targetId: { in: comments.map((c) => c.id) },
+      });
+    }
+
+    if (orFilters.length === 0) return counts;
+
+    const reports = await this.prisma.report.findMany({
+      where: {
+        status: { not: ReportStatus.REJECTED },
+        OR: orFilters,
+      },
+      select: {
+        targetType: true,
+        targetId: true,
+      },
+    });
+
+    for (const report of reports) {
+      let ownerId: string | undefined;
+
+      if (report.targetType === ReportTargetType.USER) {
+        ownerId = report.targetId;
+      } else if (report.targetType === ReportTargetType.TRACK) {
+        ownerId = trackOwnerById.get(report.targetId);
+      } else if (report.targetType === ReportTargetType.PLAYLIST) {
+        ownerId = playlistOwnerById.get(report.targetId);
+      } else if (report.targetType === ReportTargetType.COMMENT) {
+        ownerId = commentOwnerById.get(report.targetId);
+      }
+
+      if (ownerId && counts.has(ownerId)) {
+        counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+      }
+    }
+
+    return counts;
+  }
 
   // ─── In-memory TTL cache (5-minute TTL for expensive stat queries) ─────────────────
 
@@ -94,12 +178,14 @@ export class AdminUsersService {
           _count: {
             select: {
               tracks: true,
-              submittedReports: true,
+              reportedIn: true,
             },
           },
         },
       }),
     ]);
+
+    const reportCounts = await this.buildReportCountMap(users.map((u) => u.id));
 
     return {
       page,
@@ -117,7 +203,7 @@ export class AdminUsersService {
         account_status: u.accountStatus,
         is_verified: u.isVerified,
         track_count: u._count.tracks,
-        report_count: u._count.submittedReports,
+        report_count: (reportCounts.get(u.id) ?? 0) + u._count.reportedIn,
         last_login_at: u.lastLoginAt,
         created_at: u.createdAt,
       })),

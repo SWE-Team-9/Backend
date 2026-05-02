@@ -8,6 +8,7 @@ const mockPrisma = {
   track: { findUnique: jest.fn(), update: jest.fn() },
   comment: { findUnique: jest.fn(), update: jest.fn() },
   playlist: { findUnique: jest.fn(), update: jest.fn() },
+  moderationReport: { findUnique: jest.fn() },
   moderationAction: { create: jest.fn() },
 };
 
@@ -29,6 +30,7 @@ describe("ContentModerationService", () => {
 
     service = module.get<ContentModerationService>(ContentModerationService);
     jest.clearAllMocks();
+    mockPrisma.moderationReport.findUnique.mockResolvedValue(null);
   });
 
   // 1. moderateTrack - 404 when track not found
@@ -89,6 +91,37 @@ describe("ContentModerationService", () => {
       }),
     );
     expect(result.action_type).toBe("HIDE_TRACK");
+  });
+
+  it("moderateTrack: ignores unknown reportId when linking moderation action", async () => {
+    mockPrisma.track.findUnique.mockResolvedValueOnce({
+      id: "track-legacy",
+      title: "Legacy Track",
+      uploaderId: "user-1",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.moderationReport.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.track.update.mockResolvedValueOnce({});
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-legacy",
+      actionType: "HIDE_TRACK",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+
+    await service.moderateTrack("admin-1", "track-legacy", {
+      moderationState: "HIDDEN",
+      reason: "This content violates community guidelines.",
+      reportId: "not-a-legacy-moderation-report-id",
+    });
+
+    expect(mockPrisma.moderationAction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reportId: undefined,
+        }),
+      }),
+    );
   });
 
   // 4. moderateTrack - emits notification to uploader
