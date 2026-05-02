@@ -22,10 +22,11 @@ const mockPrisma = {
   },
   report: {
     count: jest.fn(),
+    findMany: jest.fn(),
   },
-  track: { count: jest.fn() },
-  playlist: { count: jest.fn() },
-  comment: { count: jest.fn() },
+  track: { count: jest.fn(), findMany: jest.fn() },
+  playlist: { count: jest.fn(), findMany: jest.fn() },
+  comment: { count: jest.fn(), findMany: jest.fn() },
   like: { count: jest.fn() },
   repost: { count: jest.fn() },
   playEvent: { count: jest.fn() },
@@ -47,6 +48,11 @@ describe("AdminUsersService", () => {
     jest.clearAllMocks();
     // Clear TTL cache between tests
     (service as unknown as { cache: Map<string, unknown> }).cache.clear();
+
+    mockPrisma.track.findMany.mockResolvedValue([]);
+    mockPrisma.playlist.findMany.mockResolvedValue([]);
+    mockPrisma.comment.findMany.mockResolvedValue([]);
+    mockPrisma.report.findMany.mockResolvedValue([]);
   });
 
   // ─── getUserDetail ────────────────────────────────────────────────────────────
@@ -122,7 +128,7 @@ describe("AdminUsersService", () => {
             avatarUrl: null,
             accountType: "FREE",
           },
-          _count: { tracks: 2, submittedReports: 0 },
+          _count: { tracks: 2, reportedIn: 0 },
         },
       ]);
 
