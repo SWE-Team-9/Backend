@@ -39,7 +39,7 @@ const PLAN_CATALOG: Record<
   },
   GO_PLUS: {
     priceCents: 1999,
-    trialDays: 30,
+    trialDays: 0,
     uploadLimit: 1000,
     adsEnabled: false,
     canDownload: true,
