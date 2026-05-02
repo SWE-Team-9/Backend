@@ -129,7 +129,7 @@ export class PlaylistsController {
       example: {
         genres: [
           {
-            genre: "Electronic",
+            genre: "electronic",
             playlists: [
               {
                 playlistId: "pl_101",
@@ -172,7 +172,7 @@ export class PlaylistsController {
             visibility: 'PUBLIC',
             tracksCount: 12,
             likesCount: 10,
-            genre: 'Electronic',
+            genre: 'electronic',
           },
         ],
       },
@@ -283,7 +283,7 @@ export class PlaylistsController {
             playlistId: 'pl_101',
             title: 'Late Night Drive',
             coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
-            genre: 'Electronic',
+            genre: 'electronic',
             owner: {
               id: 'usr_1',
               display_name: 'Ahmed Hassan',
@@ -873,67 +873,4 @@ export class PlaylistsController {
     return this.playlistsService.remove(userId, playlistId);
   }
 }
-// mmary: "Delete playlist",
-//     description: "Permanently deletes a playlist. Owner only.",
-//   })
-//   @ApiParam({
-//     name: "playlistId",
-//     description: "Playlist identifier",
-//     example: "pl_101",
-//   })
-//   @ApiResponse({ status: 204, description: "Playlist deleted successfully." })
-//   @ApiResponse({ status: 401, description: "Not authenticated." })
-//   @ApiResponse({
-//     status: 403,
-//     description: "Only playlist owner can delete this playlist.",
-//   })
-//   @ApiResponse({ status: 404, description: "Playlist not found." })
-//   @ThrottlePolicy(20, 60_000)
-//   remove(@CurrentUser("userId") userId: string, @Param() params: DeletePlaylistParamsDto) {
-// e,
-//       transform: true,
-//     }),
-//   )
-//   @ApiOperation({
-//     summary: 'Delete playlist',
-//     description: 'Permanently deletes a playlist. Owner only.',
-//   })
-//   @ApiParam({
-//     name: 'playlistId',
-//     description: 'Playlist identifier',
-//     example: 'pl_101',
-//   })
-//   @ApiResponse({ status: 204, description: 'Playlist deleted successfully.' })
-//   @ApiResponse({ status: 401, description: 'Not authenticated.' })
-//   @ApiResponse({
-//     status: 403,
-//     description: 'Only playlist owner can delete this playlist.',
-//   })
-//   @ApiResponse({ status: 404, description: 'Playlist not found.' })
-//   @ThrottlePolicy(20, 60_000)
-//   remove(@CurrentUser('userId') userId: string, @Param() params: DeletePlaylistParamsDto) {
-// Whitelisted: true,
-//       transform: true,
-//     }),
-//   )
-//   @ApiOperation({
-//     summary: "Delete playlist",
-//     description: "Permanently deletes a playlist. Owner only.",
-//   })
-//   @ApiParam({
-//     name: "playlistId",
-//     description: "Playlist identifier",
-//     example: "pl_101",
-//   })
-//   @ApiResponse({ status: 204, description: "Playlist deleted successfully." })
-//   @ApiResponse({ status: 401, description: "Not authenticated." })
-//   @ApiResponse({
-//     status: 403,
-//     description: "Only playlist owner can delete this playlist.",
-//   })
-//   @ApiResponse({ status: 404, description: "Playlist not found." })
-//   @ThrottlePolicy(20, 60_000)
-//   remove(@CurrentUser("userId") userId: string, @Param() params: DeletePlaylistParamsDto) {
-//     this.playlistsService.remove(userId, params.playlistId);
-//   }
-// }
+

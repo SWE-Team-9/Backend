@@ -9,9 +9,28 @@ import {
   IsString,
   MaxLength,
   MinLength,
+  Validate,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PlaylistType } from '@prisma/client';
+
+@ValidatorConstraint({ name: 'isValidVisibility', async: false })
+class IsValidVisibilityConstraint implements ValidatorConstraintInterface {
+  validate(value: any, args: ValidationArguments) {
+    if (value === undefined) return true; // optional field
+    if (typeof value !== 'string') return false;
+    const normalized = value.toLowerCase().trim();
+    if (normalized === 'private') return false; // explicitly reject 'private'
+    return normalized === 'public' || normalized === 'secret';
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'visibility must be one of the following values: public, secret. "private" is not allowed.';
+  }
+}
 
 export class UpdatePlaylistDto {
   @ApiPropertyOptional({
@@ -49,9 +68,7 @@ export class UpdatePlaylistDto {
   })
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
-  @IsIn(['public', 'secret'], {
-    message: 'visibility must be one of the following values: public, secret',
-  })
+  @Validate(IsValidVisibilityConstraint)
   visibility?: 'public' | 'secret';
 
   @ApiPropertyOptional({

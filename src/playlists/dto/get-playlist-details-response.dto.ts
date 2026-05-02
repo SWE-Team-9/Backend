@@ -39,7 +39,7 @@ export class GetPlaylistDetailsResponseDto {
   secretToken?: string | null;
 
   @ApiPropertyOptional({
-    example: 'Electronic',
+    example: 'electronic',
     nullable: true,
   })
   genre!: string | null;
