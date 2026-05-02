@@ -40,6 +40,21 @@ export class ContentModerationService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
+  
+  private async resolveModerationReportId(
+    reportId?: string,
+  ): Promise<string | undefined> {
+    if (!reportId) {
+      return undefined;
+    }
+    
+    const report = await this.prisma.moderationReport.findUnique({
+      where: { id: reportId },
+      select: { id: true },
+    });
+    
+    return report?.id;
+  }
 
   // ─── Moderate track ──────────────────────────────────────────────────────────
 
@@ -76,6 +91,8 @@ export class ContentModerationService {
       data: { moderationState: dto.moderationState },
     });
 
+    const moderationReportId = await this.resolveModerationReportId(dto.reportId);
+    
     const action = await this.prisma.moderationAction.create({
       data: {
         adminId,
@@ -83,7 +100,7 @@ export class ContentModerationService {
         targetUserId: track.uploaderId,
         actionType,
         notes: dto.reason,
-        reportId: dto.reportId ?? null,
+        reportId: moderationReportId,
       },
     });
 
@@ -142,6 +159,8 @@ export class ContentModerationService {
       data: { moderationState: newState },
     });
 
+    const moderationReportId = await this.resolveModerationReportId(dto.reportId);
+    
     const action = await this.prisma.moderationAction.create({
       data: {
         adminId,
@@ -149,7 +168,7 @@ export class ContentModerationService {
         targetUserId: comment.userId,
         actionType,
         notes: dto.reason,
-        reportId: dto.reportId ?? null,
+        reportId: moderationReportId,
       },
     });
 
@@ -206,6 +225,8 @@ export class ContentModerationService {
       data: { moderationState: dto.moderationState },
     });
 
+    const moderationReportId = await this.resolveModerationReportId(dto.reportId);
+    
     const action = await this.prisma.moderationAction.create({
       data: {
         adminId,
@@ -213,7 +234,7 @@ export class ContentModerationService {
         targetUserId: playlist.ownerId,
         actionType,
         notes: dto.reason,
-        reportId: dto.reportId ?? null,
+        reportId: moderationReportId,
       },
     });
 

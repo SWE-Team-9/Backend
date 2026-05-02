@@ -1407,6 +1407,7 @@ model PlayerSession {
   repeatMode            RepeatMode @default(OFF) @map("repeat_mode")
   currentQueueIndex     Int        @default(0) @map("current_queue_index")
   realTracksSinceLastAd Int        @default(0) @map("real_tracks_since_last_ad")
+  adRequired            Boolean    @default(false) @map("ad_required")
   queueContext          Json?      @map("queue_context")
   updatedAt             DateTime   @updatedAt @map("updated_at") @db.Timestamptz
 
