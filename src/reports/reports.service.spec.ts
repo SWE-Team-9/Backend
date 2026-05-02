@@ -277,6 +277,62 @@ describe("ReportsService", () => {
     });
   });
 
+  // ─── getReports ───────────────────────────────────────────────────────────────
+
+  describe("getReports", () => {
+    it("returns paginated report list with resolved target/offender info", async () => {
+      const createdAt = new Date("2026-05-01T12:00:00.000Z");
+      mockPrisma.report.count.mockResolvedValueOnce(1);
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        {
+          id: "r1",
+          targetType: ReportTargetType.TRACK,
+          targetId: "track-1",
+          reason: "SPAM",
+          status: ReportStatus.PENDING,
+          description: "spam",
+          createdAt,
+          resolvedAt: null,
+          resolvedBy: null,
+          reporter: {
+            id: "u1",
+            email: "user@example.com",
+            profile: { displayName: "User", handle: "user" },
+          },
+          adminResolution: null,
+          _count: { appeals: 2 },
+        },
+      ]);
+
+      mockPrisma.track.findUnique.mockResolvedValueOnce({
+        title: "Track A",
+        uploader: {
+          id: "artist-1",
+          accountStatus: "ACTIVE",
+          profile: { handle: "artist1" },
+        },
+      });
+
+      const result = await service.getReports({ page: 1, limit: 20 });
+
+      expect(result.pagination.total).toBe(1);
+      expect(result.items[0]).toEqual(
+        expect.objectContaining({
+          id: "r1",
+          category: "SPAM",
+          appeals_count: 2,
+          target: expect.objectContaining({
+            type: ReportTargetType.TRACK,
+            id: "track-1",
+            title: "Track A",
+            owner_handle: "artist1",
+          }),
+          offender: { id: "artist-1", account_status: "ACTIVE" },
+        }),
+      );
+    });
+  });
+
   // ─── updateReport ─────────────────────────────────────────────────────────────
 
   describe("updateReport", () => {
@@ -329,6 +385,21 @@ describe("ReportsService", () => {
       );
       expect(result.report.status).toBe("RESOLVED");
     });
+
+    it("does not update appeals when resolutionNotes is omitted", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1", status: ReportStatus.PENDING });
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.UNDER_REVIEW,
+      });
+
+      const result = await service.updateReport("r1", "admin-1", {
+        status: ReportStatus.UNDER_REVIEW,
+      });
+
+      expect(result.notesAppliedToAppeals).toBe(0);
+      expect(mockPrisma.appeal.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   // ─── assignReport ─────────────────────────────────────────────────────────────
@@ -362,6 +433,15 @@ describe("ReportsService", () => {
 
       const result = await service.assignReport("r1", "admin-1");
       expect(result.resolvedBy).toBe("admin-1");
+      expect(mockPrisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "r1" },
+          data: expect.objectContaining({
+            status: ReportStatus.UNDER_REVIEW,
+            resolvedBy: "admin-1",
+          }),
+        }),
+      );
     });
   });
 
@@ -395,6 +475,19 @@ describe("ReportsService", () => {
 
       expect(result.updatedReports).toBe(3);
       expect(result.updatedAppeals).toBe(2);
+    });
+
+    it("updates reports without resolution notes using appeals status branch", async () => {
+      mockPrisma.report.findMany.mockResolvedValueOnce([]);
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 2 }, { count: 2 }]);
+
+      const result = await service.bulkUpdateReports("admin-1", {
+        reportIds: ["r1", "r2"],
+        status: ReportStatus.UNDER_REVIEW,
+      });
+
+      expect(result).toEqual({ updatedReports: 2, updatedAppeals: 2 });
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     });
   });
 });

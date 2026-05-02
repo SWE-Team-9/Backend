@@ -44,6 +44,7 @@ export class AppBootstrapController {
           is_verified: true,
           account_type: 'ARTIST',
           system_role: 'USER',
+          account_status: 'ACTIVE',
           subscription_tier: 'PRO',
           created_at: '2025-01-15T10:00:00.000Z',
         },
