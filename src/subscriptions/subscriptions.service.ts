@@ -1150,9 +1150,15 @@ export class SubscriptionsService {
         if (stripePriceId) {
           const webhookPlan = await this.prisma.subscriptionPlan.findFirst({
             where: { stripePriceId, isActive: true },
-            select: { id: true },
+            select: { id: true, tier: true },
           });
-          if (webhookPlan) updateData.planId = webhookPlan.id;
+          if (webhookPlan) {
+            updateData.planId = webhookPlan.id;
+            if (webhookPlan.tier === SubscriptionTier.GO_PLUS) {
+              updateData.trialStart = null;
+              updateData.trialEnd = null;
+            }
+          }
         }
 
         if (Object.keys(updateData).length) {
@@ -1720,6 +1726,11 @@ export class SubscriptionsService {
   }) {
     const planCode = planTierToCode(opts.tier);
     const cfg = PLAN_CONFIG[planCode];
+    const isActualTrial =
+      planCode === 'PRO' &&
+      opts.subscriptionStatus === SubscriptionStatus.TRIALING &&
+      opts.trialEnd !== null &&
+      opts.trialEnd.getTime() > Date.now();
     const isUnlimited = !isFinite(opts.uploadLimit);
     const remainingUploads = isUnlimited
       ? null
@@ -1757,8 +1768,8 @@ export class SubscriptionsService {
       canResume: resumeState.canResume,
       resumeBlockedReason: resumeState.resumeBlockedReason ?? null,
       resumeBlockedMessage: resumeState.resumeBlockedMessage ?? null,
-      trialStart: opts.trialStart?.toISOString() ?? null,
-      trialEnd: opts.trialEnd?.toISOString() ?? null,
+      trialStart: isActualTrial ? (opts.trialStart?.toISOString() ?? null) : null,
+      trialEnd: isActualTrial ? opts.trialEnd!.toISOString() : null,
       paymentMethodSummary: opts.paymentMethod
         ? `${opts.paymentMethod.brand.charAt(0).toUpperCase() + opts.paymentMethod.brand.slice(1)} ending in ${opts.paymentMethod.last4}`
         : opts.paymentMethodSummary,
