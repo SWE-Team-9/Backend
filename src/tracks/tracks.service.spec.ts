@@ -1460,4 +1460,28 @@ describe("TracksService", () => {
       expect(result.message).toBe("Access granted via secret token");
     });
   });
+
+  describe("findTrackShareTarget", () => {
+    it("should find a track by slug or id", async () => {
+      prisma.track.findFirst.mockResolvedValueOnce({ id: "track-uuid" });
+
+      await expect(service.findTrackShareTarget("test-track")).resolves.toEqual({
+        id: "track-uuid",
+      });
+
+      expect(prisma.track.findFirst).toHaveBeenCalledWith({
+        where: {
+          deletedAt: null,
+          OR: [{ id: "test-track" }, { slug: "test-track" }],
+        },
+        select: { id: true },
+      });
+    });
+
+    it("should return null when no track matches", async () => {
+      prisma.track.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.findTrackShareTarget("missing-track")).resolves.toBeNull();
+    });
+  });
 });
