@@ -155,6 +155,31 @@ describe("ContentModerationService", () => {
     );
   });
 
+  it("moderateTrack: succeeds even if notification dispatch fails", async () => {
+    mockPrisma.track.findUnique.mockResolvedValueOnce({
+      id: "track-2b",
+      title: "Other Track",
+      uploaderId: "uploader-X",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.track.update.mockResolvedValueOnce({});
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-2b",
+      actionType: "HIDE_TRACK",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockRejectedValueOnce(
+      new Error("Notification provider timeout"),
+    );
+
+    await expect(
+      service.moderateTrack("admin-1", "track-2b", {
+        moderationState: "HIDDEN",
+        reason: "Policy violation",
+      }),
+    ).resolves.toMatchObject({ action_type: "HIDE_TRACK" });
+  });
+
   // 5. moderateComment - 404 when comment not found
   it("moderateComment: throws 404 when comment does not exist", async () => {
     mockPrisma.comment.findUnique.mockResolvedValueOnce(null);
@@ -291,5 +316,30 @@ describe("ContentModerationService", () => {
       }),
     );
     expect(result.action_type).toBe("REMOVE_PLAYLIST");
+  });
+
+  it("moderatePlaylist: succeeds even if notification dispatch fails", async () => {
+    mockPrisma.playlist.findUnique.mockResolvedValueOnce({
+      id: "playlist-2",
+      title: "Mix",
+      ownerId: "user-2",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.playlist.update.mockResolvedValueOnce({});
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-5",
+      actionType: "HIDE_PLAYLIST",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockRejectedValueOnce(
+      new Error("Notification provider timeout"),
+    );
+
+    await expect(
+      service.moderatePlaylist("admin-1", "playlist-2", {
+        moderationState: "HIDDEN",
+        reason: "Policy violation",
+      }),
+    ).resolves.toMatchObject({ action_type: "HIDE_PLAYLIST" });
   });
 });

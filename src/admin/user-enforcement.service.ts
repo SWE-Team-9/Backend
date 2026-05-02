@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -18,11 +19,31 @@ import {
 
 @Injectable()
 export class UserEnforcementService {
+  private readonly logger = new Logger(UserEnforcementService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
   ) {}
+
+  private async createNotificationSafely(params: {
+    recipientId: string;
+    actorId: string;
+    entityType: "USER" | "TRACK" | "COMMENT" | "PLAYLIST";
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      await this.notificationsService.createNotification(params as any);
+    } catch (error) {
+      this.logger.error(
+        `Non-fatal notification failure for enforcement event ${params.eventType}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   // ─── Re-auth helpers ─────────────────────────────────────────────────────────
 
@@ -118,7 +139,7 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
@@ -199,7 +220,7 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
@@ -292,7 +313,7 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
@@ -375,7 +396,7 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",

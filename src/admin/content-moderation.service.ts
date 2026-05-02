@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ModerationActionType, ModerationState } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -36,10 +36,24 @@ function playlistStateToActionType(state: ModerationState): ModerationActionType
 
 @Injectable()
 export class ContentModerationService {
+  private readonly logger = new Logger(ContentModerationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async createNotificationSafely(payload: any): Promise<void> {
+    try {
+      await this.notificationsService.createNotification(payload);
+    } catch (error) {
+      this.logger.error(
+        `Non-fatal notification failure during content moderation: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
   
   private async resolveModerationReportId(
     reportId?: string,
@@ -104,7 +118,7 @@ export class ContentModerationService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: track.uploaderId,
       actorId: adminId,
       entityType: "TRACK",
@@ -172,7 +186,7 @@ export class ContentModerationService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: comment.userId,
       actorId: adminId,
       entityType: "COMMENT",
@@ -238,7 +252,7 @@ export class ContentModerationService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: playlist.ownerId,
       actorId: adminId,
       entityType: "PLAYLIST",
