@@ -1,4 +1,3 @@
-
 type Env = Record<string, string | undefined>;
 
 // Always required - the server cannot function without these.
@@ -112,36 +111,16 @@ export function validateEnvironment(config: Env): Env {
     }
   }
 
-  // ── Stripe ────────────────────────────────────────────────────────────────
-  // If real Stripe billing is enabled, fail fast unless all required Stripe
-  // secrets/redirect URLs are present. Mock mode can run without Stripe keys.
-  const billingProvider = config["BILLING_PROVIDER"] ?? "mock_stripe";
-  if (!["mock_stripe", "stripe"].includes(billingProvider)) {
-    errors.push(
-      `BILLING_PROVIDER must be "mock_stripe" or "stripe" (got "${billingProvider}").`,
-    );
-  }
-
-  if (billingProvider === "stripe") {
-    const requiredStripeKeys = [
-      "STRIPE_SECRET_KEY",
-      "STRIPE_WEBHOOK_SECRET",
-      "STRIPE_CHECKOUT_SUCCESS_URL",
-      "STRIPE_CHECKOUT_CANCEL_URL",
-    ];
-
-    for (const key of requiredStripeKeys) {
+  // ── Stripe - warn in production if keys are missing ───────────────────────
+  // Not a hard failure (allows local dev without Stripe keys), but Stripe
+  // features will not work without them.
+  const nodeEnvForStripe = config["NODE_ENV"];
+  if (nodeEnvForStripe === "production") {
+    const stripeKeys = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
+    for (const key of stripeKeys) {
       if (!config[key] || config[key].trim() === "") {
-        errors.push(`${key} is required when BILLING_PROVIDER=stripe.`);
+        errors.push(`${key} is required in production.`);
       }
-    }
-
-    if (config["STRIPE_SECRET_KEY"] && !config["STRIPE_SECRET_KEY"]!.startsWith("sk_")) {
-      errors.push("STRIPE_SECRET_KEY must start with sk_test_ or sk_live_.");
-    }
-
-    if (config["STRIPE_WEBHOOK_SECRET"] && !config["STRIPE_WEBHOOK_SECRET"]!.startsWith("whsec_")) {
-      errors.push("STRIPE_WEBHOOK_SECRET must start with whsec_.");
     }
   }
 
@@ -152,5 +131,3 @@ export function validateEnvironment(config: Env): Env {
 
   return config;
 }
-
-
