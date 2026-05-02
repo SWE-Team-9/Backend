@@ -95,4 +95,38 @@ describe('NotificationsService', () => {
       expect.objectContaining({ unreadCount: 0 }),
     );
   });
+
+  it('getNotifications: builds account moderation message (not social like message)', async () => {
+    const createdAt = new Date('2024-01-01T00:00:00.000Z');
+    mockPrisma.notification.count.mockResolvedValueOnce(1);
+    mockPrisma.notification.findMany.mockResolvedValueOnce([
+      {
+        id: 'notif-admin-1',
+        eventType: 'ACCOUNT_SUSPENDED',
+        entityType: 'USER',
+        actorId: 'admin-1',
+        trackId: null,
+        playlistId: null,
+        commentId: null,
+        messageId: null,
+        metadata: null,
+        readAt: null,
+        createdAt,
+        actor: {
+          id: 'admin-1',
+          profile: {
+            displayName: 'Admin',
+            handle: 'admin',
+            avatarUrl: null,
+          },
+        },
+      },
+    ]);
+
+    const result = await service.getNotifications('user-1', { page: 1, limit: 20 });
+
+    expect(result.notifications[0].type).toBe('account_suspended');
+    expect(result.notifications[0].message).toBe('Your account has been suspended');
+    expect(result.notifications[0].message).not.toContain('liked your track');
+  });
 });
