@@ -36,3 +36,4 @@ export { PlaylistRecentQueryDto } from "./playlist-recent-query.dto";
 export { PlaylistItemDto, PlaylistOwnerDto } from "./playlist-item.dto";
 export { PlaylistDetailsTrackDto, ArtistPreviewDto } from "./track-details.dto";
 export { GetPlaylistLikedResponseDto } from "./get-playlist-liked-response.dto";
+export { PlaylistResponseDto, PaginatedResponseDto } from './get-user-playlists-response.dto';
