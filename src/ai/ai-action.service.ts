@@ -248,44 +248,26 @@ export class AiActionService {
       };
     }
 
-    const genreAliases = this.genreSearchTerms(query);
-    const isKnownGenre =
-      genreAliases.length > 1 ||
-      [
-        'rap',
-        'quran',
-        'sha3by',
-        'shaabi',
-        'shaaby',
-        'sh3by',
-        'mahraganat',
-        'pop',
-        'rock',
-        'jazz',
-        'hip-hop',
-        'hip hop',
-      ].includes(query.toLowerCase());
-
-    const tracks = isKnownGenre
-      ? await this.findPublicTracks({ genre: query, limit })
-      : await this.findPublicTracks({ query, limit });
+    const searchResult = await this.discovery.search(query, 'tracks', 1, limit);
+    const rawTracks: any[] = (searchResult as any)?.data?.tracks ?? [];
+    const tracks = this.normalizeDiscoveryTracks(rawTracks);
 
     if (tracks.length === 0) {
       return {
-        reply: `No tracks found for "${query}". Try a different title, artist, or genre.`,
+        reply: `No tracks found for “${query}”. Try a different title, artist, or genre.`,
         provider,
         intent: 'search_tracks',
-        actionsTaken: [`searched tracks for "${query}"`],
+        actionsTaken: [`searched tracks for “${query}”`],
         data: { query, tracks: [] },
         suggestions: ['Show trending tracks', 'Search for rap tracks'],
       };
     }
 
     return {
-      reply: `Found ${tracks.length} track${tracks.length === 1 ? '' : 's'} for "${query}".`,
+      reply: `Found ${tracks.length} track${tracks.length === 1 ? '' : 's'} for “${query}”.`,
       provider,
       intent: 'search_tracks',
-      actionsTaken: [`searched tracks for "${query}"`],
+      actionsTaken: [`searched tracks for “${query}”`],
       data: { query, tracks },
       suggestions: [
         `Create a playlist from ${query}`,
@@ -486,7 +468,20 @@ export class AiActionService {
     const playlistName =
       this.cleanString(params.playlistName) || `${this.titleCase(genre)} Mix`;
 
-    const tracks = await this.findPublicTracksByGenre({ genre, limit });
+    const genreResult = await this.discovery.getTrendingTracksByGenre(genre, limit);
+    const rawTracks: any[] = (genreResult as any)?.tracks ?? [];
+    const tracks: TrackCard[] = rawTracks.map((t: any) => ({
+      trackId: t.trackId ?? t.id,
+      title: t.title,
+      slug: t.slug ?? null,
+      coverArtUrl: t.coverArtUrl ?? null,
+      likesCount: t.likesCount ?? 0,
+      artist: {
+        id: t.artist?.id ?? t.uploaderId,
+        displayName: t.artist?.displayName ?? null,
+        handle: t.artist?.handle ?? null,
+      },
+    }));
 
     if (tracks.length === 0) {
       return {

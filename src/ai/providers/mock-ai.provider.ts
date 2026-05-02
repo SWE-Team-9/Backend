@@ -269,18 +269,15 @@ export function detectMockIntent(
   }
 
   if (/search\s+for\s+.+\s+(tracks?|songs?|music)|find\s+.+\s+(tracks?|songs?|music)|show\s+.+\s+(tracks?|songs?|music)/i.test(msg)) {
-    const genre = extractGenre(msg);
-    if (genre !== 'mixed') {
-      return {
-        intent: 'recommend_by_genre',
-        parameters: {
-          genre,
-          limit: extractLimit(msg, 10),
-        },
-        confidence: 0.88,
-        needsConfirmation: false,
-      };
-    }
+    const query =
+      msg.match(/(?:search\s+for|find|show)\s+(.+?)\s+(?:tracks?|songs?|music)/i)?.[1]?.trim() ||
+      original;
+    return {
+      intent: 'search_tracks',
+      parameters: { query },
+      confidence: 0.88,
+      needsConfirmation: false,
+    };
   }
 
   if (/(recommend|suggest|give me).*(song|track|music)|\b[0-9]\b.*(track|song)/i.test(msg)) {
@@ -300,16 +297,6 @@ export function detectMockIntent(
       msg.match(/(?:search|find|look for|show me|get me)\s+(.+)/i)?.[1]
         ?.replace(/tracks?|songs?|music/gi, '')
         .trim() || original;
-
-    const genre = extractGenre(query);
-    if (genre !== 'mixed') {
-      return {
-        intent: 'recommend_by_genre',
-        parameters: { genre, limit: extractLimit(msg, 10) },
-        confidence: 0.85,
-        needsConfirmation: false,
-      };
-    }
 
     return {
       intent: 'search_tracks',
