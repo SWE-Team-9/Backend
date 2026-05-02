@@ -250,6 +250,16 @@ describe('PlayerService', () => {
       expect(result.accessState).toBe('PLAYABLE');
     });
 
+    it('should throw ConflictException when adRequired gate is active', async () => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(finishedTrack);
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({ adRequired: true });
+
+      await expect(service.getPlaybackSource('user-uuid', 'track-uuid')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prismaMock.trackFile.findFirst).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundException when track does not exist', async () => {
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
 
