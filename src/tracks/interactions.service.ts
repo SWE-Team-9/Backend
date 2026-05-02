@@ -26,6 +26,12 @@ type TrackSummary = {
   slug: string;
   coverArtUrl: string | null;
   publishedAt: Date | null;
+  waveformData: number[];
+  artist: {
+    id: string;
+    displayName: string | null;
+    handle: string | null;
+  } | null;
   likesCount: number;
   repostsCount: number;
 };
@@ -256,6 +262,18 @@ export class InteractionsService {
               slug: true,
               coverArtUrl: true,
               publishedAt: true,
+              waveformData: true,
+              uploader: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      displayName: true,
+                      handle: true,
+                    },
+                  },
+                },
+              },
               _count: {
                 select: {
                   likes: true,
@@ -271,15 +289,7 @@ export class InteractionsService {
     return {
       items: likes.map((like) => ({
         interactedAt: like.createdAt,
-        track: {
-          id: like.track.id,
-          title: like.track.title,
-          slug: like.track.slug,
-          coverArtUrl: like.track.coverArtUrl,
-          publishedAt: like.track.publishedAt,
-          likesCount: like.track._count.likes,
-          repostsCount: like.track._count.reposts,
-        },
+        track: this.mapTrackSummary(like.track),
       })),
       pagination: this.buildPagination(total, normalizedPage, normalizedLimit),
     };
@@ -311,6 +321,18 @@ export class InteractionsService {
               slug: true,
               coverArtUrl: true,
               publishedAt: true,
+              waveformData: true,
+              uploader: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      displayName: true,
+                      handle: true,
+                    },
+                  },
+                },
+              },
               _count: {
                 select: {
                   likes: true,
@@ -326,15 +348,7 @@ export class InteractionsService {
     return {
       items: reposts.map((repost) => ({
         interactedAt: repost.createdAt,
-        track: {
-          id: repost.track.id,
-          title: repost.track.title,
-          slug: repost.track.slug,
-          coverArtUrl: repost.track.coverArtUrl,
-          publishedAt: repost.track.publishedAt,
-          likesCount: repost.track._count.likes,
-          repostsCount: repost.track._count.reposts,
-        },
+        track: this.mapTrackSummary(repost.track),
       })),
       pagination: this.buildPagination(total, normalizedPage, normalizedLimit),
     };
@@ -366,6 +380,18 @@ export class InteractionsService {
               slug: true,
               coverArtUrl: true,
               publishedAt: true,
+              waveformData: true,
+              uploader: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      displayName: true,
+                      handle: true,
+                    },
+                  },
+                },
+              },
               _count: {
                 select: {
                   likes: true,
@@ -381,15 +407,7 @@ export class InteractionsService {
     return {
       items: likes.map((like) => ({
         interactedAt: like.createdAt,
-        track: {
-          id: like.track.id,
-          title: like.track.title,
-          slug: like.track.slug,
-          coverArtUrl: like.track.coverArtUrl,
-          publishedAt: like.track.publishedAt,
-          likesCount: like.track._count.likes,
-          repostsCount: like.track._count.reposts,
-        },
+        track: this.mapTrackSummary(like.track),
       })),
       pagination: this.buildPagination(total, normalizedPage, normalizedLimit),
     };
@@ -421,6 +439,18 @@ export class InteractionsService {
               slug: true,
               coverArtUrl: true,
               publishedAt: true,
+              waveformData: true,
+              uploader: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      displayName: true,
+                      handle: true,
+                    },
+                  },
+                },
+              },
               _count: {
                 select: {
                   likes: true,
@@ -436,15 +466,7 @@ export class InteractionsService {
     return {
       items: reposts.map((repost) => ({
         interactedAt: repost.createdAt,
-        track: {
-          id: repost.track.id,
-          title: repost.track.title,
-          slug: repost.track.slug,
-          coverArtUrl: repost.track.coverArtUrl,
-          publishedAt: repost.track.publishedAt,
-          likesCount: repost.track._count.likes,
-          repostsCount: repost.track._count.reposts,
-        },
+        track: this.mapTrackSummary(repost.track),
       })),
       pagination: this.buildPagination(total, normalizedPage, normalizedLimit),
     };
@@ -723,6 +745,14 @@ export class InteractionsService {
     slug: string;
     coverArtUrl: string | null;
     publishedAt: Date | null;
+    waveformData?: number[] | null;
+    uploader?: {
+      id: string;
+      profile?: {
+        displayName: string | null;
+        handle: string | null;
+      } | null;
+    } | null;
     _count: { likes: number; reposts: number };
   }): TrackSummary {
     return {
@@ -731,6 +761,14 @@ export class InteractionsService {
       slug: track.slug,
       coverArtUrl: track.coverArtUrl,
       publishedAt: track.publishedAt,
+      waveformData: track.waveformData ?? [],
+      artist: track.uploader?.profile
+        ? {
+            id: track.uploader.id,
+            displayName: track.uploader.profile.displayName,
+            handle: track.uploader.profile.handle,
+          }
+        : null,
       likesCount: track._count.likes,
       repostsCount: track._count.reposts,
     };
@@ -744,6 +782,14 @@ export class InteractionsService {
     slug: string;
     coverArtUrl: string | null;
     publishedAt: Date | null;
+    waveformData: number[];
+    uploader: {
+      id: string;
+      profile: {
+        displayName: string | null;
+        handle: string | null;
+      } | null;
+    } | null;
     _count: { likes: number; reposts: number };
   }> {
     const track = await this.prisma.track.findUnique({
@@ -756,6 +802,18 @@ export class InteractionsService {
         slug: true,
         coverArtUrl: true,
         publishedAt: true,
+        waveformData: true,
+        uploader: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+                handle: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             likes: true,
