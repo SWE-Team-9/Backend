@@ -11,7 +11,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { IMessagesGateway, MessagesService } from "./messages.service";
 
 @WebSocketGateway({
-  namespace: "messages",
+  namespace: "api/v1/messages",
 })
 export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect, IMessagesGateway {
   @WebSocketServer()

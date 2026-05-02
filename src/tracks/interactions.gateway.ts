@@ -10,7 +10,9 @@ type TrackInteractionEvent = {
   timestampAt?: number;
 };
 
-@WebSocketGateway()
+@WebSocketGateway({
+  namespace: "api/v1/interactions",
+})
 export class InteractionsGateway {
   @WebSocketServer()
   private readonly server!: Server;

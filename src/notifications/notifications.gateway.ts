@@ -10,7 +10,7 @@ import { ConfigService } from "@nestjs/config";
 import { INotificationsGateway, NotificationsService } from "./notifications.service";
 
 @WebSocketGateway({
-  namespace: "notifications",
+  namespace: "api/v1/notifications",
 })
 export class NotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect, INotificationsGateway
