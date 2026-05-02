@@ -744,6 +744,7 @@ export class SubscriptionsService {
       cancelAtPeriodEnd: false,
       resumed: true,
     });
+    this.sendSubscriptionResumedEmailAsync(userId, sub.plan.name, sub.currentPeriodEnd);
     return this.getMySubscription(userId);
   }
 
@@ -1922,6 +1923,31 @@ export class SubscriptionsService {
               expiresAt,
             })
             .catch((err: unknown) => this.logger.error(`[CANCELLATION EMAIL] ${err}`));
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private sendSubscriptionResumedEmailAsync(
+    userId: string,
+    planName: string,
+    renewalDate: Date,
+  ): void {
+    this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, profile: { select: { displayName: true } } },
+      })
+      .then((user) => {
+        if (user && (this.mailService as any).sendSubscriptionResumedEmail) {
+          (this.mailService as any)
+            .sendSubscriptionResumedEmail({
+              to: user.email,
+              displayName: user.profile?.displayName ?? undefined,
+              planName,
+              renewalDate,
+            })
+            .catch((err: unknown) => this.logger.error(`[SUBSCRIPTION RESUMED EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);

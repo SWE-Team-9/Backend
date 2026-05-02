@@ -456,6 +456,33 @@ export class MailService {
     });
   }
 
+  async sendSubscriptionResumedEmail(params: {
+    to: string;
+    displayName?: string;
+    planName: string;
+    renewalDate: Date;
+  }): Promise<void> {
+    const renewalDateStr = params.renewalDate.toISOString().slice(0, 10);
+    await this.sendMail({
+      to: params.to,
+      subject: "Your IQA3 subscription will continue",
+      text: [
+        `Hi ${params.displayName ?? "there"},`,
+        "",
+        `Your ${params.planName} subscription cancellation has been cancelled.`,
+        `Your plan remains active and will renew on ${renewalDateStr}.`,
+        "",
+        "You can manage your subscription any time from Settings > Subscription.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${this.escapeHtml(params.displayName ?? "there")},</p>`,
+        `<p>Your <strong>${this.escapeHtml(params.planName)}</strong> subscription cancellation has been cancelled.</p>`,
+        `<p>Your plan remains active and will renew on <strong>${renewalDateStr}</strong>.</p>`,
+        "<p>You can manage your subscription any time from <strong>Settings &gt; Subscription</strong>.</p>",
+      ].join(""),
+    });
+  }
+
   async sendInvoiceReceiptEmail(params: {
     to: string;
     displayName?: string;
