@@ -562,12 +562,14 @@ export class PlaylistsService {
     }
 
     if (dto.visibility !== undefined) {
-      data.visibility = dto.visibility === 'public' ? PlaylistVisibility.PUBLIC : PlaylistVisibility.SECRET;
-
       if (dto.visibility === 'public') {
+        data.visibility = PlaylistVisibility.PUBLIC;
         data.secretToken = null;
-      } else if (playlist.visibility !== PlaylistVisibility.SECRET || !playlist.secretToken) {
-        data.secretToken = await this.generateUniqueSecretToken(playlist.id);
+      } else if (dto.visibility === 'secret') {
+        data.visibility = PlaylistVisibility.SECRET;
+        if (playlist.visibility !== PlaylistVisibility.SECRET || !playlist.secretToken) {
+          data.secretToken = await this.generateUniqueSecretToken(playlist.id);
+        }
       }
     }
 
