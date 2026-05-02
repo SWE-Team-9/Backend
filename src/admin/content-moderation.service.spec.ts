@@ -98,6 +98,9 @@ describe("ContentModerationService", () => {
       where: { id: "track-1" },
       data: { moderationState: "HIDDEN" },
     });
+    expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "LIKE" }),
+    );
     expect(result.action_type).toBe("HIDE_TRACK");
   });
 
@@ -278,6 +281,9 @@ describe("ContentModerationService", () => {
         entityType: "COMMENT",
         eventType: "REPORT_RESOLVED",
       }),
+    );
+    expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "LIKE" }),
     );
     expect(result.action_type).toBe("HIDE_COMMENT");
   });

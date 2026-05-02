@@ -249,6 +249,12 @@ describe("UserEnforcementService", () => {
         durationDays: 7,
       });
       expect(result.action_type).toBe("SUSPEND_USER");
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "ACCOUNT_SUSPENDED" }),
+      );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "LIKE" }),
+      );
     });
 
     it("revokes sessions via updateMany with revokedAt (not deleteMany)", async () => {
@@ -486,6 +492,12 @@ describe("UserEnforcementService", () => {
 
       expect(result.tracks_restored).toBe(3);
       expect(result.playlists_restored).toBe(1);
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "ACCOUNT_RESTORED" }),
+      );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "LIKE" }),
+      );
     });
 
     it("throws ConflictException with code USER_ALREADY_ACTIVE for an ACTIVE user", async () => {
