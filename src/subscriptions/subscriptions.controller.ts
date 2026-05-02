@@ -471,6 +471,7 @@ export class SubscriptionsController {
     required: false,
     description:
       'Where to send the user after they close the portal (backward-compat query param).',
+    example: 'https://app.iqa3.tech/settings/billing',
   })
   @ApiResponse({
     status: 200,
@@ -563,6 +564,11 @@ export class SubscriptionsController {
     description: 'Subscription is not scheduled to cancel.',
   })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiBody({
+    required: false,
+    description: 'No request body required.',
+    schema: { type: 'object', example: {} },
+  })
   @Post('resume')
   @HttpCode(HttpStatus.OK)
   async resumeSubscription(@CurrentUser('userId') userId: string) {
@@ -632,6 +638,11 @@ export class SubscriptionsController {
   @ApiResponse({ status: 404, description: 'No active subscription found.' })
   @ApiResponse({ status: 409, description: 'No pending plan change exists.' })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiBody({
+    required: false,
+    description: 'No request body required.',
+    schema: { type: 'object', example: {} },
+  })
   @Post('cancel-plan-change')
   @HttpCode(HttpStatus.OK)
   async cancelPlanChange(@CurrentUser('userId') userId: string) {
@@ -658,6 +669,12 @@ export class SubscriptionsController {
     description: 'No active subscription or already cancelled.',
   })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiBody({
+    type: CancelSubscriptionDto,
+    required: false,
+    description: 'No fields are required. Send `{}` or omit body.',
+    schema: { type: 'object', example: {} },
+  })
   @Post('cancel')
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))

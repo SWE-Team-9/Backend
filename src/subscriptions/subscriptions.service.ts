@@ -588,7 +588,21 @@ export class SubscriptionsService {
       });
     }
 
-    if (sub.cancelAtPeriodEnd) {
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+    const pendingDowngrade =
+      (currentPaymentMethod.pendingDowngrade as
+        | {
+            planCode: string;
+            planId: string;
+            planName: string;
+            effectiveAt: string;
+          }
+        | null) ?? null;
+
+    if (sub.cancelAtPeriodEnd && !pendingDowngrade) {
       return {
         message:
           'Subscription is already scheduled to cancel at end of billing period. You keep full access until then.',
@@ -604,11 +618,6 @@ export class SubscriptionsService {
       providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
       cancelAtPeriodEnd: true,
     });
-
-    const currentPaymentMethod =
-      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
-        ? ((sub as any).paymentMethod as Record<string, unknown>)
-        : {};
     const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
 
     await this.prisma.userSubscription.update({
