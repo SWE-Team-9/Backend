@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   ModerationState,
   PlaylistVisibility,
@@ -12,7 +13,43 @@ import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class DiscoveryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  buildRedirectHtml(targetUrl: string, title: string, bodyText = "Opening in app...") {
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <meta http-equiv="refresh" content="0; url=${targetUrl}">
+  <script>
+    window.location.href = "${targetUrl}";
+  </script>
+</head>
+<body>
+  <p>${bodyText}</p>
+</body>
+</html>`;
+  }
+
+  buildTrackShareRedirectHtml(
+    trackId: string,
+    artistHandle: string | null | undefined,
+    isMobile: boolean,
+  ) {
+    const frontendBase = (this.configService.get<string>("app.clientUrl") ?? "http://localhost:5173").replace(/\/+$/, "");
+    const targetUrl = isMobile
+      ? `trackmaster://track/${trackId}`
+      : `${frontendBase}/track/${trackId}${artistHandle ? `?artist=${encodeURIComponent(artistHandle)}` : ""}`;
+
+    return this.buildRedirectHtml(
+      targetUrl,
+      isMobile ? "Opening track..." : "Opening track in browser...",
+    );
+  }
 
   async search(
     q: string,

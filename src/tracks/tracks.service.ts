@@ -5,13 +5,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage/storage.service";
 
-import { FileRole, FileStatus, Prisma, TrackStatus, TrackVisibility } from "@prisma/client";
+import { FileRole, FileStatus, ModerationState, Prisma, TrackStatus, TrackVisibility } from "@prisma/client";
 import { nanoid } from "nanoid";
 import { CreateTrackDto } from "./dto/create-track.dto";
 import { UpdateTrackDto } from "./dto/update-track.dto";
@@ -678,6 +679,65 @@ export class TracksService {
     };
   }
 
+  async search(query: string) {
+    const normalized = query.trim();
+
+    if (normalized.length < 2) {
+      return [];
+    }
+
+    try {
+      const tracks = await this.prisma.track.findMany({
+        where: this.buildSearchWhere(normalized),
+        take: 10,
+        orderBy: [{ createdAt: "desc" }],
+        select: TRACK_LIST_SELECT,
+      });
+
+      return tracks.map((track) => this.formatListItem(track));
+    } catch (error) {
+      if (this.isTimeoutError(error)) {
+        this.logger.warn(`Track search timed out for query "${normalized}"`);
+        throw new ServiceUnavailableException("Track search is temporarily unavailable.");
+      }
+
+      throw error;
+    }
+  }
+
+  async getSuggestions(query: string) {
+    const normalized = query.trim();
+
+    if (normalized.length < 2) {
+      return [] as string[];
+    }
+
+    try {
+      const tracks = await this.prisma.track.findMany({
+        where: {
+          deletedAt: null,
+          visibility: TrackVisibility.PUBLIC,
+          status: TrackStatus.FINISHED,
+          moderationState: ModerationState.VISIBLE,
+          title: { contains: normalized, mode: "insensitive" },
+        },
+        select: { title: true },
+        distinct: ["title"],
+        orderBy: [{ title: "asc" }],
+        take: 5,
+      });
+
+      return tracks.map((track) => track.title);
+    } catch (error) {
+      if (this.isTimeoutError(error)) {
+        this.logger.warn(`Track suggestions timed out for query "${normalized}"`);
+        throw new ServiceUnavailableException("Track suggestions are temporarily unavailable.");
+      }
+
+      throw error;
+    }
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // WAVEFORM
   // ──────────────────────────────────────────────────────────────────────────
@@ -777,14 +837,34 @@ export class TracksService {
     };
   }
 
-  async findTrackShareTarget(identifier: string): Promise<{ id: string } | null> {
-    return this.prisma.track.findFirst({
+  async findTrackShareTarget(identifier: string): Promise<{ id: string; artistHandle: string | null } | null> {
+    const track = await this.prisma.track.findFirst({
       where: {
         deletedAt: null,
         OR: [{ id: identifier }, { slug: identifier }],
       },
-      select: { id: true },
+      select: {
+        id: true,
+        uploader: {
+          select: {
+            profile: {
+              select: {
+                handle: true,
+              },
+            },
+          },
+        },
+      },
     });
+
+    if (!track) {
+      return null;
+    }
+
+    return {
+      id: track.id,
+      artistHandle: track.uploader?.profile?.handle ?? null,
+    };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -900,6 +980,39 @@ export class TracksService {
         this.logger.warn(`Failed to delete file ${file.storageKey}: ${err}`);
       }
     }
+  }
+
+  private buildSearchWhere(normalizedQuery: string): Prisma.TrackWhereInput {
+    return {
+      deletedAt: null,
+      visibility: TrackVisibility.PUBLIC,
+      status: TrackStatus.FINISHED,
+      moderationState: ModerationState.VISIBLE,
+      OR: [
+        { title: { contains: normalizedQuery, mode: "insensitive" } },
+        {
+          uploader: {
+            profile: {
+              OR: [
+                { displayName: { contains: normalizedQuery, mode: "insensitive" } },
+                { handle: { contains: normalizedQuery, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  private isTimeoutError(error: unknown): boolean {
+    const maybeError = error as { code?: string; message?: string };
+    const message = maybeError.message?.toLowerCase() ?? "";
+
+    return (
+      maybeError.code === "P1008" ||
+      maybeError.code === "P2024" ||
+      message.includes("timeout")
+    );
   }
 
   /** Format a raw track record into the upload response shape */
