@@ -345,6 +345,24 @@ describe("AdminUsersService", () => {
       expect(result.billing.total_storage_bytes).toBe(500 * 1024 * 1024);
     });
 
+    it("getTotalStorage returns bytes and human-readable units from track_files", async () => {
+      mockPrisma.trackFile.aggregate.mockResolvedValueOnce({
+        _sum: { fileSizeBytes: BigInt(1536 * 1024 * 1024) },
+      });
+
+      const result = await service.getTotalStorage();
+
+      expect(mockPrisma.trackFile.aggregate).toHaveBeenCalledWith({
+        _sum: { fileSizeBytes: true },
+      });
+      expect(result).toEqual({
+        totalBytes: 1536 * 1024 * 1024,
+        totalMB: 1536,
+        totalGB: 1.5,
+        source: "track_files.file_size_bytes",
+      });
+    });
+
     it("returns artist_to_listener_ratio as 0 when no artists or listeners", async () => {
       mockPrisma.user.count.mockResolvedValue(0);
       mockPrisma.userProfile.count.mockResolvedValue(0);

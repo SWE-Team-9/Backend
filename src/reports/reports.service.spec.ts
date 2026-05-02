@@ -46,6 +46,12 @@ describe("ReportsService", () => {
 
     service = module.get<ReportsService>(ReportsService);
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (arg: any) => {
+      if (typeof arg === "function") {
+        return arg(mockPrisma);
+      }
+      return Promise.all(arg);
+    });
   });
 
   // ─── createReport ─────────────────────────────────────────────────────────────
@@ -345,7 +351,7 @@ describe("ReportsService", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it("throws INVALID_TRANSITION when attempting to move a RESOLVED report to another state", async () => {
+    it("throws REPORT_ALREADY_HANDLED when attempting to move a RESOLVED report to another state", async () => {
       mockPrisma.report.findUnique.mockResolvedValueOnce({
         id: "r1",
         status: ReportStatus.RESOLVED,
@@ -357,14 +363,32 @@ describe("ReportsService", () => {
         }),
       ).rejects.toMatchObject({
         response: {
-          code: "INVALID_TRANSITION",
+          code: "REPORT_ALREADY_HANDLED",
+        },
+      });
+      expect(mockPrisma.report.update).not.toHaveBeenCalled();
+    });
+
+    it("throws REPORT_ALREADY_HANDLED when attempting to move a REJECTED report", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.REJECTED,
+      });
+
+      await expect(
+        service.updateReport("r1", "admin-1", {
+          status: ReportStatus.RESOLVED,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: "REPORT_ALREADY_HANDLED",
         },
       });
       expect(mockPrisma.report.update).not.toHaveBeenCalled();
     });
 
     it("sets resolvedAt and resolvedBy when status is RESOLVED", async () => {
-      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1" });
+      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1", status: ReportStatus.PENDING });
       const updatedReport = {
         id: "r1",
         status: "RESOLVED",
@@ -384,6 +408,7 @@ describe("ReportsService", () => {
         }),
       );
       expect(result.report.status).toBe("RESOLVED");
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
 
     it("does not update appeals when resolutionNotes is omitted", async () => {
@@ -448,7 +473,7 @@ describe("ReportsService", () => {
   // ─── bulkUpdateReports ────────────────────────────────────────────────────────
 
   describe("bulkUpdateReports", () => {
-    it("throws INVALID_TRANSITION when any selected report is already RESOLVED", async () => {
+    it("throws REPORT_ALREADY_HANDLED when any selected report is already RESOLVED", async () => {
       mockPrisma.report.findMany.mockResolvedValueOnce([{ id: "r2" }]);
 
       await expect(
@@ -458,7 +483,7 @@ describe("ReportsService", () => {
         }),
       ).rejects.toMatchObject({
         response: {
-          code: "INVALID_TRANSITION",
+          code: "REPORT_ALREADY_HANDLED",
         },
       });
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();

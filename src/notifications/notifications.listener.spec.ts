@@ -66,6 +66,35 @@ describe("NotificationsListener", () => {
     expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
   });
 
+  it("handleTrackLiked: sends LIKE notification for a normal user like", async () => {
+    mockPrisma.userNotificationPreference.findUnique.mockResolvedValueOnce({
+      userId: "owner-1",
+      likes: true,
+      comments: true,
+      follows: true,
+      reposts: true,
+    });
+    mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+    await listener.handleTrackLiked({
+      trackId: "track-1",
+      actorId: "user-A",
+      ownerId: "owner-1",
+    });
+
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientId: "owner-1",
+        actorId: "user-A",
+        entityType: "TRACK",
+        eventType: "LIKE",
+        trackId: "track-1",
+      }),
+    );
+  });
+
   // 2. handleReportCreated - notifies ADMIN and MODERATOR users after debounce
   it("handleReportCreated: notifies all ADMIN and MODERATOR users after timer fires", async () => {
     mockPrisma.user.findMany.mockResolvedValue([{ id: "admin-1" }, { id: "mod-1" }]);

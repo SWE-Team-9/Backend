@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { ModerationActionType, ModerationState } from "@prisma/client";
+import { ModerationActionType, ModerationState, ReportTargetType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import {
@@ -90,7 +90,7 @@ export class ContentModerationService {
       });
     }
 
-    if (track.moderationState === dto.moderationState) {
+    if (track.moderationState === dto.moderationState && dto.moderationState !== "REMOVED") {
       throw new BadRequestException({
         code: "NO_STATE_CHANGE",
         message: "Track is already in this moderation state.",
@@ -99,32 +99,63 @@ export class ContentModerationService {
 
     const previousState = track.moderationState;
     const actionType = stateToActionType(dto.moderationState);
-
-    await this.prisma.track.update({
-      where: { id: trackId },
-      data: { moderationState: dto.moderationState },
-    });
-
     const moderationReportId = await this.resolveModerationReportId(dto.reportId);
-    
-    const action = await this.prisma.moderationAction.create({
-      data: {
-        adminId,
-        trackId,
-        targetUserId: track.uploaderId,
-        actionType,
-        notes: dto.reason,
-        reportId: moderationReportId,
-      },
-    });
 
-    await this.createNotificationSafely({
-      recipientId: track.uploaderId,
-      actorId: adminId,
-      entityType: "TRACK",
-      eventType: "REPORT_RESOLVED",
-      trackId,
-      metadata: { actionType, reason: dto.reason },
+    const action = await this.prisma.$transaction(async (tx) => {
+      if (dto.moderationState === "REMOVED") {
+        const createdAction = await tx.moderationAction.create({
+          data: {
+            adminId,
+            targetUserId: track.uploaderId,
+            actionType,
+            notes: dto.reason,
+            reportId: moderationReportId,
+          },
+        });
+
+        await tx.report.updateMany({
+          where: {
+            targetType: ReportTargetType.TRACK,
+            targetId: trackId,
+            status: { in: ["PENDING", "UNDER_REVIEW"] },
+          },
+          data: {
+            status: "RESOLVED",
+            resolvedAt: new Date(),
+            resolvedBy: adminId,
+          },
+        });
+
+        await tx.moderationReport.updateMany({
+          where: {
+            trackId,
+            status: { in: ["PENDING", "UNDER_REVIEW"] },
+          },
+          data: {
+            status: "RESOLVED",
+            resolvedAt: new Date(),
+          },
+        });
+
+        await tx.track.delete({ where: { id: trackId } });
+        return createdAction;
+      }
+
+      await tx.track.update({
+        where: { id: trackId },
+        data: { moderationState: dto.moderationState },
+      });
+
+      return tx.moderationAction.create({
+        data: {
+          adminId,
+          trackId,
+          targetUserId: track.uploaderId,
+          actionType,
+          notes: dto.reason,
+          reportId: moderationReportId,
+        },
+      });
     });
 
     return {

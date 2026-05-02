@@ -14,6 +14,15 @@ export class AdminUsersService {
 
   private readonly DAY_MS = 24 * 60 * 60 * 1000;
 
+  private formatStorageBytes(totalBytes: number) {
+    return {
+      totalBytes,
+      totalMB: Number((totalBytes / (1024 * 1024)).toFixed(2)),
+      totalGB: Number((totalBytes / (1024 * 1024 * 1024)).toFixed(2)),
+      source: "track_files.file_size_bytes",
+    };
+  }
+
   private startOfDayUtc(input: Date): Date {
     return new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate()));
   }
@@ -537,6 +546,14 @@ export class AdminUsersService {
 
   // ─── Overview stats ──────────────────────────────────────────────────────────
 
+  async getTotalStorage() {
+    const storageAggregate = await this.prisma.trackFile.aggregate({
+      _sum: { fileSizeBytes: true },
+    });
+
+    return this.formatStorageBytes(Number(storageAggregate._sum.fileSizeBytes ?? BigInt(0)));
+  }
+
   async getOverviewStats() {
     return this.getCached("overview_stats", async () => {
       const now = new Date();
@@ -608,7 +625,9 @@ export class AdminUsersService {
         }),
       ]);
 
-      const totalStorageBytes = Number(storageAggregate._sum.fileSizeBytes ?? BigInt(0));
+      const totalStorageBytes = this.formatStorageBytes(
+        Number(storageAggregate._sum.fileSizeBytes ?? BigInt(0)),
+      ).totalBytes;
 
       // Play Through Rate = (completedPlays / totalPlays) × 100
       // A completed play is one where completionRatio >= 0.90

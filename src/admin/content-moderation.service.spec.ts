@@ -5,11 +5,13 @@ import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
 const mockPrisma = {
-  track: { findUnique: jest.fn(), update: jest.fn() },
+  track: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
   comment: { findUnique: jest.fn(), update: jest.fn() },
   playlist: { findUnique: jest.fn(), update: jest.fn() },
-  moderationReport: { findUnique: jest.fn() },
+  report: { updateMany: jest.fn() },
+  moderationReport: { findUnique: jest.fn(), updateMany: jest.fn() },
   moderationAction: { create: jest.fn() },
+  $transaction: jest.fn(),
 };
 
 const mockNotificationsService = {
@@ -31,6 +33,9 @@ describe("ContentModerationService", () => {
     service = module.get<ContentModerationService>(ContentModerationService);
     jest.clearAllMocks();
     mockPrisma.moderationReport.findUnique.mockResolvedValue(null);
+    mockPrisma.report.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.moderationReport.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
   });
 
   // 1. moderateTrack - 404 when track not found
@@ -68,7 +73,6 @@ describe("ContentModerationService", () => {
       uploaderId: "user-1",
       moderationState: "VISIBLE",
     });
-    mockPrisma.track.update.mockResolvedValueOnce({});
     mockPrisma.moderationAction.create.mockResolvedValueOnce({
       id: "action-1",
       actionType: "HIDE_TRACK",
@@ -90,6 +94,10 @@ describe("ContentModerationService", () => {
         }),
       }),
     );
+    expect(mockPrisma.track.update).toHaveBeenCalledWith({
+      where: { id: "track-1" },
+      data: { moderationState: "HIDDEN" },
+    });
     expect(result.action_type).toBe("HIDE_TRACK");
   });
 
@@ -101,7 +109,6 @@ describe("ContentModerationService", () => {
       moderationState: "VISIBLE",
     });
     mockPrisma.moderationReport.findUnique.mockResolvedValueOnce(null);
-    mockPrisma.track.update.mockResolvedValueOnce({});
     mockPrisma.moderationAction.create.mockResolvedValueOnce({
       id: "action-legacy",
       actionType: "HIDE_TRACK",
@@ -124,8 +131,7 @@ describe("ContentModerationService", () => {
     );
   });
 
-  // 4. moderateTrack - emits notification to uploader
-  it("moderateTrack: emits REPORT_RESOLVED notification to track uploader", async () => {
+  it("moderateTrack: does not emit LIKE notification for admin moderation", async () => {
     const uploaderId = "uploader-X";
     mockPrisma.track.findUnique.mockResolvedValueOnce({
       id: "track-2",
@@ -133,51 +139,78 @@ describe("ContentModerationService", () => {
       uploaderId,
       moderationState: "VISIBLE",
     });
-    mockPrisma.track.update.mockResolvedValueOnce({});
     mockPrisma.moderationAction.create.mockResolvedValueOnce({
       id: "action-2",
       actionType: "REMOVE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
 
     await service.moderateTrack("admin-1", "track-2", {
       moderationState: "REMOVED",
       reason: "Serious policy violation requiring removal.",
     });
 
-    expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+    expect(mockPrisma.track.delete).toHaveBeenCalledWith({ where: { id: "track-2" } });
+    expect(mockPrisma.report.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        recipientId: uploaderId,
-        eventType: "REPORT_RESOLVED",
-        entityType: "TRACK",
+        where: expect.objectContaining({
+          targetType: "TRACK",
+          targetId: "track-2",
+          status: { in: ["PENDING", "UNDER_REVIEW"] },
+        }),
+        data: expect.objectContaining({
+          status: "RESOLVED",
+          resolvedBy: "admin-1",
+        }),
       }),
+    );
+    expect(mockPrisma.moderationReport.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trackId: "track-2",
+          status: { in: ["PENDING", "UNDER_REVIEW"] },
+        }),
+        data: expect.objectContaining({ status: "RESOLVED" }),
+      }),
+    );
+    expect(mockPrisma.moderationAction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          targetUserId: uploaderId,
+          actionType: "REMOVE_TRACK",
+        }),
+      }),
+    );
+    expect(mockPrisma.moderationAction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({ trackId: "track-2" }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "LIKE" }),
     );
   });
 
-  it("moderateTrack: succeeds even if notification dispatch fails", async () => {
+  it("moderateTrack: hard-deletes an already REMOVED track when removal is requested", async () => {
     mockPrisma.track.findUnique.mockResolvedValueOnce({
       id: "track-2b",
       title: "Other Track",
       uploaderId: "uploader-X",
-      moderationState: "VISIBLE",
+      moderationState: "REMOVED",
     });
-    mockPrisma.track.update.mockResolvedValueOnce({});
     mockPrisma.moderationAction.create.mockResolvedValueOnce({
       id: "action-2b",
-      actionType: "HIDE_TRACK",
+      actionType: "REMOVE_TRACK",
       createdAt: new Date(),
     });
-    mockNotificationsService.createNotification.mockRejectedValueOnce(
-      new Error("Notification provider timeout"),
-    );
 
     await expect(
       service.moderateTrack("admin-1", "track-2b", {
-        moderationState: "HIDDEN",
+        moderationState: "REMOVED",
         reason: "Policy violation",
       }),
-    ).resolves.toMatchObject({ action_type: "HIDE_TRACK" });
+    ).resolves.toMatchObject({ action_type: "REMOVE_TRACK" });
+    expect(mockPrisma.track.delete).toHaveBeenCalledWith({ where: { id: "track-2b" } });
   });
 
   // 5. moderateComment - 404 when comment not found
