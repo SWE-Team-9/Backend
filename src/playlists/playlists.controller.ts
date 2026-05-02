@@ -72,6 +72,7 @@ export class PlaylistsController {
   // Playlist lifecycle endpoints are grouped by create, public read, owner edit, and track actions.
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  // Validate the create payload before ownership and track existence checks run in the service.
   @UsePipes(
     new ValidationPipe({
       whitelist: true,
