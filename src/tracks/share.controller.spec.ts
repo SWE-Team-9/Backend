@@ -5,19 +5,41 @@ const request = require('supertest') as typeof import('supertest');
 
 import { ShareController } from './share.controller';
 import { TracksService } from './tracks.service';
+import { DiscoveryService } from '../discovery/discovery.service';
 
 const UUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 function buildServiceMock() {
   return {
-    findTrackShareTarget: jest.fn().mockResolvedValue({ id: UUID }),
+    findTrackShareTarget: jest.fn().mockResolvedValue({ id: UUID, artistHandle: 'testartist' }),
   };
 }
 
-async function buildApp(serviceMock: ReturnType<typeof buildServiceMock>): Promise<INestApplication> {
+function buildDiscoveryMock() {
+  return {
+    buildRedirectHtml: jest.fn((targetUrl: string, title: string) => `HTML:${title}:${targetUrl}`),
+    buildTrackShareRedirectHtml: jest.fn(
+      (trackId: string, artistHandle: string | null, isMobile: boolean) => {
+        const targetUrl = isMobile
+          ? `trackmaster://track/${trackId}`
+          : `https://iqa3.tech/track/${trackId}${artistHandle ? `?artist=${artistHandle}` : ''}`;
+
+        return `HTML:${isMobile ? 'Opening track...' : 'Opening track in browser...'}:${targetUrl}`;
+      },
+    ),
+  };
+}
+
+async function buildApp(
+  serviceMock: ReturnType<typeof buildServiceMock>,
+  discoveryMock: ReturnType<typeof buildDiscoveryMock>,
+): Promise<INestApplication> {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [ShareController],
-    providers: [{ provide: TracksService, useValue: serviceMock }],
+    providers: [
+      { provide: TracksService, useValue: serviceMock },
+      { provide: DiscoveryService, useValue: discoveryMock },
+    ],
   }).compile();
 
   const app = module.createNestApplication();
@@ -28,10 +50,12 @@ async function buildApp(serviceMock: ReturnType<typeof buildServiceMock>): Promi
 describe('ShareController', () => {
   let app: INestApplication;
   let svc: ReturnType<typeof buildServiceMock>;
+  let discovery: ReturnType<typeof buildDiscoveryMock>;
 
   beforeEach(async () => {
     svc = buildServiceMock();
-    app = await buildApp(svc);
+    discovery = buildDiscoveryMock();
+    app = await buildApp(svc, discovery);
   });
 
   afterEach(async () => {
@@ -41,12 +65,27 @@ describe('ShareController', () => {
 
   describe('GET /share/track/:slugOrId', () => {
     it('should return HTML that opens the mobile app for a found track', async () => {
-      const res = await request(app.getHttpServer()).get('/share/track/test-track').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/share/track/test-track')
+        .set('user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')
+        .expect(200);
 
       expect(svc.findTrackShareTarget).toHaveBeenCalledWith('test-track');
       expect(res.headers['content-type']).toContain('text/html');
-      expect(res.text).toContain(`iqa3://track/${UUID}`);
+      expect(discovery.buildTrackShareRedirectHtml).toHaveBeenCalledWith(UUID, 'testartist', true);
+      expect(res.text).toContain(`trackmaster://track/${UUID}`);
       expect(res.text).toContain('Opening track...');
+    });
+
+    it('should route browser requests to the frontend URL for a found track', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/share/track/test-track')
+        .set('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+        .expect(200);
+
+      expect(discovery.buildTrackShareRedirectHtml).toHaveBeenCalledWith(UUID, 'testartist', false);
+      expect(res.text).toContain(`https://iqa3.tech/track/${UUID}?artist=testartist`);
+      expect(res.text).toContain('Opening track in browser...');
     });
 
     it('should fall back to the main website when the track is not found', async () => {
@@ -54,8 +93,8 @@ describe('ShareController', () => {
 
       const res = await request(app.getHttpServer()).get('/share/track/missing-track').expect(200);
 
-      expect(res.text).toContain('https://iqa3.tech');
-      expect(res.text).toContain('Track not found');
+      expect(discovery.buildRedirectHtml).toHaveBeenCalledWith('https://iqa3.tech', 'Track not found');
+      expect(res.text).toContain('HTML:Track not found:https://iqa3.tech');
     });
   });
 });
