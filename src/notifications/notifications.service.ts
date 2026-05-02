@@ -186,7 +186,7 @@ export class NotificationsService {
       case 'MESSAGE':
         return `${name} sent you a message`;
       case 'REPORT_RESOLVED':
-        return 'Your report has been resolved';
+        return (meta?.['batchMessage'] as string) ?? 'Your report has been resolved';
       case 'SUBSCRIPTION':
         return 'Your subscription was updated';
       case 'ACCOUNT_SUSPENDED': {
@@ -196,9 +196,9 @@ export class NotificationsService {
           : 'Your account has been suspended';
       }
       case 'ACCOUNT_BANNED':
-        return 'Your account has been permanently banned';
+        return (meta?.['batchMessage'] as string) ?? 'Your account has been permanently banned';
       case 'ACCOUNT_RESTORED':
-        return 'Your account has been restored';
+        return (meta?.['batchMessage'] as string) ?? 'Your account has been restored';
       default:
         return (meta?.['batchMessage'] as string) ?? 'You have a new notification';
     }
@@ -222,6 +222,12 @@ export class NotificationsService {
         return (meta?.['batchMessage'] as string) ?? 'Your report has been resolved';
       case 'SUBSCRIPTION':
         return 'Your subscription was updated';
+      case 'ACCOUNT_SUSPENDED':
+        return (meta?.['batchMessage'] as string) ?? 'Your account has been suspended';
+      case 'ACCOUNT_BANNED':
+        return (meta?.['batchMessage'] as string) ?? 'Your account has been permanently banned';
+      case 'ACCOUNT_RESTORED':
+        return (meta?.['batchMessage'] as string) ?? 'Your account has been restored';
       default:
         return (meta?.['batchMessage'] as string) ?? 'You have a new notification';
     }

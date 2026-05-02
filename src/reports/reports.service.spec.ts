@@ -4,6 +4,7 @@ import { ReportStatus, ReportTargetType } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ReportsService } from "./reports.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 const mockPrisma = {
   report: {
@@ -30,6 +31,10 @@ const mockEventEmitter = {
   emit: jest.fn(),
 };
 
+const mockNotificationsService = {
+  createNotification: jest.fn(),
+};
+
 const REPORTER_ID = "reporter-uuid";
 
 describe("ReportsService", () => {
@@ -41,6 +46,7 @@ describe("ReportsService", () => {
         ReportsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 
@@ -388,7 +394,11 @@ describe("ReportsService", () => {
     });
 
     it("sets resolvedAt and resolvedBy when status is RESOLVED", async () => {
-      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1", status: ReportStatus.PENDING });
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.PENDING,
+        reporterId: "reporter-uuid",
+      });
       const updatedReport = {
         id: "r1",
         status: "RESOLVED",
@@ -409,10 +419,47 @@ describe("ReportsService", () => {
       );
       expect(result.report.status).toBe("RESOLVED");
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: "reporter-uuid",
+          eventType: "REPORT_RESOLVED",
+        }),
+      );
+    });
+
+    it("sends reporter-only outcome notification for REJECTED status", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.PENDING,
+        reporterId: "reporter-uuid",
+      });
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: "r1",
+        status: "REJECTED",
+      });
+      mockPrisma.appeal.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await service.updateReport("r1", "admin-1", {
+        status: ReportStatus.REJECTED,
+      });
+
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: "reporter-uuid",
+          eventType: "REPORT_RESOLVED",
+          metadata: expect.objectContaining({
+            reportStatus: ReportStatus.REJECTED,
+          }),
+        }),
+      );
     });
 
     it("does not update appeals when resolutionNotes is omitted", async () => {
-      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1", status: ReportStatus.PENDING });
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.PENDING,
+        reporterId: "reporter-uuid",
+      });
       mockPrisma.report.update.mockResolvedValueOnce({
         id: "r1",
         status: ReportStatus.UNDER_REVIEW,
@@ -487,9 +534,16 @@ describe("ReportsService", () => {
         },
       });
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
     });
 
     it("updates multiple reports in a transaction", async () => {
+      mockPrisma.report.findMany.mockResolvedValueOnce([]);
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        { id: "r1", reporterId: "reporter-1", status: ReportStatus.PENDING },
+        { id: "r2", reporterId: "reporter-2", status: ReportStatus.PENDING },
+        { id: "r3", reporterId: "reporter-3", status: ReportStatus.PENDING },
+      ]);
       mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 2 }]);
 
       const result = await service.bulkUpdateReports("admin-1", {
@@ -500,10 +554,19 @@ describe("ReportsService", () => {
 
       expect(result.updatedReports).toBe(3);
       expect(result.updatedAppeals).toBe(2);
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(3);
+      expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ recipientId: "reporter-1", eventType: "REPORT_RESOLVED" }),
+      );
     });
 
     it("updates reports without resolution notes using appeals status branch", async () => {
       mockPrisma.report.findMany.mockResolvedValueOnce([]);
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        { id: "r1", reporterId: "reporter-1", status: ReportStatus.PENDING },
+        { id: "r2", reporterId: "reporter-2", status: ReportStatus.PENDING },
+      ]);
       mockPrisma.$transaction.mockResolvedValueOnce([{ count: 2 }, { count: 2 }]);
 
       const result = await service.bulkUpdateReports("admin-1", {
@@ -513,6 +576,7 @@ describe("ReportsService", () => {
 
       expect(result).toEqual({ updatedReports: 2, updatedAppeals: 2 });
       expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
     });
   });
 });

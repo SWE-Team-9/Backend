@@ -129,4 +129,37 @@ describe('NotificationsService', () => {
     expect(result.notifications[0].message).toBe('Your account has been suspended');
     expect(result.notifications[0].message).not.toContain('liked your track');
   });
+
+  it('getNotifications: uses metadata batchMessage for REPORT_RESOLVED moderation payloads', async () => {
+    const createdAt = new Date('2024-01-01T00:00:00.000Z');
+    mockPrisma.notification.count.mockResolvedValueOnce(1);
+    mockPrisma.notification.findMany.mockResolvedValueOnce([
+      {
+        id: 'notif-report-1',
+        eventType: 'REPORT_RESOLVED',
+        entityType: 'COMMENT',
+        actorId: 'admin-1',
+        trackId: null,
+        playlistId: null,
+        commentId: 'comment-1',
+        messageId: null,
+        metadata: { batchMessage: 'Your comment was hidden by moderation.' },
+        readAt: null,
+        createdAt,
+        actor: {
+          id: 'admin-1',
+          profile: {
+            displayName: 'Admin',
+            handle: 'admin',
+            avatarUrl: null,
+          },
+        },
+      },
+    ]);
+
+    const result = await service.getNotifications('user-1', { page: 1, limit: 20 });
+
+    expect(result.notifications[0].message).toBe('Your comment was hidden by moderation.');
+    expect(result.notifications[0].message).not.toContain('liked your track');
+  });
 });

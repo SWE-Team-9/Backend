@@ -19,6 +19,7 @@ const mockPrisma = {
   track: { updateMany: jest.fn() },
   playlist: { updateMany: jest.fn() },
   moderationAction: { create: jest.fn() },
+  moderationReport: { findUnique: jest.fn(), update: jest.fn() },
   $transaction: jest.fn(),
 };
 
@@ -66,6 +67,8 @@ describe("UserEnforcementService", () => {
 
     service = module.get<UserEnforcementService>(UserEnforcementService);
     jest.clearAllMocks();
+    mockPrisma.moderationReport.findUnique.mockResolvedValue(null);
+    mockPrisma.moderationReport.update.mockResolvedValue({});
   });
 
   // ─── warnUser ────────────────────────────────────────────────────────────────
@@ -174,6 +177,44 @@ describe("UserEnforcementService", () => {
 
       expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
         expect.objectContaining({ recipientId: TARGET_ID, actorId: ADMIN_ID }),
+      );
+    });
+
+    it("notifies reporter on linked moderation report and does not misroute reporter message to target", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin());
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "action-report-link",
+        actionType: "WARN_USER",
+        createdAt: new Date(),
+      });
+      mockPrisma.moderationReport.findUnique
+        .mockResolvedValueOnce({ id: "report-1", reporterId: "reporter-1", status: "PENDING" });
+      mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+      await service.warnUser(ADMIN_ID, TARGET_ID, {
+        reason: "Posting misleading content repeatedly.",
+        currentPassword: "correct-pw",
+        reportId: "report-1",
+      });
+
+      expect(mockPrisma.moderationReport.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "report-1" } }),
+      );
+      expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ recipientId: TARGET_ID }),
+      );
+      expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          recipientId: "reporter-1",
+          eventType: "REPORT_RESOLVED",
+          metadata: expect.objectContaining({ outcome: "ACTION_TAKEN" }),
+        }),
       );
     });
 

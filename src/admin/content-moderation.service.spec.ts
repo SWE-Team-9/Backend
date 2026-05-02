@@ -33,6 +33,7 @@ describe("ContentModerationService", () => {
     service = module.get<ContentModerationService>(ContentModerationService);
     jest.clearAllMocks();
     mockPrisma.moderationReport.findUnique.mockResolvedValue(null);
+    (mockPrisma.moderationReport as any).update = jest.fn().mockResolvedValue({});
     mockPrisma.report.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.moderationReport.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
@@ -280,12 +281,65 @@ describe("ContentModerationService", () => {
         recipientId: "user-1",
         entityType: "COMMENT",
         eventType: "REPORT_RESOLVED",
+        metadata: expect.objectContaining({
+          batchMessage: expect.stringContaining("comment"),
+        }),
       }),
     );
     expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
       expect.objectContaining({ eventType: "LIKE" }),
     );
     expect(result.action_type).toBe("HIDE_COMMENT");
+  });
+
+  it("moderateComment: notifies reporter (not target report-status) when linked moderation report exists", async () => {
+    mockPrisma.comment.findUnique.mockResolvedValueOnce({
+      id: "comment-2",
+      userId: "target-user",
+      trackId: "track-1",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.moderationReport.findUnique
+      .mockResolvedValueOnce({ id: "mod-report-1" })
+      .mockResolvedValueOnce({
+        id: "mod-report-1",
+        reporterId: "reporter-user",
+        status: "PENDING",
+      });
+    mockPrisma.comment.update.mockResolvedValueOnce({});
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-linked",
+      actionType: "HIDE_COMMENT",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+    await service.moderateComment("admin-1", "comment-2", {
+      isHidden: true,
+      reason: "Policy violation",
+      reportId: "mod-report-1",
+    });
+
+    expect((mockPrisma.moderationReport as any).update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "mod-report-1" } }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        recipientId: "target-user",
+        eventType: "REPORT_RESOLVED",
+      }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        recipientId: "reporter-user",
+        eventType: "REPORT_RESOLVED",
+        metadata: expect.objectContaining({
+          outcome: "ACTION_TAKEN",
+        }),
+      }),
+    );
   });
 
   // 8. moderatePlaylist - 404 when playlist not found
