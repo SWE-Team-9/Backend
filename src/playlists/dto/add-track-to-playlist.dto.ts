@@ -39,4 +39,7 @@ export class AddTrackToPlaylistResponseDto {
     name: string;
     handle: string | null;
   };
+
+  @ApiProperty({ example: 'Layali' })
+  title!: string;
 }

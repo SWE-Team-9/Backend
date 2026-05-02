@@ -58,4 +58,10 @@ export class GetPlaylistDetailsResponseDto {
 
   @ApiProperty({ type: () => PlaylistDetailsTrackDto, isArray: true })
   tracks!: PlaylistDetailsTrackDto[];
+
+  @ApiProperty({example: 'late-night-drive',nullable: true})
+  slug!: string | null;  
+  
+  @ApiProperty({example: 'farah',nullable: true})
+  handle!: string | null;
 }
