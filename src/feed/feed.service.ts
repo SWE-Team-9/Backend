@@ -110,6 +110,7 @@ export class FeedService {
         where: {
           userId,
           trackId: { in: trackIds },
+          track: { deletedAt: null },
         },
         select: { trackId: true },
       });

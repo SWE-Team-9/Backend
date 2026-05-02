@@ -141,7 +141,7 @@ export class MessagesService {
     if (!trackIds.length) return { likedTrackIds: new Set(), repostedTrackIds: new Set() };
     const [likes, reposts] = await Promise.all([
       this.prisma.like.findMany({
-        where: { userId, trackId: { in: trackIds } },
+        where: { userId, trackId: { in: trackIds }, track: { deletedAt: null } },
         select: { trackId: true },
       }),
       this.prisma.repost.findMany({
