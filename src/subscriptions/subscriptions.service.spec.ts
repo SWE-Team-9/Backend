@@ -262,6 +262,7 @@ function makeMailMock() {
     sendSubscriptionConfirmationEmail: jest.fn().mockResolvedValue(undefined),
     sendTrialEndingEmail: jest.fn().mockResolvedValue(undefined),
     sendCancellationConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+    sendSubscriptionResumedEmail: jest.fn().mockResolvedValue(undefined),
     sendInvoiceReceiptEmail: jest.fn().mockResolvedValue(undefined),
     sendPlanChangedEmail: jest.fn().mockResolvedValue(undefined),
   };
@@ -648,6 +649,23 @@ describe('SubscriptionsService', () => {
       expect(result.message).toContain('full access');
     });
 
+    it('sends cancellation email with period-end access date', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100);
+      prisma.userSubscription.findFirst.mockResolvedValue(sub);
+
+      await service.cancelSubscription(USER_ID, dto);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mail.sendCancellationConfirmedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'test@example.com',
+          planName: sub.plan.name,
+          expiresAt: sub.currentPeriodEnd,
+        }),
+      );
+    });
+
     it('is idempotent if cancellation is already scheduled', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true }),
@@ -658,6 +676,7 @@ describe('SubscriptionsService', () => {
       expect(result.cancelAtPeriodEnd).toBe(true);
       expect(result.expiresAt).toBe(FUTURE.toISOString());
       expect(billing.cancelSubscription).not.toHaveBeenCalled();
+      expect(mail.sendCancellationConfirmedEmail).not.toHaveBeenCalled();
     });
   });
 
@@ -707,6 +726,15 @@ describe('SubscriptionsService', () => {
         }),
       );
       expect(result.planCode).toBe('PRO');
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mail.sendSubscriptionResumedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'test@example.com',
+          planName: canceledSub.plan.name,
+          renewalDate: canceledSub.currentPeriodEnd,
+        }),
+      );
     });
 
     it('resumes active subscription with cancelAtPeriodEnd=true and historical checkoutSessionId', async () => {
