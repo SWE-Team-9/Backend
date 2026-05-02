@@ -269,7 +269,7 @@ export class PlaylistsService {
       genre: { slug: string } | null;
       createdAt?: Date | string | null;
       releaseDate?: Date | string | null;
-      owner: { id: string; profile: { displayName: string } | null };
+      owner: { id: string; profile: { displayName: string | null; handle: string | null } | null };
       tracks?: Array<{
         track: {
           id: string;
@@ -312,6 +312,7 @@ export class PlaylistsService {
         id: playlist.owner.id,
         displayName: playlist.owner.profile?.displayName ?? 'Unknown User',
       },
+      handle: playlist.owner.profile?.handle ?? null,
       tracks: tracks.map(({ track }) => {
         const uploaderProfile = track.uploader.profile;
         return {
@@ -1552,6 +1553,7 @@ export class PlaylistsService {
       },
       select: {
         id: true,
+        ownerId: true,
       },
     });
 
@@ -1559,7 +1561,7 @@ export class PlaylistsService {
       throw this.notFound('PLAYLIST_SECRET_NOT_FOUND', 'Secret playlist not found.');
     }
 
-    return this.findOne(playlist.id);
+    return this.findOne(playlist.id, playlist.ownerId);
   }
 
   async getEmbedCode(

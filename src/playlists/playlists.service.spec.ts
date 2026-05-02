@@ -1139,6 +1139,7 @@ describe("PlaylistsService", () => {
       prisma.playlist.findFirst
         .mockResolvedValueOnce({
           id: "pl_101",
+          ownerId: "usr_1",
         })
         .mockResolvedValueOnce({
           id: "pl_101",
@@ -1173,7 +1174,7 @@ describe("PlaylistsService", () => {
         tracksCount: 0,
         owner: { id: "usr_1", displayName: "Ahmed Hassan" },
         tracks: [],
-      });
+      }));
     });
 
     it("throws when secret token is invalid", async () => {
