@@ -243,7 +243,7 @@ export class InteractionsService {
 
     const where = {
       userId,
-      track: { status: TrackStatus.FINISHED },
+      track: { status: TrackStatus.FINISHED, deletedAt: null },
     };
 
     const [total, likes] = await this.prisma.$transaction([
@@ -302,7 +302,7 @@ export class InteractionsService {
 
     const where = {
       userId,
-      track: { status: TrackStatus.FINISHED },
+      track: { status: TrackStatus.FINISHED, deletedAt: null },
     };
 
     const [total, reposts] = await this.prisma.$transaction([
@@ -361,7 +361,7 @@ export class InteractionsService {
 
     const where = {
       userId,
-      track: { status: TrackStatus.FINISHED },
+      track: { status: TrackStatus.FINISHED, deletedAt: null },
     };
 
     const [total, likes] = await this.prisma.$transaction([
@@ -420,7 +420,7 @@ export class InteractionsService {
 
     const where = {
       userId,
-      track: { status: TrackStatus.FINISHED },
+      track: { status: TrackStatus.FINISHED, deletedAt: null },
     };
 
     const [total, reposts] = await this.prisma.$transaction([
@@ -478,7 +478,7 @@ export class InteractionsService {
     const normalizedLimit = this.normalizeLimit(limit);
     const skip = (normalizedPage - 1) * normalizedLimit;
 
-    const where = { trackId };
+    const where = { trackId, track: { deletedAt: null } };
 
     const [total, likes] = await this.prisma.$transaction([
       this.prisma.like.count({ where }),
@@ -524,7 +524,7 @@ export class InteractionsService {
     const normalizedLimit = this.normalizeLimit(limit);
     const skip = (normalizedPage - 1) * normalizedLimit;
 
-    const where = { trackId };
+    const where = { trackId, track: { deletedAt: null } };
 
     const [total, reposts] = await this.prisma.$transaction([
       this.prisma.repost.count({ where }),

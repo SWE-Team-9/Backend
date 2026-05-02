@@ -531,7 +531,10 @@ describe('InteractionsService', () => {
 
       expect(prismaMock.like.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { trackId: 'track-uuid' },
+          where: { 
+  trackId: 'track-uuid',
+  track: { deletedAt: null } 
+},
           orderBy: { createdAt: 'desc' },
           skip: 10,
           take: 10,
@@ -602,7 +605,7 @@ describe('InteractionsService', () => {
 
       expect(prismaMock.repost.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { trackId: 'track-uuid' },
+          where: { trackId: 'track-uuid', track: { deletedAt: null } },
           orderBy: { createdAt: 'desc' },
           skip: 10,
           take: 10,

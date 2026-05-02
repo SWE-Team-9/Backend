@@ -94,27 +94,6 @@ export class PlayerService {
       });
     }
 
-    // Hard ad gate: when an ad is pending, do not issue any playable source URL.
-    // This prevents direct track taps from bypassing the non-skippable ad flow.
-    if (userId) {
-      const [shouldShowAds, session] = await Promise.all([
-        this.userAdsEnabled(userId),
-        this.prisma.playerSession.findUnique({
-          where: { userId },
-          select: { adRequired: true },
-        }),
-      ]);
-
-      if (shouldShowAds && session?.adRequired) {
-        throw new ConflictException({
-          code: 'AD_REQUIRED',
-          message: 'Complete the required ad before playing another track.',
-          ad: this.getNextAd(),
-          canSkip: false,
-        });
-      }
-    }
-
     const streamFile = await this.prisma.trackFile.findFirst({
       where: { trackId, fileRole: 'STREAM', isCurrent: true },
       select: { storageKey: true },
@@ -307,7 +286,7 @@ export class PlayerService {
         select: { trackId: true, positionSeconds: true },
       }),
       this.prisma.like.findMany({
-        where: { userId, trackId: { in: trackIds } },
+        where: { userId, trackId: { in: trackIds }, track: { deletedAt: null } },
         select: { trackId: true },
       }),
       this.prisma.repost.findMany({
@@ -399,7 +378,7 @@ export class PlayerService {
         },
       }),
       this.prisma.like.findMany({
-        where: { userId, trackId: { in: trackIds } },
+        where: { userId, trackId: { in: trackIds }, track: { deletedAt: null } },
         select: { trackId: true },
       }),
       this.prisma.repost.findMany({
