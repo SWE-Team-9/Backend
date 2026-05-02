@@ -35,6 +35,8 @@ export const FAQ_ANSWERS: Record<string, string> = {
     'Edit your profile from /settings or your profile page. You can update your bio, avatar, cover, links, and favorite genres if supported.',
   account:
     'Manage your account from /settings.',
+  settings:
+    'Open /settings to manage your profile, account details, notifications, and preferences.',
   download:
     'Downloads/offline listening are available for PRO and GO+ users. FREE users cannot download.',
   ads:
@@ -47,8 +49,21 @@ const UNSAFE_PATTERNS =
 const GENRE_WORDS = [
   'sha3by',
   'shaabi',
+  'shaaby',
+  'sh3by',
+  'شعبي',
+  'mahraganat',
+  'mahragan',
+  'مهرجانات',
   'quran',
+  'koran',
+  'quranic',
+  'قرآن',
+  'قران',
+  'tilawa',
+  'recitation',
   'rap',
+  'راب',
   'pop',
   'jazz',
   'rock',
@@ -56,6 +71,7 @@ const GENRE_WORDS = [
   'r&b',
   'hip hop',
   'hip-hop',
+  'hiphop',
   'electronic',
   'classical',
   'arabic',
@@ -88,10 +104,37 @@ export function detectMockIntent(
     };
   }
 
-  if (/(how|what|where|why|explain|help|can i|do i).*(upload|playlist|private|queue|search|like|repost|comment|report|message|notification|profile|account|download|ads?|free|pro|go\+|go plus|subscription|plan)/i.test(msg)) {
+  if (/(best|top).*(track|song).*(all genres|overall|everything)|what.*best.*track/i.test(msg) && !/(by user|by artist|from user|from artist|by\s+[a-z0-9_؀-ۿ])/i.test(msg)) {
+    return {
+      intent: 'get_trending_tracks',
+      parameters: {
+        limit: extractLimit(msg, 1),
+        mode: 'global_best',
+      },
+      confidence: 0.9,
+      needsConfirmation: false,
+    };
+  }
+
+  if (/(best|top).*(track|song).*(by|from)\s+(user|artist)\s+/i.test(msg)) {
+    const artist = extractArtistOrUser(original);
+    return {
+      intent: 'search_tracks',
+      parameters: {
+        artist,
+        limit: extractLimit(msg, 1),
+        mode: 'artist_best',
+      },
+      confidence: artist ? 0.88 : 0.55,
+      needsConfirmation: !artist,
+      clarifyingQuestion: artist ? undefined : 'Which artist or user should I search for?',
+    };
+  }
+
+  if (/(how|what|where|why|explain|help|can i|do i).*(upload|playlist|private|queue|search|like|repost|comment|report|message|notification|profile|account|settings?|download|ads?|free|pro|go\+|go plus|subscription|plan)/i.test(msg)) {
     return {
       intent: 'faq_help',
-      parameters: { originalMessage: original },
+      parameters: { originalMessage: original, topic: extractFaqTopic(msg) },
       confidence: 0.85,
       needsConfirmation: false,
     };
@@ -128,7 +171,7 @@ export function detectMockIntent(
 
   if (
     /(create|make).*(playlist).*(all|top|\d+|with|from|of)/i.test(msg) &&
-    /tracks?|songs?|genre|sha3by|shaabi|quran|rap|pop|jazz|rock|rnb|hip.?hop|electronic|arabic/i.test(msg)
+    /tracks?|songs?|genre|sha3by|shaabi|shaaby|sh3by|شعبي|mahraganat|مهرجانات|quran|قرآن|قران|rap|راب|pop|jazz|rock|rnb|hip.?hop|electronic|arabic/i.test(msg)
   ) {
     const genre = extractGenre(msg);
     const allRequested = /\ball\b/i.test(msg);
@@ -225,7 +268,19 @@ export function detectMockIntent(
     };
   }
 
-  if (/(recommend|suggest|give me).*(song|track|music)|\b[0-9]+\b.*(track|song)/i.test(msg)) {
+  if (/search\s+for\s+.+\s+(tracks?|songs?|music)|find\s+.+\s+(tracks?|songs?|music)|show\s+.+\s+(tracks?|songs?|music)/i.test(msg)) {
+    const query =
+      msg.match(/(?:search\s+for|find|show)\s+(.+?)\s+(?:tracks?|songs?|music)/i)?.[1]?.trim() ||
+      original;
+    return {
+      intent: 'search_tracks',
+      parameters: { query },
+      confidence: 0.88,
+      needsConfirmation: false,
+    };
+  }
+
+  if (/(recommend|suggest|give me).*(song|track|music)|\b[0-9]\b.*(track|song)/i.test(msg)) {
     return {
       intent: 'recommend_by_genre',
       parameters: {
@@ -251,10 +306,10 @@ export function detectMockIntent(
     };
   }
 
-  if (/upload|subscription|plan|pro|go\+|go plus|free|download|ad\b|queue|search|like\b|repost|comment|report|message|notification|profile|account|private/i.test(msg)) {
+  if (/upload|subscription|plan|pro|go\+|go plus|free|download|ad\b|queue|search|like\b|repost|comment|report|message|notification|profile|account|settings?|private/i.test(msg)) {
     return {
       intent: 'faq_help',
-      parameters: { originalMessage: original },
+      parameters: { originalMessage: original, topic: extractFaqTopic(msg) },
       confidence: 0.8,
       needsConfirmation: false,
     };
@@ -272,9 +327,11 @@ function extractGenre(msg: string): string {
   const normalized = msg.toLowerCase();
   const found = GENRE_WORDS.find((genre) => normalized.includes(genre));
   if (!found) return 'mixed';
-  if (found === 'shaabi') return 'sha3by';
-  if (found === 'hip hop') return 'hip-hop';
+  if (['shaabi', 'shaaby', 'sh3by', 'شعبي', 'mahraganat', 'mahragan', 'مهرجانات'].includes(found)) return 'sha3by';
+  if (found === 'hip hop' || found === 'hiphop') return 'hip-hop';
   if (found === 'r&b') return 'rnb';
+  if (['koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'].includes(found)) return 'quran';
+  if (found === 'راب') return 'rap';
   return found;
 }
 
@@ -304,9 +361,30 @@ function extractArtist(msg: string): string | undefined {
   return cleanName(match?.[1]);
 }
 
+function extractArtistOrUser(msg: string): string | undefined {
+  const match =
+    msg.match(/(?:by|from)\s+(?:user|artist)\s+["']?([a-zA-Z0-9_؀-ۿ\s\-]{2,60})["']?/i) ??
+    msg.match(/(?:by|from)\s+["']?([a-zA-Z0-9_؀-ۿ\s\-]{2,60})["']?/i);
+
+  return cleanName(match?.[1]);
+}
+
 function extractRecipient(msg: string): string | undefined {
   const match = msg.match(/(?:to|with)\s+["']?([a-zA-Z0-9_؀-ۿ\s\-]{2,60})["']?/i);
   return cleanName(match?.[1]?.replace(/\b(track|song|this)\b/gi, ''));
+}
+
+function extractFaqTopic(msg: string): string | undefined {
+  if (/settings?|account|profile/.test(msg)) return 'settings';
+  if (/upload/.test(msg)) return 'upload';
+  if (/subscription|plan|free|pro|go\+|go plus|uploads? left/.test(msg)) return 'subscription';
+  if (/playlist/.test(msg)) return 'playlist';
+  if (/queue|playback|play next/.test(msg)) return 'queue';
+  if (/search|discover|find/.test(msg)) return 'search';
+  if (/message|send|share/.test(msg)) return 'messages';
+  if (/download/.test(msg)) return 'download';
+  if (/ads?/.test(msg)) return 'ads';
+  return undefined;
 }
 
 function cleanName(value?: string): string | undefined {

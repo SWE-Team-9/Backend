@@ -106,6 +106,45 @@ describe("AdminUsersService", () => {
       expect(result.reports_against.total).toBe(3);
       expect(result.subscription).toBeNull();
     });
+
+    it("counts only non-deleted tracks in tracks_uploaded (deletedAt: null filter)", async () => {
+      const user = {
+        id: "u2",
+        email: "b@example.com",
+        systemRole: "USER",
+        accountStatus: "ACTIVE",
+        isVerified: false,
+        suspendedUntil: null,
+        lastLoginAt: null,
+        createdAt: new Date(),
+        profile: { displayName: "Bob", handle: "bob", avatarUrl: null, accountType: "FREE" },
+        subscriptions: [],
+        // 3 live tracks (deletedAt: null), 2 soft-deleted — mock returns 3
+        _count: { tracks: 3, playlists: 0, followers: 0, following: 0 },
+      };
+      mockPrisma.user.findUnique.mockResolvedValueOnce(user);
+      mockPrisma.moderationAction.findMany.mockResolvedValueOnce([]);
+      mockPrisma.moderationReport.aggregate
+        .mockResolvedValueOnce({ _count: { id: 0 } })
+        .mockResolvedValueOnce({ _count: { id: 0 } });
+      mockPrisma.moderationReport.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+
+      const result = await service.getUserDetail("u2");
+
+      // Verify the query includes a where filter on the tracks _count
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            _count: expect.objectContaining({
+              select: expect.objectContaining({
+                tracks: expect.objectContaining({ where: { deletedAt: null } }),
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(result.stats.tracks_uploaded).toBe(3);
+    });
   });
 
   // ─── getUsers ────────────────────────────────────────────────────────────────
@@ -137,6 +176,40 @@ describe("AdminUsersService", () => {
       expect(result.total).toBe(1);
       expect(result.users).toHaveLength(1);
       expect(result.users[0].handle).toBe("alice");
+    });
+
+    it("queries track_count with deletedAt: null filter (excludes soft-deleted tracks)", async () => {
+      mockPrisma.user.count.mockResolvedValueOnce(1);
+      mockPrisma.user.findMany.mockResolvedValueOnce([
+        {
+          id: "u1",
+          email: "a@b.com",
+          systemRole: "USER",
+          accountStatus: "ACTIVE",
+          isVerified: true,
+          lastLoginAt: null,
+          createdAt: new Date(),
+          profile: { displayName: "Alice", handle: "alice", avatarUrl: null, accountType: "FREE" },
+          // 4 live tracks (mock already excludes deleted via the query filter)
+          _count: { tracks: 4, reportedIn: 0 },
+        },
+      ]);
+
+      const result = await service.getUsers({ page: 1, limit: 20 });
+
+      // Verify findMany is called with the filtered _count on tracks
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            _count: expect.objectContaining({
+              select: expect.objectContaining({
+                tracks: expect.objectContaining({ where: { deletedAt: null } }),
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(result.users[0].track_count).toBe(4);
     });
   });
 

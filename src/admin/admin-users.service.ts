@@ -177,7 +177,8 @@ export class AdminUsersService {
           },
           _count: {
             select: {
-              tracks: true,
+              // Count non-deleted tracks only
+              tracks: { where: { deletedAt: null } },
               reportedIn: true,
             },
           },
@@ -243,8 +244,10 @@ export class AdminUsersService {
         },
         _count: {
           select: {
-            tracks: true,
-            playlists: true,
+            // Count non-deleted tracks only
+            tracks: { where: { deletedAt: null } },
+            // Count non-deleted playlists only
+            playlists: { where: { deletedAt: null } },
             followers: true,
             following: true,
           },
