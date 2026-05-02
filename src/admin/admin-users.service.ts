@@ -596,11 +596,11 @@ export class AdminUsersService {
         }),
         this.prisma.userSubscription.count({ where: { status: "ACTIVE" } }),
         this.prisma.trackFile.aggregate({ _sum: { fileSizeBytes: true } }),
-        this.prisma.moderationReport.count({ where: { status: "PENDING" } }),
-        this.prisma.moderationReport.count({
+        this.prisma.report.count({ where: { status: "PENDING" } }),
+        this.prisma.report.count({
           where: { status: "UNDER_REVIEW" },
         }),
-        this.prisma.moderationReport.count({
+        this.prisma.report.count({
           where: { status: "RESOLVED", resolvedAt: { gte: weekAgo } },
         }),
         this.prisma.moderationAction.count({
