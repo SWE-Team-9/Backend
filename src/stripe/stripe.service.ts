@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Stripe from 'stripe';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import Stripe from "stripe";
 
 @Injectable()
 export class StripeService {
@@ -8,36 +8,11 @@ export class StripeService {
   private readonly logger = new Logger(StripeService.name);
 
   constructor(private readonly config: ConfigService) {
-    const billingProvider =
-      this.config.get<string>('billing.provider') ??
-      this.config.get<string>('BILLING_PROVIDER') ??
-      process.env.BILLING_PROVIDER ??
-      'mock_stripe';
-
-    const secretKey =
-      this.config.get<string>('stripe.secretKey') ??
-      this.config.get<string>('STRIPE_SECRET_KEY') ??
-      process.env.STRIPE_SECRET_KEY ??
-      '';
-
-    const isRealStripe = billingProvider === 'stripe';
-
-    if (isRealStripe && !secretKey) {
-      throw new Error('STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe.');
-    }
-
-    const stripeKey = secretKey || 'sk_test_mock_key_do_not_use_in_real_payments';
-
-    this.stripe = new Stripe(stripeKey, {
-      apiVersion: '2025-08-27.basil',
+    const secretKey = this.config.get<string>("stripe.secretKey") ?? "";
+    this.stripe = new Stripe(secretKey, {
+      apiVersion: "2025-08-27.basil",
       typescript: true,
     });
-
-    if (!isRealStripe) {
-      this.logger.warn(
-        `StripeService initialized with BILLING_PROVIDER=${billingProvider}. Real Stripe network calls must not be used in mock mode.`,
-      );
-    }
   }
 
   // ── Customer ─────────────────────────────────────────────────────────────
@@ -57,10 +32,9 @@ export class StripeService {
   async retrieveCustomer(customerId: string): Promise<Stripe.Customer | null> {
     try {
       const customer = await this.stripe.customers.retrieve(customerId);
-      if ('deleted' in customer && customer.deleted) return null;
-      return customer as Stripe.Customer;
-    } catch (err) {
-      this.logger.warn(`[STRIPE] Failed to retrieve customer ${customerId}: ${String(err)}`);
+      if (customer.deleted) return null;
+      return customer;
+    } catch {
       return null;
     }
   }
@@ -75,20 +49,17 @@ export class StripeService {
   }
 
   // ── Setup Intent ─────────────────────────────────────────────────────────
+  // Used by the frontend to securely collect card details via Stripe.js.
+  // The frontend confirms the SetupIntent and gets back a paymentMethodId.
 
   async createSetupIntent(customerId: string): Promise<Stripe.SetupIntent> {
     return this.stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ['card'],
-      usage: 'off_session',
+      payment_method_types: ["card"],
     });
   }
 
-  async retrieveSetupIntent(setupIntentId: string): Promise<Stripe.SetupIntent> {
-    return this.stripe.setupIntents.retrieve(setupIntentId);
-  }
-
-  // ── Payment Method ───────────────────────────────────────────────────────
+  // ── Payment Method ────────────────────────────────────────────────────────
 
   async retrievePaymentMethod(paymentMethodId: string): Promise<Stripe.PaymentMethod> {
     return this.stripe.paymentMethods.retrieve(paymentMethodId);
@@ -98,22 +69,9 @@ export class StripeService {
     paymentMethodId: string,
     customerId: string,
   ): Promise<Stripe.PaymentMethod> {
-    const paymentMethod = await this.stripe.paymentMethods.retrieve(paymentMethodId);
-
-    const currentCustomer =
-      typeof paymentMethod.customer === 'string'
-        ? paymentMethod.customer
-        : paymentMethod.customer?.id;
-
-    if (currentCustomer && currentCustomer !== customerId) {
-      throw new Error('Payment method is already attached to a different Stripe customer.');
-    }
-
-    if (currentCustomer === customerId) {
-      return paymentMethod;
-    }
-
-    return this.stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
+    return this.stripe.paymentMethods.attach(paymentMethodId, {
+      customer: customerId,
+    });
   }
 
   async detachPaymentMethod(paymentMethodId: string): Promise<void> {
@@ -123,13 +81,12 @@ export class StripeService {
   async listCustomerPaymentMethods(customerId: string): Promise<Stripe.PaymentMethod[]> {
     const response = await this.stripe.paymentMethods.list({
       customer: customerId,
-      type: 'card',
+      type: "card",
     });
-
     return response.data;
   }
 
-  // ── Subscription ─────────────────────────────────────────────────────────
+  // ── Subscription ──────────────────────────────────────────────────────────
 
   async createSubscription(params: {
     customerId: string;
@@ -138,8 +95,11 @@ export class StripeService {
     trialPeriodDays?: number;
     metadata?: Record<string, string>;
   }): Promise<Stripe.Subscription> {
+    // Ensure the payment method is attached to the customer
     await this.stripe.customers.update(params.customerId, {
-      invoice_settings: { default_payment_method: params.paymentMethodId },
+      invoice_settings: {
+        default_payment_method: params.paymentMethodId,
+      },
     });
 
     return this.stripe.subscriptions.create({
@@ -148,7 +108,8 @@ export class StripeService {
       default_payment_method: params.paymentMethodId,
       trial_period_days: params.trialPeriodDays,
       metadata: params.metadata ?? {},
-      expand: ['latest_invoice.payment_intent'],
+      // Expand the latest invoice so we can inspect its payment intent
+      expand: ["latest_invoice.payment_intent"],
     });
   }
 
@@ -157,22 +118,20 @@ export class StripeService {
       await this.stripe.subscriptions.update(stripeSubscriptionId, {
         cancel_at_period_end: true,
       });
-      return;
+    } else {
+      await this.stripe.subscriptions.cancel(stripeSubscriptionId);
     }
-
-    await this.stripe.subscriptions.cancel(stripeSubscriptionId);
   }
 
   async reactivateSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
+    // Un-cancel a subscription that was set to cancel at period end
     return this.stripe.subscriptions.update(stripeSubscriptionId, {
       cancel_at_period_end: false,
     });
   }
 
   async retrieveSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
-    return this.stripe.subscriptions.retrieve(stripeSubscriptionId, {
-      expand: ['latest_invoice.payment_intent'],
-    });
+    return this.stripe.subscriptions.retrieve(stripeSubscriptionId);
   }
 
   async updateSubscription(
@@ -182,53 +141,21 @@ export class StripeService {
     return this.stripe.subscriptions.update(stripeSubscriptionId, params);
   }
 
-  async listCustomerSubscriptions(customerId: string): Promise<Stripe.Subscription[]> {
-    const response = await this.stripe.subscriptions.list({
-      customer: customerId,
-      status: 'all',
-      limit: 100,
-      expand: ['data.latest_invoice.payment_intent'],
-    });
-
-    return response.data;
-  }
-
-  // ── Invoice ───────────────────────────────────────────────────────────────
-
-  async retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice> {
-    return this.stripe.invoices.retrieve(invoiceId, {
-      expand: ['payment_intent', 'subscription'],
-    });
-  }
-
-  async listCustomerInvoices(customerId: string): Promise<Stripe.Invoice[]> {
-    const response = await this.stripe.invoices.list({
-      customer: customerId,
-      limit: 100,
-      expand: ['data.payment_intent', 'data.subscription'],
-    });
-
-    return response.data;
-  }
-
-  async payInvoice(invoiceId: string): Promise<Stripe.Invoice> {
-    return this.stripe.invoices.pay(invoiceId);
-  }
-
   // ── Customer Search ───────────────────────────────────────────────────────
+  // Find an existing Stripe customer by the userId stored in their metadata.
+  // Returns the Stripe customer ID or null if not found.
 
   async searchCustomersByUserId(userId: string): Promise<string | null> {
-    const escapedUserId = userId.replace(/'/g, "\\'");
-
     const result = await this.stripe.customers.search({
-      query: `metadata['userId']:'${escapedUserId}'`,
+      query: `metadata['userId']:'${userId}'`,
       limit: 1,
     });
-
     return result.data[0]?.id ?? null;
   }
 
-  // ── Checkout Session ─────────────────────────────────────────────────────
+  // ── Checkout Session ──────────────────────────────────────────────────────
+  // Creates a Stripe Hosted Checkout session.
+  // The user is redirected to session.url to enter payment details on Stripe.
 
   async createCheckoutSession(
     params: Stripe.Checkout.SessionCreateParams,
@@ -236,13 +163,9 @@ export class StripeService {
     return this.stripe.checkout.sessions.create(params);
   }
 
-  async retrieveCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
-    return this.stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['customer', 'subscription', 'payment_intent', 'setup_intent'],
-    });
-  }
-
-  // ── Billing Portal ───────────────────────────────────────────────────────
+  // ── Billing Portal ────────────────────────────────────────────────────────
+  // Creates a Stripe Customer Portal session so the user can manage their
+  // payment methods, view invoices, and cancel or change plans.
 
   async createBillingPortalSession(
     params: Stripe.BillingPortal.SessionCreateParams,
@@ -251,6 +174,8 @@ export class StripeService {
   }
 
   // ── Webhook ───────────────────────────────────────────────────────────────
+  // Verifies the Stripe-Signature header and parses the raw body.
+  // Throws if the signature is invalid.
 
   constructWebhookEvent(
     payload: Buffer | string,
@@ -258,9 +183,5 @@ export class StripeService {
     webhookSecret: string,
   ): Stripe.Event {
     return this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-  }
-
-  getClient(): Stripe {
-    return this.stripe;
   }
 }

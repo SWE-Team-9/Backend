@@ -247,6 +247,7 @@ describe("PlaylistsService", () => {
         isLiked: false,
         releaseDate: "2026-03-01T00:00:00.000Z",
         genre: "electronic",
+        tracksCount: 1,
         owner: { id: "usr_1", displayName: "Ahmed Hassan" },
         tracks: [
           {
@@ -313,6 +314,7 @@ describe("PlaylistsService", () => {
         isLiked: true,
         releaseDate: "2026-03-01T00:00:00.000Z",
         genre: null,
+        tracksCount: 1,
         owner: { id: "usr_1", displayName: "Ahmed Hassan" },
         tracks: [
           {
@@ -382,13 +384,14 @@ describe("PlaylistsService", () => {
           isLiked: false,
           releaseDate: "2026-03-01T00:00:00.000Z",
           genre: null,
+          tracksCount: 0,
           owner: { id: "usr_1", displayName: "Ahmed Hassan" },
           tracks: [],
         },
       });
     });
 
-    it("maps PRIVATE to SECRET and generates UUID token if needed", async () => {
+    it("keeps SECRET visibility and generates UUID token if needed", async () => {
       const findOneMock = {
         id: "pl_101",
         ownerId: "usr_1",
@@ -413,7 +416,7 @@ describe("PlaylistsService", () => {
       prisma.playlist.update.mockResolvedValue({});
 
       await service.update("usr_1", "pl_101", {
-        visibility: "PRIVATE",
+        visibility: "secret",
       });
 
       expect(prisma.playlist.update).toHaveBeenCalledWith({
@@ -458,6 +461,35 @@ describe("PlaylistsService", () => {
       );
     });
 
+    it("rejects PRIVATE visibility updates", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+      });
+
+      await expect(
+        service.update("usr_1", "pl_101", {
+          visibility: "PRIVATE" as never,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("rejects lowercase private visibility updates", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
+      });
+
+      await expect(
+        service.update("usr_1", "pl_101", {
+          visibility: "private" as never,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
     it("updates new editable playlist metadata fields", async () => {
       const findOneMock = {
         id: "pl_101",
@@ -519,6 +551,7 @@ describe("PlaylistsService", () => {
         type: "ALBUM",
         releaseDate: new Date("2026-03-01"),
         genreId: 12,
+        genre: { slug: "electronic" },
         tags: ["chill", "night-drive"],
       });
 
@@ -533,7 +566,7 @@ describe("PlaylistsService", () => {
         coverImageUrl: "https://cdn.example.com/playlists/pl_101/cover.jpg",
         type: "ALBUM",
         releaseDate: "2026-03-01T00:00:00.000Z",
-        genreId: 12,
+        genre: "electronic",
         tags: ["chill", "night-drive"],
       });
     });
@@ -1089,19 +1122,44 @@ describe("PlaylistsService", () => {
   });
 
   describe("resolveSecret", () => {
-    it("returns private access payload when token is valid", async () => {
-      prisma.playlist.findFirst.mockResolvedValue({
-        id: "pl_101",
-        title: "Late Night Drive",
-      });
+    it("returns secret access payload when token is valid", async () => {
+      prisma.playlist.findFirst
+        .mockResolvedValueOnce({
+          id: "pl_101",
+        })
+        .mockResolvedValueOnce({
+          id: "pl_101",
+          ownerId: "usr_1",
+          title: "Late Night Drive",
+          description: "chill tracks",
+          visibility: PlaylistVisibility.SECRET,
+          secretToken: "sec_token",
+          coverImageUrl: null,
+          coverArtUrl: null,
+          likesCount: 0,
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          releaseDate: null,
+          genre: null,
+          owner: { id: "usr_1", profile: { displayName: "Ahmed Hassan" } },
+        });
+      prisma.playlistTrack.findMany.mockResolvedValue([]);
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
 
       const result = await service.resolveSecret("sec_token");
 
       expect(result).toEqual({
         playlistId: "pl_101",
         title: "Late Night Drive",
-        visibility: "PRIVATE",
-        message: "Access granted via secret token",
+        description: "chill tracks",
+        visibility: "SECRET",
+        coverImageUrl: null,
+        likesCount: 0,
+        isLiked: false,
+        releaseDate: "2026-03-01T00:00:00.000Z",
+        genre: null,
+        tracksCount: 0,
+        owner: { id: "usr_1", displayName: "Ahmed Hassan" },
+        tracks: [],
       });
     });
 

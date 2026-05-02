@@ -53,8 +53,16 @@ function buildServiceMock() {
     resolveSecret: jest.fn().mockResolvedValue({
       playlistId,
       title: "Late Night Drive",
-      visibility: "PRIVATE",
-      message: "Access granted via secret token",
+      description: "chill tracks",
+      visibility: "SECRET",
+      coverImageUrl: null,
+      likesCount: 0,
+      isLiked: false,
+      releaseDate: null,
+      genre: "electronic",
+      tracksCount: 0,
+      owner: { id: artistId, displayName: "Ahmed Hassan" },
+      tracks: [],
     }),
     getRecentPlaylists: jest.fn().mockResolvedValue({ playlists: [] }),
     getEditDetails: jest.fn().mockResolvedValue({
@@ -66,7 +74,7 @@ function buildServiceMock() {
       coverImageUrl: null,
       type: "PLAYLIST",
       releaseDate: null,
-      genreId: null,
+      genre: "electronic",
       tags: [],
     }),
     uploadCover: jest.fn().mockResolvedValue({
@@ -372,6 +380,26 @@ describe("PlaylistsController", () => {
         .patch(`/playlists/${playlistId}`)
         .send({ visibility: "FRIENDS_ONLY" })
         .expect(400);
+    });
+  });
+
+  describe("PATCH /playlists/:playlistId", () => {
+    it("returns 400 for private visibility payloads", async () => {
+      await request(app.getHttpServer())
+        .patch(`/playlists/${playlistId}`)
+        .send({ visibility: "private" })
+        .expect(400);
+
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it("accepts lowercase secret visibility payloads", async () => {
+      await request(app.getHttpServer())
+        .patch(`/playlists/${playlistId}`)
+        .send({ visibility: "secret" })
+        .expect(200);
+
+      expect(service.update).toHaveBeenCalledWith("usr_1", playlistId, { visibility: "secret" });
     });
   });
 

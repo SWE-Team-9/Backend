@@ -20,7 +20,7 @@ export class GetPlaylistDetailsResponseDto {
   description!: string | null;
 
   @ApiProperty({ example: 'PUBLIC' })
-  visibility!: string;
+  visibility!: 'PUBLIC' | 'SECRET';
 
   @ApiPropertyOptional({ example: 'https://cdn.example.com/covers/pl_101.jpg', nullable: true })
   coverImageUrl!: string | null;
@@ -49,6 +49,9 @@ export class GetPlaylistDetailsResponseDto {
     nullable: true,
   })
   releaseDate!: string | null;
+
+  @ApiProperty({ example: 12 })
+  tracksCount!: number;
 
   @ApiProperty({ type: () => PlaylistDetailsOwnerDto })
   owner!: PlaylistDetailsOwnerDto;

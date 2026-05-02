@@ -64,8 +64,12 @@ export class DiscoveryService {
             up.handle AS artist_handle,
             t.duration_ms,
             COALESCE(SUM(tds.play_count), 0)::int AS views,
-            (t.title ILIKE ${ilikePattern} AND (t.title ILIKE ${normalized}%)) AS exact_prefix_match,
-            COALESCE(similarity(t.title, ${normalized}), 0) AS fuzzy_score,
+            (t.title ILIKE (${normalized} || '%')) AS exact_prefix_match,
+            CASE
+              WHEN t.title ILIKE ${ilikePattern} THEN 1
+              WHEN to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, '')) @@ plainto_tsquery('english', ${normalized}) THEN 0.5
+              ELSE 0
+            END AS fuzzy_score,
             COUNT(*) OVER()::bigint AS total_count
           FROM tracks t
           LEFT JOIN user_profiles up ON up.user_id = t.uploader_id
@@ -78,12 +82,11 @@ export class DiscoveryService {
             AND (
               to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, '')) @@ plainto_tsquery('english', ${normalized})
               OR t.title ILIKE ${ilikePattern}
-              OR t.description ILIKE ${ilikePattern}
-              OR similarity(t.title, ${normalized}) > 0.3
+                OR t.description ILIKE ${ilikePattern}
             )
           GROUP BY t.id, up.handle
-          ORDER BY
-            ${isShortQuery ? "views DESC, fuzzy_score DESC" : "exact_prefix_match DESC, fuzzy_score DESC"}
+            ORDER BY
+              ${isShortQuery ? "views DESC, fuzzy_score DESC" : "exact_prefix_match DESC, fuzzy_score DESC"}
           LIMIT ${limit}
           OFFSET ${offset}
         `
@@ -115,8 +118,6 @@ export class DiscoveryService {
             AND (
               u.handle ILIKE ${ilikePattern}
               OR u.display_name ILIKE ${ilikePattern}
-              OR similarity(u.handle, ${normalized}) > 0.3
-              OR similarity(u.display_name, ${normalized}) > 0.3
             )
           LIMIT ${limit}
           OFFSET ${offset}
@@ -152,7 +153,6 @@ export class DiscoveryService {
               to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p.description, '')) @@ plainto_tsquery('english', ${normalized})
               OR p.title ILIKE ${ilikePattern}
               OR p.description ILIKE ${ilikePattern}
-              OR similarity(p.title, ${normalized}) > 0.3
             )
           LIMIT ${limit}
           OFFSET ${offset}
@@ -183,16 +183,16 @@ export class DiscoveryService {
     const playlistsTotalCount = playlists.length > 0 ? Number(playlists[0].total_count) : 0;
 
     // Transform raw query results to match expected API response shape
-    const transformedTracks = tracks.map((t) => ({
+    const transformedTracks = (tracks || []).map((t) => ({
       id: t.id,
       title: t.title,
       slug: t.slug,
       description: t.description,
       coverArtUrl: t.cover_art_url,
       uploaderId: t.uploader_id,
-      artistHandle: t.artist_handle,
-      duration: t.duration_ms ? Math.floor(t.duration_ms / 1000) : null,
-      views: t.views,
+      artistHandle: t.artist_handle ?? null,
+      duration: typeof t.duration_ms === 'number' ? Math.floor(t.duration_ms / 1000) : null,
+      views: t.views != null ? Number(t.views) : 0,
     }));
 
     const transformedPlaylists = playlists.map((p) => ({

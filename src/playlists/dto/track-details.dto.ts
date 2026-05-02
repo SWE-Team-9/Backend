@@ -51,13 +51,12 @@ export class PlaylistDetailsTrackDto {
   })
   coverArtUrl!: string | null;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Track duration in milliseconds',
     example: 240000,
     type: Number,
-    nullable: true,
   })
-  durationMs!: number | null;
+  durationMs!: number;
 
   @ApiProperty({
     description: 'Number of likes on the track',
