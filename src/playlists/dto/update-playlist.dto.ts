@@ -28,7 +28,7 @@ class IsValidVisibilityConstraint implements ValidatorConstraintInterface {
   }
 
   defaultMessage(args: ValidationArguments) {
-    return 'visibility must be one of the following values: public, secret. "private" is not allowed.';
+    return 'visibility must be one of the following values: PUBLIC, SECRET. "PRIVATE" is not allowed.';
   }
 }
 
@@ -63,8 +63,8 @@ export class UpdatePlaylistDto {
 
   @ApiPropertyOptional({
     description: 'Playlist visibility',
-    enum: ['public', 'secret'],
-    example: 'secret',
+    enum: ['PUBLIC', 'SECRET'],
+    example: 'SECRET',
   })
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
