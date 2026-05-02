@@ -95,6 +95,7 @@ function buildServiceMock() {
       message: "Track added to playlist successfully",
       playlistId,
       trackId,
+      title: "Layali",
       coverArtUrl: "https://example.com/cover.jpg",
       artist: {
         id: artistId,
@@ -303,6 +304,7 @@ describe("PlaylistsController", () => {
       expect(res.body).toEqual({
         message: expect.any(String),
         playlistId: expect.any(String),
+        title: expect.any(String),
         trackId: expect.any(String),
         coverArtUrl: expect.anything(),
         artist: {

@@ -257,6 +257,7 @@ export class PlaylistsService {
   private sanitizePlaylistOutput(
     playlist: {
       id: string;
+      slug: string;
       title: string;
       description: string | null;
       visibility: PlaylistVisibility;
@@ -268,7 +269,8 @@ export class PlaylistsService {
       genre: { slug: string } | null;
       createdAt?: Date | string | null;
       releaseDate?: Date | string | null;
-      owner: { id: string; profile: { displayName: string } | null };
+      owner: { id: string; profile: { displayName: string; handle: string | null } | null };
+      _count?: { tracks: number };
       tracks?: Array<{
         track: {
           id: string;
@@ -288,10 +290,11 @@ export class PlaylistsService {
     tracksCount?: number,
   ): GetPlaylistDetailsResponseDto {
     const tracks = playlist.tracks ?? [];
-    const resolvedTracksCount = tracksCount ?? tracks.length;
+    const resolvedTracksCount = typeof tracksCount === 'number' ? tracksCount : tracks.length;
 
     return {
       playlistId: playlist.id,
+      slug: playlist.slug,
       title: playlist.title,
       description: playlist.description,
       visibility: this.normalizeVisibility(playlist.visibility),
@@ -310,6 +313,7 @@ export class PlaylistsService {
         id: playlist.owner.id,
         displayName: playlist.owner.profile?.displayName ?? 'Unknown User',
       },
+      handle: playlist.owner.profile?.handle ?? null,
       tracks: tracks.map(({ track }) => {
         const uploaderProfile = track.uploader.profile;
         return {
@@ -350,6 +354,7 @@ export class PlaylistsService {
           id: true,
           ownerId: true,
           title: true,
+          slug: true,
           description: true,
           visibility: true,
           secretToken: true,
@@ -358,6 +363,7 @@ export class PlaylistsService {
           likesCount: true,
           createdAt: true,
           releaseDate: true,
+          _count: { select: { tracks: true } },
           genre: {
             select: {
               slug: true,
@@ -369,6 +375,7 @@ export class PlaylistsService {
               profile: {
                 select: {
                   displayName: true,
+                  handle: true,
                 },
               },
             },
@@ -422,6 +429,10 @@ export class PlaylistsService {
 
     if (!playlist) {
       throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
+    }
+
+    if(playlist.visibility !== PlaylistVisibility.PUBLIC && playlist.ownerId !== requesterUserId) {
+      throw this.forbidden('PLAYLIST_ACCESS_DENIED', 'You do not have permission to access this playlist.');
     }
 
     let isLiked = false;
@@ -1192,6 +1203,7 @@ export class PlaylistsService {
         },
         select: {
           id: true,
+          title: true,
           coverArtUrl: true,
           uploader: {
             select: {
@@ -1249,6 +1261,7 @@ export class PlaylistsService {
       return {
         playlistId: playlist.id,
         trackId: track.id,
+        title: track.title,
         coverArtUrl: track.coverArtUrl ?? null,
         artist: {
           id: track.uploader.id,
@@ -1268,6 +1281,7 @@ export class PlaylistsService {
     return {
       message: 'Track added to playlist successfully',
       playlistId: result.playlistId,
+      title: result.title,
       trackId: result.trackId,
       coverArtUrl: result.coverArtUrl,
       artist: result.artist,
@@ -1383,29 +1397,45 @@ export class PlaylistsService {
       );
     }
 
-    try {
-      // Build CASE WHEN statement for position updates
-      const caseStatements = orderedTrackIds
-        .map((trackId, index) => `WHEN '${trackId}' THEN ${index}`)
-        .join(' ');
+    await this.prisma.$transaction(
+      orderedTrackIds.map((trackId, index) =>
+        this.prisma.playlistTrack.update({ 
+          where: {
+            playlistId_trackId: {
+              playlistId: playlist.id,
+              trackId,
+            },
+          },
+          data: {
+            position: index,
+          },
+        })
+      )
+    );
 
-      await this.prisma.$executeRaw(
-        Prisma.sql`
-          UPDATE "playlist_tracks"
-          SET "position" = CASE "track_id"
-            ${Prisma.raw(caseStatements)}
-            ELSE "position"
-          END
-          WHERE "playlist_id" = ${playlist.id}::uuid
-        `,
-      );
-    } catch (error) {
-      this.logger.error('Reorder failed:', error);
-      throw this.badRequest(
-        'PLAYLIST_REORDER_FAILED',
-        'Failed to reorder tracks. Please ensure all track IDs are valid.',
-      );
-    }
+    // try {
+    //   // Build CASE WHEN statement for position updates
+    //   const caseStatements = orderedTrackIds
+    //     .map((trackId, index) => `WHEN '${trackId}' THEN ${index}`)
+    //     .join(' ');
+
+    //   await this.prisma.$executeRaw(
+    //     Prisma.sql`
+    //       UPDATE "playlist_tracks"
+    //       SET "position" = CASE "track_id"
+    //         ${Prisma.raw(caseStatements)}
+    //         ELSE "position"
+    //       END
+    //       WHERE "playlist_id" = ${playlist.id}::uuid
+    //     `,
+    //   );
+    // } catch (error) {
+    //   this.logger.error('Reorder failed:', error);
+    //   throw this.badRequest(
+    //     'PLAYLIST_REORDER_FAILED',
+    //     'Failed to reorder tracks. Please ensure all track IDs are valid.',
+    //   );
+    // }
 
     this.logAudit('playlist.tracks.reorder', userId, playlist.id, {
       tracksCount: orderedTrackIds.length,
@@ -1506,6 +1536,7 @@ export class PlaylistsService {
       },
       select: {
         id: true,
+        ownerId: true,
       },
     });
 
@@ -1513,7 +1544,7 @@ export class PlaylistsService {
       throw this.notFound('PLAYLIST_SECRET_NOT_FOUND', 'Secret playlist not found.');
     }
 
-    return this.findOne(playlist.id);
+    return this.findOne(playlist.id, playlist.ownerId);
   }
 
   async getEmbedCode(

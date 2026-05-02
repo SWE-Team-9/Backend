@@ -870,7 +870,7 @@ export class PlaylistsController {
   @ApiResponse({ status: 404, description: 'Playlist not found.' })
   @ThrottlePolicy(20, 60_000)
   remove(@CurrentUser('userId') userId: string, @Param('playlistId', new ParseUUIDPipe()) playlistId: string) {
-    this.playlistsService.remove(userId, playlistId);
+    return this.playlistsService.remove(userId, playlistId);
   }
 }
 // mmary: "Delete playlist",
