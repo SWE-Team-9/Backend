@@ -1579,6 +1579,71 @@ export class PlaylistsService {
     };
   }
 
+  async getUserPlaylists(
+    userId: string,
+    query: PlaylistPaginationQueryDto,
+    requestingUserId?: string,
+  ) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PlaylistWhereInput = {
+      ownerId: userId,
+      visibility:
+        requestingUserId === userId
+          ? { in: [PlaylistVisibility.PUBLIC, PlaylistVisibility.SECRET] }
+          : PlaylistVisibility.PUBLIC,
+      deletedAt: null,
+    };
+
+    const [total, playlists] = await this.prisma.$transaction([
+      this.prisma.playlist.count({ where }),
+      this.prisma.playlist.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          coverImageUrl: true,
+          visibility: true,
+          likesCount: true,
+          genre: {
+            select: {
+              slug: true,
+            },
+          },
+          _count: {
+            select: {
+              tracks: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      playlists: playlists.map((playlist) => ({
+        playlistId: playlist.id,
+        title: playlist.title,
+        slug: playlist.slug,
+        coverImageUrl: playlist.coverImageUrl ?? null,
+        visibility: this.normalizeVisibility(playlist.visibility),
+        likesCount: playlist.likesCount ?? 0,
+        tracksCount: playlist._count.tracks,
+        genre: playlist.genre?.slug ?? null,
+      })),
+    };
+  }
+
   async resolveSecret(secretToken: string): Promise<ResolveSecretPlaylistResponseDto> {
     // Secret links resolve through the same detailed playlist projection as the standard details route.
     const playlist = await this.prisma.playlist.findFirst({

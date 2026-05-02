@@ -1192,6 +1192,184 @@ describe("PlaylistsService", () => {
     });
   });
 
+  describe("getUserPlaylists", () => {
+    it("should return paginated playlists", async () => {
+      prisma.playlist.count.mockResolvedValue(2);
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: "pl_101",
+          title: "Late Night Drive",
+          slug: "late-night-drive",
+          coverImageUrl: null,
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 10,
+          genre: { slug: "electronic" },
+          _count: { tracks: 12 },
+        },
+      ]);
+
+      const result = await service.getUserPlaylists("usr_123", { page: 1, limit: 20 });
+
+      expect(result).toEqual({
+        page: 1,
+        limit: 20,
+        total: 2,
+        playlists: [
+          {
+            playlistId: "pl_101",
+            title: "Late Night Drive",
+            slug: "late-night-drive",
+            coverImageUrl: null,
+            visibility: "PUBLIC",
+            likesCount: 10,
+            tracksCount: 12,
+            genre: "electronic",
+          },
+        ],
+      });
+      expect(result.playlists[0].playlistId).toBeDefined();
+      expect(result.playlists[0].slug).toBeDefined();
+      expect(result.playlists[0].tracksCount).toBeDefined();
+    });
+
+    it("should maintain pagination correctness for both cases", async () => {
+      prisma.playlist.count.mockResolvedValue(50);
+      prisma.playlist.findMany.mockResolvedValue([]);
+
+      await service.getUserPlaylists("usr_123", { page: 3, limit: 10 }, "usr_123");
+      await service.getUserPlaylists("usr_123", { page: 3, limit: 10 }, "usr_other");
+
+      expect(prisma.playlist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 20,
+          take: 10,
+        }),
+      );
+    });
+
+    it("should return only PUBLIC playlists when viewing another user", async () => {
+      prisma.playlist.count.mockResolvedValue(1);
+      prisma.playlist.findMany.mockResolvedValue([]);
+
+      await service.getUserPlaylists("usr_123", { page: 1, limit: 20 }, "usr_other");
+
+      expect(prisma.playlist.count).toHaveBeenCalledWith({
+        where: {
+          ownerId: "usr_123",
+          visibility: PlaylistVisibility.PUBLIC,
+          deletedAt: null,
+        },
+      });
+      expect(prisma.playlist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            ownerId: "usr_123",
+            visibility: PlaylistVisibility.PUBLIC,
+            deletedAt: null,
+          },
+        }),
+      );
+    });
+
+    it("should return PUBLIC + SECRET when user views own playlists", async () => {
+      prisma.playlist.count.mockResolvedValue(2);
+      prisma.playlist.findMany.mockResolvedValue([]);
+
+      await service.getUserPlaylists("usr_123", { page: 1, limit: 20 }, "usr_123");
+
+      expect(prisma.playlist.count).toHaveBeenCalledWith({
+        where: {
+          ownerId: "usr_123",
+          visibility: { in: [PlaylistVisibility.PUBLIC, PlaylistVisibility.SECRET] },
+          deletedAt: null,
+        },
+      });
+      expect(prisma.playlist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            ownerId: "usr_123",
+            visibility: { in: [PlaylistVisibility.PUBLIC, PlaylistVisibility.SECRET] },
+            deletedAt: null,
+          },
+        }),
+      );
+    });
+
+    it("should NOT include SECRET playlists in cross-user request", async () => {
+      prisma.playlist.count.mockResolvedValue(1);
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: "pl_101",
+          title: "Late Night Drive",
+          slug: "late-night-drive",
+          coverImageUrl: null,
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: 10,
+          genre: { slug: "electronic" },
+          _count: { tracks: 12 },
+        },
+      ]);
+
+      const result = await service.getUserPlaylists("usr_123", { page: 1, limit: 20 }, "usr_other");
+
+      expect(prisma.playlist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            visibility: PlaylistVisibility.PUBLIC,
+          }),
+        }),
+      );
+      expect(result.playlists.every((playlist) => playlist.visibility === "PUBLIC")).toBe(true);
+    });
+
+    it("should return correct mapping (slug, genre, counts)", async () => {
+      prisma.playlist.count.mockResolvedValue(1);
+      prisma.playlist.findMany.mockResolvedValue([
+        {
+          id: "pl_102",
+          title: "Neon Pulse",
+          slug: "neon-pulse",
+          coverImageUrl: undefined,
+          visibility: PlaylistVisibility.PUBLIC,
+          likesCount: undefined,
+          genre: null,
+          _count: { tracks: 5 },
+        },
+      ]);
+
+      const result = await service.getUserPlaylists("usr_123", { page: 1, limit: 20 });
+
+      expect(result.playlists[0]).toEqual({
+        playlistId: "pl_102",
+        title: "Neon Pulse",
+        slug: "neon-pulse",
+        coverImageUrl: null,
+        visibility: "PUBLIC",
+        likesCount: 0,
+        tracksCount: 5,
+        genre: null,
+      });
+    });
+
+    it("should handle empty playlists array", async () => {
+      prisma.playlist.count.mockResolvedValue(0);
+      prisma.playlist.findMany.mockResolvedValue([]);
+
+      const result = await service.getUserPlaylists("usr_123", { page: 1, limit: 20 });
+
+      expect(result.playlists).toEqual([]);
+    });
+
+    it("should return correct total count", async () => {
+      prisma.playlist.count.mockResolvedValue(37);
+      prisma.playlist.findMany.mockResolvedValue([]);
+
+      const result = await service.getUserPlaylists("usr_123", { page: 2, limit: 20 });
+
+      expect(result.total).toBe(37);
+    });
+  });
+
   describe("resolveSecret", () => {
     it("returns secret access payload when token is valid", async () => {
       prisma.playlist.findFirst
