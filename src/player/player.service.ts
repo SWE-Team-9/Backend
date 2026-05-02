@@ -286,7 +286,7 @@ export class PlayerService {
         select: { trackId: true, positionSeconds: true },
       }),
       this.prisma.like.findMany({
-        where: { userId, trackId: { in: trackIds } },
+        where: { userId, trackId: { in: trackIds }, track: { deletedAt: null } },
         select: { trackId: true },
       }),
       this.prisma.repost.findMany({
@@ -378,7 +378,7 @@ export class PlayerService {
         },
       }),
       this.prisma.like.findMany({
-        where: { userId, trackId: { in: trackIds } },
+        where: { userId, trackId: { in: trackIds }, track: { deletedAt: null } },
         select: { trackId: true },
       }),
       this.prisma.repost.findMany({

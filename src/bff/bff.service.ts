@@ -273,7 +273,7 @@ export class BffService {
 
     const [likes, reposts] = await Promise.all([
       this.prisma.like.findMany({
-        where: { userId: requesterId, trackId: { in: ids } },
+        where: { userId: requesterId, trackId: { in: ids }, track: { deletedAt: null } },
         select: { trackId: true },
       }),
       this.prisma.repost.findMany({
