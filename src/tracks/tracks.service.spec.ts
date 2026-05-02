@@ -1544,10 +1544,18 @@ describe("TracksService", () => {
 
   describe("findTrackShareTarget", () => {
     it("should find a track by slug or id", async () => {
-      prisma.track.findFirst.mockResolvedValueOnce({ id: "track-uuid" });
+      prisma.track.findFirst.mockResolvedValueOnce({
+        id: "track-uuid",
+        uploader: {
+          profile: {
+            handle: "artist-handle",
+          },
+        },
+      });
 
       await expect(service.findTrackShareTarget("test-track")).resolves.toEqual({
         id: "track-uuid",
+        artistHandle: "artist-handle",
       });
 
       expect(prisma.track.findFirst).toHaveBeenCalledWith({
@@ -1556,7 +1564,18 @@ describe("TracksService", () => {
           moderationState: "VISIBLE",
           OR: [{ id: "test-track" }, { slug: "test-track" }],
         },
-        select: { id: true },
+        select: {
+          id: true,
+          uploader: {
+            select: {
+              profile: {
+                select: {
+                  handle: true,
+                },
+              },
+            },
+          },
+        },
       });
     });
 

@@ -10,6 +10,7 @@ import {
 import { NotFoundException } from "@nestjs/common";
 import { DiscoveryService } from "./discovery.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { ConfigService } from "@nestjs/config";
 
 describe("DiscoveryService", () => {
   let service: DiscoveryService;
@@ -45,6 +46,18 @@ describe("DiscoveryService", () => {
             $queryRaw: jest.fn(),
           },
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === "app.clientUrl") {
+                return "http://localhost:5173";
+              }
+
+              return undefined;
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -57,6 +70,19 @@ describe("DiscoveryService", () => {
   });
 
   describe("search", () => {
+    it("keeps deleted tracks out of search queries", async () => {
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce([]);
+
+      await service.search("test", "tracks");
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+
+      const [sqlParts] = (prisma.$queryRaw as jest.Mock).mock.calls[0];
+      const sql = Array.isArray(sqlParts) ? sqlParts.join("") : String(sqlParts);
+
+      expect(sql).toContain("t.deleted_at IS NULL");
+    });
+
     it("should search tracks, users, and playlists with enriched data", async () => {
       const query = "test";
 

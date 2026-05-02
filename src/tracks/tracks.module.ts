@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { DiscoveryModule } from "../discovery/discovery.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { SubscriptionsModule } from "../subscriptions/subscriptions.module";
 import { InteractionsController } from "./interactions.controller";
@@ -12,7 +13,7 @@ import { TranscodingService } from "./transcoding.service";
 import { UserTracksController } from "./user-tracks.controller";
 
 @Module({
-  imports: [PrismaModule, SubscriptionsModule],
+  imports: [PrismaModule, SubscriptionsModule, DiscoveryModule],
   controllers: [InteractionsController, ShareController, TracksController, UserTracksController],
   providers: [InteractionsService, InteractionsGateway, TracksService, TranscodingService],
   exports: [InteractionsService, TracksService],
