@@ -357,4 +357,81 @@ describe("AdminUsersService", () => {
       expect(first.engagement).toHaveProperty("completed_play_events");
     });
   });
+
+  // ─── getDailyStats ─────────────────────────────────────────────────────────
+
+  describe("getDailyStats", () => {
+    it("returns fallback daily buckets with zeros when metrics table is empty", async () => {
+      mockPrisma.dailyPlatformMetric.findMany.mockResolvedValueOnce([]);
+
+      const result = await service.getDailyStats({
+        dateFrom: "2026-05-01",
+        dateTo: "2026-05-03",
+        granularity: "daily",
+      });
+
+      expect(result.metrics).toHaveLength(3);
+      expect(result.metrics[0]).toEqual(
+        expect.objectContaining({
+          date: "2026-05-03",
+          new_users: 0,
+          tracks_uploaded: 0,
+          total_storage_bytes: 0,
+          active_subscribers: 0,
+        }),
+      );
+      expect(result.metrics[2]).toEqual(
+        expect.objectContaining({
+          date: "2026-05-01",
+          new_users: 0,
+          tracks_uploaded: 0,
+          total_storage_bytes: 0,
+          active_subscribers: 0,
+        }),
+      );
+    });
+
+    it("aggregates multiple metric rows into weekly buckets", async () => {
+      mockPrisma.dailyPlatformMetric.findMany.mockResolvedValueOnce([
+        {
+          metricDate: new Date("2026-05-01T00:00:00.000Z"),
+          newUsers: 2,
+          tracksUploaded: 4,
+          totalStorageBytes: BigInt(100),
+          activeSubscribers: 8,
+        },
+        {
+          metricDate: new Date("2026-05-03T00:00:00.000Z"),
+          newUsers: 3,
+          tracksUploaded: 1,
+          totalStorageBytes: BigInt(40),
+          activeSubscribers: 10,
+        },
+      ]);
+
+      const result = await service.getDailyStats({
+        dateFrom: "2026-05-01",
+        dateTo: "2026-05-14",
+        granularity: "weekly",
+      });
+
+      expect(result.metrics).toHaveLength(2);
+      const metrics = result.metrics as Array<{
+        date: string;
+        new_users: number;
+        tracks_uploaded: number;
+        total_storage_bytes: number;
+        active_subscribers: number;
+      }>;
+      const weekBucket = metrics.find((m) => m.date === "2026-05-01");
+      expect(weekBucket).toEqual(
+        expect.objectContaining({
+          new_users: 5,
+          tracks_uploaded: 5,
+          total_storage_bytes: 140,
+          active_subscribers: 10,
+        }),
+      );
+    });
+  });
 });

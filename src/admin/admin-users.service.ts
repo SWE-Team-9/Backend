@@ -12,6 +12,114 @@ import {
 export class AdminUsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly DAY_MS = 24 * 60 * 60 * 1000;
+
+  private startOfDayUtc(input: Date): Date {
+    return new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate()));
+  }
+
+  private dateKey(input: Date): string {
+    return input.toISOString().split("T")[0];
+  }
+
+  private addDaysUtc(input: Date, days: number): Date {
+    return new Date(input.getTime() + days * this.DAY_MS);
+  }
+
+  private monthStartUtc(input: Date): Date {
+    return new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), 1));
+  }
+
+  private nextMonthUtc(input: Date): Date {
+    return new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth() + 1, 1));
+  }
+
+  private getBucketKey(
+    date: Date,
+    granularity: "daily" | "weekly" | "monthly",
+    dateFrom: Date,
+  ): string {
+    const normalized = this.startOfDayUtc(date);
+
+    if (granularity === "daily") {
+      return this.dateKey(normalized);
+    }
+
+    if (granularity === "weekly") {
+      const start = this.startOfDayUtc(dateFrom);
+      const diffDays = Math.floor((normalized.getTime() - start.getTime()) / this.DAY_MS);
+      const bucketIndex = Math.max(0, Math.floor(diffDays / 7));
+      return this.dateKey(this.addDaysUtc(start, bucketIndex * 7));
+    }
+
+    return this.dateKey(this.monthStartUtc(normalized));
+  }
+
+  private buildMetricBuckets(
+    dateFrom: Date,
+    dateTo: Date,
+    granularity: "daily" | "weekly" | "monthly",
+  ) {
+    const buckets = new Map<
+      string,
+      {
+        date: string;
+        new_users: number;
+        tracks_uploaded: number;
+        total_storage_bytes: number;
+        active_subscribers: number;
+      }
+    >();
+
+    const from = this.startOfDayUtc(dateFrom);
+    const to = this.startOfDayUtc(dateTo);
+
+    if (granularity === "daily") {
+      for (let cursor = from; cursor.getTime() <= to.getTime(); cursor = this.addDaysUtc(cursor, 1)) {
+        const key = this.dateKey(cursor);
+        buckets.set(key, {
+          date: key,
+          new_users: 0,
+          tracks_uploaded: 0,
+          total_storage_bytes: 0,
+          active_subscribers: 0,
+        });
+      }
+      return buckets;
+    }
+
+    if (granularity === "weekly") {
+      for (let cursor = from; cursor.getTime() <= to.getTime(); cursor = this.addDaysUtc(cursor, 7)) {
+        const key = this.dateKey(cursor);
+        buckets.set(key, {
+          date: key,
+          new_users: 0,
+          tracks_uploaded: 0,
+          total_storage_bytes: 0,
+          active_subscribers: 0,
+        });
+      }
+      return buckets;
+    }
+
+    for (
+      let cursor = this.monthStartUtc(from);
+      cursor.getTime() <= to.getTime();
+      cursor = this.nextMonthUtc(cursor)
+    ) {
+      const key = this.dateKey(cursor);
+      buckets.set(key, {
+        date: key,
+        new_users: 0,
+        tracks_uploaded: 0,
+        total_storage_bytes: 0,
+        active_subscribers: 0,
+      });
+    }
+
+    return buckets;
+  }
+
   private async buildReportCountMap(userIds: string[]): Promise<Map<string, number>> {
     const counts = new Map<string, number>();
     for (const userId of userIds) counts.set(userId, 0);
@@ -569,6 +677,8 @@ export class AdminUsersService {
     const cacheKey = `daily_stats:${dateFrom.toISOString()}:${dateTo.toISOString()}:${query.granularity ?? "daily"}`;
 
     return this.getCached(cacheKey, async () => {
+      const granularity = query.granularity ?? "daily";
+
       const metrics = await this.prisma.dailyPlatformMetric.findMany({
         where: {
           metricDate: { gte: dateFrom, lte: dateTo },
@@ -576,17 +686,30 @@ export class AdminUsersService {
         orderBy: { metricDate: "desc" },
       });
 
+      const buckets = this.buildMetricBuckets(dateFrom, dateTo, granularity);
+
+      for (const m of metrics) {
+        const bucketKey = this.getBucketKey(m.metricDate, granularity, dateFrom);
+        if (!buckets.has(bucketKey)) {
+          continue;
+        }
+
+        const bucket = buckets.get(bucketKey)!;
+        bucket.new_users += m.newUsers;
+        bucket.tracks_uploaded += m.tracksUploaded;
+        bucket.total_storage_bytes += Number(m.totalStorageBytes);
+        bucket.active_subscribers = Math.max(bucket.active_subscribers, m.activeSubscribers);
+      }
+
+      const normalizedMetrics = Array.from(buckets.values()).sort((a, b) =>
+        a.date < b.date ? 1 : a.date > b.date ? -1 : 0,
+      );
+
       return {
         date_from: dateFrom.toISOString().split("T")[0],
         date_to: dateTo.toISOString().split("T")[0],
-        granularity: query.granularity ?? "daily",
-        metrics: metrics.map((m) => ({
-          date: m.metricDate.toISOString().split("T")[0],
-          new_users: m.newUsers,
-          tracks_uploaded: m.tracksUploaded,
-          total_storage_bytes: Number(m.totalStorageBytes),
-          active_subscribers: m.activeSubscribers,
-        })),
+        granularity,
+        metrics: normalizedMetrics,
       };
     });
   }

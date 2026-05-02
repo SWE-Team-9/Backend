@@ -136,6 +136,7 @@ const TRACK_DETAIL_SELECT = {
   publishedAt: true,
   createdAt: true,
   updatedAt: true,
+  moderationState: true,
   uploader: {
     select: {
       id: true,
@@ -185,6 +186,7 @@ const TRACK_LIST_SELECT = {
   visibility: true,
   status: true,
   coverArtUrl: true,
+  moderationState: true,
   createdAt: true,
   uploader: {
     select: {
@@ -444,6 +446,11 @@ export class TracksService {
       throw new NotFoundException("Track not found.");
     }
 
+    // Hidden/removed tracks are only visible to the owner.
+    if (track.moderationState !== "VISIBLE" && track.uploader.id !== requesterId) {
+      throw new NotFoundException("Track not found.");
+    }
+
     const base = this.formatDetailResponse(track);
 
     if (!requesterId) return base;
@@ -473,12 +480,15 @@ export class TracksService {
   async getTrackStatus(trackId: string, requesterId?: string) {
     const track = await this.prisma.track.findFirst({
       where: { id: trackId, deletedAt: null },
-      select: { id: true, status: true, uploaderId: true, visibility: true },
+      select: { id: true, status: true, uploaderId: true, visibility: true, moderationState: true },
     });
     if (!track) {
       throw new NotFoundException("Track not found.");
     }
     if (track.visibility === TrackVisibility.PRIVATE && track.uploaderId !== requesterId) {
+      throw new NotFoundException("Track not found.");
+    }
+    if (track.moderationState !== "VISIBLE" && track.uploaderId !== requesterId) {
       throw new NotFoundException("Track not found.");
     }
     return { trackId: track.id, status: track.status };
@@ -495,6 +505,10 @@ export class TracksService {
     coverArtFile?: Express.Multer.File,
   ) {
     const track = await this.findOwnedTrack(trackId, userId);
+
+    if (track.moderationState !== "VISIBLE") {
+      throw new ConflictException("Cannot modify a track while it is hidden or removed by moderation.");
+    }
 
     // Block edits while the track is still being processed
     const fullTrack = await this.prisma.track.findUnique({
@@ -599,6 +613,10 @@ export class TracksService {
   async changeVisibility(trackId: string, userId: string, visibility: TrackVisibility) {
     const track = await this.findOwnedTrack(trackId, userId);
 
+    if (track.moderationState !== "VISIBLE") {
+      throw new ConflictException("Cannot change visibility of a track hidden or removed by moderation.");
+    }
+
     const data: Prisma.TrackUpdateInput = { visibility };
 
     // Regenerate secret token when switching to PRIVATE
@@ -639,6 +657,7 @@ export class TracksService {
       ...(!isOwner && {
         visibility: TrackVisibility.PUBLIC,
         status: TrackStatus.FINISHED,
+        moderationState: "VISIBLE",
       }),
     };
 
@@ -765,7 +784,7 @@ export class TracksService {
 
   async getTrackBySecretToken(secretToken: string) {
     const track = await this.prisma.track.findFirst({
-      where: { secretToken, deletedAt: null },
+      where: { secretToken, deletedAt: null, moderationState: "VISIBLE" },
       select: TRACK_DETAIL_SELECT,
     });
     if (!track) {
@@ -781,6 +800,7 @@ export class TracksService {
     return this.prisma.track.findFirst({
       where: {
         deletedAt: null,
+        moderationState: "VISIBLE",
         OR: [{ id: identifier }, { slug: identifier }],
       },
       select: { id: true },
@@ -798,7 +818,7 @@ export class TracksService {
   private async findOwnedTrack(trackId: string, userId: string) {
     const track = await this.prisma.track.findFirst({
       where: { id: trackId, deletedAt: null },
-      select: { id: true, uploaderId: true, publishedAt: true },
+      select: { id: true, uploaderId: true, publishedAt: true, moderationState: true },
     });
     if (!track) {
       throw new NotFoundException("Track not found.");

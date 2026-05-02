@@ -315,6 +315,31 @@ describe("UserEnforcementService", () => {
         }),
       );
     });
+
+    it("does not fail when notification dispatch errors after suspension", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin());
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.$transaction.mockResolvedValueOnce([{}, {}]);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a3b",
+        actionType: "SUSPEND_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockRejectedValueOnce(
+        new Error("Notification service unavailable"),
+      );
+
+      await expect(
+        service.suspendUser(ADMIN_ID, TARGET_ID, {
+          reason: "abuse",
+          currentPassword: "pw",
+          durationDays: 3,
+        }),
+      ).resolves.toMatchObject({ action_type: "SUSPEND_USER" });
+    });
   });
 
   // ─── banUser ─────────────────────────────────────────────────────────────────
@@ -492,6 +517,28 @@ describe("UserEnforcementService", () => {
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.track.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("does not fail when notification dispatch errors after restore", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }))
+        .mockResolvedValueOnce(makeAdmin());
+      mockPrisma.user.update.mockResolvedValueOnce({});
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a6",
+        actionType: "RESTORE_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockRejectedValueOnce(
+        new Error("Notification service unavailable"),
+      );
+
+      await expect(
+        service.restoreUser(ADMIN_ID, TARGET_ID, {
+          reason: "appeal",
+          restoreContent: false,
+        }),
+      ).resolves.toMatchObject({ target_user: { account_status: "ACTIVE" } });
     });
   });
 });
