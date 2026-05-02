@@ -248,7 +248,7 @@ describe("PlaylistsService", () => {
         releaseDate: "2026-03-01T00:00:00.000Z",
         genre: "electronic",
         tracksCount: 1,
-        owner: expect.objectContaining({ id: "usr_1", displayName: "Ahmed Hassan" }),
+        owner: { id: "usr_1", displayName: "Ahmed Hassan" },
         tracks: [
           {
             trackId: "trk_123",
@@ -315,7 +315,7 @@ describe("PlaylistsService", () => {
         releaseDate: "2026-03-01T00:00:00.000Z",
         genre: null,
         tracksCount: 1,
-        owner: expect.objectContaining({ id: "usr_1", displayName: "Ahmed Hassan" }),
+        owner: { id: "usr_1", displayName: "Ahmed Hassan" },
         tracks: [
           {
             trackId: "trk_123",
@@ -386,7 +386,7 @@ describe("PlaylistsService", () => {
           releaseDate: "2026-03-01T00:00:00.000Z",
           genre: null,
           tracksCount: 0,
-          owner: expect.objectContaining({ id: "usr_1", displayName: "Ahmed Hassan" }),
+          owner: { id: "usr_1", displayName: "Ahmed Hassan" },
           tracks: [],
         }),
       }));
@@ -1139,7 +1139,6 @@ describe("PlaylistsService", () => {
       prisma.playlist.findFirst
         .mockResolvedValueOnce({
           id: "pl_101",
-          ownerId: "usr_1",
         })
         .mockResolvedValueOnce({
           id: "pl_101",
@@ -1172,9 +1171,9 @@ describe("PlaylistsService", () => {
         releaseDate: "2026-03-01T00:00:00.000Z",
         genre: null,
         tracksCount: 0,
-        owner: expect.objectContaining({ id: "usr_1", displayName: "Ahmed Hassan" }),
+        owner: { id: "usr_1", displayName: "Ahmed Hassan" },
         tracks: [],
-      }));
+      });
     });
 
     it("throws when secret token is invalid", async () => {
