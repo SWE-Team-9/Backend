@@ -433,6 +433,25 @@ describe('SubscriptionsService', () => {
       expect(result.remainingUploads).toBeNull();
     });
 
+    it('does not expose stale trial fields for active GO_PLUS subscriptions', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.GO_PLUS, 1000, {
+          status: SubscriptionStatus.ACTIVE,
+          trialStart: new Date('2026-04-28T00:05:31.680Z'),
+          trialEnd: new Date('2026-05-28T12:46:38.461Z'),
+        }),
+      );
+      prisma.track.count.mockResolvedValue(1);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.planCode).toBe('GO_PLUS');
+      expect(result.trialStart).toBeNull();
+      expect(result.trialEnd).toBeNull();
+      expect(result.renewalDate).toBe(FUTURE.toISOString());
+      expect(result.canResume).toBe(false);
+    });
+
     it('does not leak provider IDs in response', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, {
@@ -1079,6 +1098,8 @@ describe('SubscriptionsService', () => {
             currentPeriodEnd: new Date(1772600000 * 1000),
             canceledAt: new Date(1769999000 * 1000),
             planId: 'plan-go-plus',
+            trialStart: null,
+            trialEnd: null,
           }),
         }),
       );
