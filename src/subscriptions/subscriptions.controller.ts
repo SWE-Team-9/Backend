@@ -618,6 +618,26 @@ export class SubscriptionsController {
     return this.subscriptionsService.changePlan(userId, dto);
   }
 
+  // ─── POST /subscriptions/cancel-plan-change ──────────────────────────────
+  @ApiOperation({
+    summary: 'Cancel a pending scheduled plan change',
+    description:
+      'Removes a pending plan switch (for example PRO -> GO+) and keeps the current subscription active.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Pending plan change canceled. Returns the full updated subscription object (same shape as GET /subscriptions/me).',
+  })
+  @ApiResponse({ status: 404, description: 'No active subscription found.' })
+  @ApiResponse({ status: 409, description: 'No pending plan change exists.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @Post('cancel-plan-change')
+  @HttpCode(HttpStatus.OK)
+  async cancelPlanChange(@CurrentUser('userId') userId: string) {
+    return this.subscriptionsService.cancelPendingPlanChange(userId);
+  }
+
   // ─── POST /subscriptions/cancel ───────────────────────────────────────────
   @ApiOperation({ summary: 'Cancel subscription at period end' })
   @ApiResponse({

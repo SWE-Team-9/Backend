@@ -636,6 +636,58 @@ export class SubscriptionsService {
     };
   }
 
+  // ── POST /subscriptions/cancel-plan-change ───────────────────────────────
+
+  async cancelPendingPlanChange(userId: string) {
+    const sub = await this.findActiveSubscription(userId);
+    if (!sub) {
+      throw new NotFoundException({
+        code: 'SUBSCRIPTION_NOT_FOUND',
+        message: 'No active subscription found.',
+      });
+    }
+
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+
+    const pendingDowngrade =
+      (currentPaymentMethod.pendingDowngrade as {
+        planCode: string;
+        planId: string;
+        planName: string;
+        effectiveAt: string;
+      } | null) ?? null;
+
+    if (!pendingDowngrade) {
+      throw new ConflictException({
+        code: 'NO_PENDING_PLAN_CHANGE',
+        message: 'There is no pending plan change to cancel.',
+      });
+    }
+
+    const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
+
+    await this.prisma.userSubscription.update({
+      where: { id: sub.id },
+      data: {
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        paymentMethod: cleanPaymentMethod as any,
+      },
+    });
+
+    await this.logPaymentEvent(sub.id, 'customer.subscription.plan_change_canceled', {
+      planCode: pendingDowngrade.planCode,
+      planId: pendingDowngrade.planId,
+      planName: pendingDowngrade.planName,
+      effectiveAt: pendingDowngrade.effectiveAt,
+    });
+
+    return this.getMySubscription(userId);
+  }
+
   // ── POST /subscriptions/resume ────────────────────────────────────────────
 
   async resumeSubscription(userId: string) {
