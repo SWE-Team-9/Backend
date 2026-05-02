@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -362,6 +363,7 @@ describe('SubscriptionsService', () => {
         adsEnabled: true,
         canDownload: false,
         isPremium: false,
+        canResume: false,
       });
     });
 
@@ -380,6 +382,7 @@ describe('SubscriptionsService', () => {
         adsEnabled: false,
         canDownload: true,
         isPremium: true,
+        canResume: false,
       });
       expect(result.renewalDate).not.toBeNull();
       expect(result.expiresAt).toBeNull();
@@ -395,6 +398,26 @@ describe('SubscriptionsService', () => {
 
       expect(result.expiresAt).not.toBeNull();
       expect(result.renewalDate).toBeNull();
+      expect(result.canResume).toBe(true);
+      expect(result.resumeBlockedReason).toBeNull();
+      expect(result.resumeBlockedMessage).toBeNull();
+    });
+
+    it('sets canResume=false with checkout-session blocked reason when canceling sub has cs_ id', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: 'cs_test_pending',
+        }),
+      );
+      prisma.track.count.mockResolvedValue(0);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.canResume).toBe(false);
+      expect(result.resumeBlockedReason).toBe('CHECKOUT_SESSION_PENDING');
+      expect(result.resumeBlockedMessage).toContain('checkout session');
     });
 
     it('returns remainingUploads=null when DB plan limit is unlimited', async () => {
@@ -680,6 +703,61 @@ describe('SubscriptionsService', () => {
         }),
       );
       expect(result.planCode).toBe('PRO');
+    });
+
+    it('throws CHECKOUT_SESSION_PENDING when provider id is a checkout session', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: 'cs_test_123',
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'CHECKOUT_SESSION_PENDING' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
+
+    it('throws SUBSCRIPTION_PROVIDER_ID_MISSING when provider subscription id is absent', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: null,
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'SUBSCRIPTION_PROVIDER_ID_MISSING' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
+
+    it('maps provider missing-subscription error to ConflictException instead of 500', async () => {
+      const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        stripeSubscriptionId: 'sub_missing_123',
+      });
+      prisma.userSubscription.findFirst.mockResolvedValue(canceledSub);
+      billing.resumeSubscription.mockRejectedValue(new Error('No such subscription: sub_missing_123'));
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(ConflictException);
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'PROVIDER_SUBSCRIPTION_NOT_FOUND' }),
+      });
+    });
+
+    it('maps unexpected provider errors to BadGatewayException instead of 500', async () => {
+      const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+      });
+      prisma.userSubscription.findFirst.mockResolvedValue(canceledSub);
+      billing.resumeSubscription.mockRejectedValue(new Error('Stripe timeout'));
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(BadGatewayException);
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'BILLING_PROVIDER_RESUME_FAILED' }),
+      });
     });
   });
 
