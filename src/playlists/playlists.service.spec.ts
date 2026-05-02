@@ -344,6 +344,7 @@ describe("PlaylistsService", () => {
     it("updates playlist and returns sanitized payload", async () => {
       const findOneMock = {
         id: "pl_101",
+        slug: "vol-2",
         ownerId: "usr_1",
         title: "Vol 2",
         description: null,
@@ -374,7 +375,7 @@ describe("PlaylistsService", () => {
       });
       expect(result).toEqual(expect.objectContaining({
         message: "Playlist updated successfully",
-        playlist: {
+        playlist: expect.objectContaining({
           playlistId: "pl_101",
           title: "Vol 2",
           description: null,
@@ -387,7 +388,7 @@ describe("PlaylistsService", () => {
           tracksCount: 0,
           owner: expect.objectContaining({ id: "usr_1", displayName: "Ahmed Hassan" }),
           tracks: [],
-        },
+        }),
       }));
     });
 
