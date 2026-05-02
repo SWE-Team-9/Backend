@@ -79,6 +79,15 @@ export function detectMockIntent(
     };
   }
 
+  if (/(my plan|my subscription|uploads? left|how many uploads?|what plan|my account|my profile)/i.test(msg)) {
+    return {
+      intent: 'profile_or_subscription_help',
+      parameters: {},
+      confidence: 0.9,
+      needsConfirmation: false,
+    };
+  }
+
   if (/(how|what|where|why|explain|help|can i|do i).*(upload|playlist|private|queue|search|like|repost|comment|report|message|notification|profile|account|download|ads?|free|pro|go\+|go plus|subscription|plan)/i.test(msg)) {
     return {
       intent: 'faq_help',
@@ -159,7 +168,7 @@ export function detectMockIntent(
     };
   }
 
-  if (/(add|put|save).*(to|in).*(playlist)|playlist.*add/i.test(msg)) {
+  if (/(add|put|save).*(to|in).*(playlist)|playlist.*add|(add|put|save).*(this\s+(track|song))|this\s+(track|song).*(add|put|save)/i.test(msg)) {
     const playlistName = extractPlaylistNameAfterTo(original);
     const trackId = context?.trackId as string | undefined;
 
@@ -213,15 +222,6 @@ export function detectMockIntent(
       confidence: context?.trackId ? 0.86 : 0.55,
       needsConfirmation: !context?.trackId,
       clarifyingQuestion: 'Please open a track first, then ask me to queue it.',
-    };
-  }
-
-  if (/(my plan|my subscription|uploads? left|how many uploads?|what plan|my account|my profile)/i.test(msg)) {
-    return {
-      intent: 'profile_or_subscription_help',
-      parameters: {},
-      confidence: 0.9,
-      needsConfirmation: false,
     };
   }
 

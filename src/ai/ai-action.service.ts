@@ -79,37 +79,37 @@ export class AiActionService {
           return this.execFaqHelp(intentResult.parameters, provider);
 
         case 'search_tracks':
-          return this.execSearchTracks(intentResult.parameters, provider);
+          return await this.execSearchTracks(intentResult.parameters, provider);
 
         case 'get_trending_tracks':
-          return this.execGetTrending(userId, intentResult.parameters, provider);
+          return await this.execGetTrending(userId, intentResult.parameters, provider);
 
         case 'recommend_by_genre':
-          return this.execRecommendByGenre(intentResult.parameters, provider);
+          return await this.execRecommendByGenre(intentResult.parameters, provider);
 
         case 'create_playlist':
-          return this.execCreatePlaylist(userId, intentResult.parameters, provider);
+          return await this.execCreatePlaylist(userId, intentResult.parameters, provider);
 
         case 'list_my_playlists':
-          return this.execListPlaylists(userId, provider);
+          return await this.execListPlaylists(userId, provider);
 
         case 'add_track_to_playlist':
-          return this.execAddTrackToPlaylist(userId, intentResult.parameters, provider);
+          return await this.execAddTrackToPlaylist(userId, intentResult.parameters, provider);
 
         case 'create_playlist_from_genre':
-          return this.execCreatePlaylistFromGenre(userId, intentResult.parameters, provider);
+          return await this.execCreatePlaylistFromGenre(userId, intentResult.parameters, provider);
 
         case 'create_playlist_from_artist_genre':
-          return this.execCreatePlaylistFromArtistGenre(userId, intentResult.parameters, provider);
+          return await this.execCreatePlaylistFromArtistGenre(userId, intentResult.parameters, provider);
 
         case 'share_track_message':
-          return this.execShareTrack(userId, intentResult.parameters, provider);
+          return await this.execShareTrack(userId, intentResult.parameters, provider);
 
         case 'queue_track_or_play_next':
-          return this.execQueueTrack(userId, intentResult.parameters, provider);
+          return await this.execQueueTrack(userId, intentResult.parameters, provider);
 
         case 'profile_or_subscription_help':
-          return this.execProfileHelp(userId, provider);
+          return await this.execProfileHelp(userId, provider);
 
         default:
           return this.unknownResponse(provider);

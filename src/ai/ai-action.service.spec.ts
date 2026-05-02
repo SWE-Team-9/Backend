@@ -42,13 +42,7 @@ function makePrismaMock() {
     user: {
       findMany: jest.fn(),
     },
-    $transaction: jest.fn().mockImplementation(async (arg) => {
-      if (typeof arg === 'function') {
-        const tx = makePrismaMock();
-        return arg(tx);
-      }
-      return Promise.all(arg);
-    }),
+    $transaction: jest.fn(),
   };
 }
 
@@ -63,6 +57,12 @@ describe('AiActionService', () => {
 
   beforeEach(async () => {
     prisma = makePrismaMock();
+
+    // Wire $transaction to use the outer prisma mock so call assertions work
+    (prisma.$transaction as jest.Mock).mockImplementation(async (arg: unknown) => {
+      if (typeof arg === 'function') return (arg as (tx: typeof prisma) => Promise<unknown>)(prisma);
+      return Promise.all(arg as Promise<unknown>[]);
+    });
 
     discovery = {
       search: jest.fn().mockResolvedValue({
