@@ -699,6 +699,65 @@ describe('SubscriptionsService', () => {
     });
   });
 
+  describe('cancelPendingPlanChange()', () => {
+    it('throws NotFoundException when there is no active subscription', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(null);
+
+      await expect(service.cancelPendingPlanChange(USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws NO_PENDING_PLAN_CHANGE when no scheduled plan switch exists', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
+
+      await expect(service.cancelPendingPlanChange(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'NO_PENDING_PLAN_CHANGE' }),
+      });
+    });
+
+    it('clears pending plan change and keeps full subscription active', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        paymentMethod: {
+          brand: 'visa',
+          last4: '4242',
+          pendingDowngrade: {
+            planCode: 'GO_PLUS',
+            planId: 'plan-go-plus',
+            planName: 'Go+',
+            effectiveAt: FUTURE.toISOString(),
+          },
+        },
+      });
+
+      prisma.userSubscription.findFirst
+        .mockResolvedValueOnce(sub)
+        .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: false,
+          paymentMethod: { brand: 'visa', last4: '4242' },
+        }));
+      prisma.track.count.mockResolvedValue(0);
+
+      const result = await service.cancelPendingPlanChange(USER_ID);
+
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: sub.id },
+          data: expect.objectContaining({
+            cancelAtPeriodEnd: false,
+            canceledAt: null,
+            paymentMethod: expect.not.objectContaining({
+              pendingDowngrade: expect.anything(),
+            }),
+          }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(false);
+      expect(result.pendingDowngrade).toBeNull();
+    });
+  });
+
   describe('resumeSubscription()', () => {
     it('throws NotFoundException when no active subscription exists', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(null);
