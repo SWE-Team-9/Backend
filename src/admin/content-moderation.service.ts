@@ -54,6 +54,49 @@ export class ContentModerationService {
       );
     }
   }
+
+  private async notifyReporterForLinkedReport(params: {
+    reportId?: string;
+    adminId: string;
+    targetUserId: string;
+    message: string;
+  }): Promise<void> {
+    if (!params.reportId) return;
+
+    const report = await this.prisma.moderationReport.findUnique({
+      where: { id: params.reportId },
+      select: { id: true, reporterId: true, status: true },
+    });
+    if (!report) return;
+
+    if (report.status === "RESOLVED" || report.status === "REJECTED") {
+      return;
+    }
+
+    await this.prisma.moderationReport.update({
+      where: { id: report.id },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (report.reporterId === params.targetUserId) {
+      return;
+    }
+
+    await this.createNotificationSafely({
+      recipientId: report.reporterId,
+      actorId: params.adminId,
+      entityType: "USER",
+      eventType: "REPORT_RESOLVED",
+      metadata: {
+        batchMessage: params.message,
+        reportId: report.id,
+        outcome: "ACTION_TAKEN",
+      },
+    });
+  }
   
   private async resolveModerationReportId(
     reportId?: string,
@@ -158,6 +201,33 @@ export class ContentModerationService {
       });
     });
 
+    const trackActionLabel =
+      dto.moderationState === "REMOVED"
+        ? "removed"
+        : dto.moderationState === "HIDDEN"
+          ? "hidden"
+          : "restored";
+
+    await this.createNotificationSafely({
+      recipientId: track.uploaderId,
+      actorId: adminId,
+      entityType: "TRACK",
+      eventType: "REPORT_RESOLVED",
+      trackId,
+      metadata: {
+        actionType,
+        reason: dto.reason,
+        batchMessage: `Your track was ${trackActionLabel} by moderation.`,
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: moderationReportId,
+      adminId,
+      targetUserId: track.uploaderId,
+      message: "Your report was reviewed. Action was taken on the reported track.",
+    });
+
     return {
       action_id: action.id,
       action_type: actionType,
@@ -223,7 +293,20 @@ export class ContentModerationService {
       entityType: "COMMENT",
       eventType: "REPORT_RESOLVED",
       commentId,
-      metadata: { actionType, reason: dto.reason },
+      metadata: {
+        actionType,
+        reason: dto.reason,
+        batchMessage: dto.isHidden
+          ? "Your comment was hidden by moderation."
+          : "Your comment was restored by moderation.",
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: moderationReportId,
+      adminId,
+      targetUserId: comment.userId,
+      message: "Your report was reviewed. Action was taken on the reported comment.",
     });
 
     return {
@@ -289,7 +372,23 @@ export class ContentModerationService {
       entityType: "PLAYLIST",
       eventType: "REPORT_RESOLVED",
       playlistId,
-      metadata: { actionType, reason: dto.reason },
+      metadata: {
+        actionType,
+        reason: dto.reason,
+        batchMessage:
+          dto.moderationState === "REMOVED"
+            ? "Your playlist was removed by moderation."
+            : dto.moderationState === "HIDDEN"
+              ? "Your playlist was hidden by moderation."
+              : "Your playlist was restored by moderation.",
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: moderationReportId,
+      adminId,
+      targetUserId: playlist.ownerId,
+      message: "Your report was reviewed. Action was taken on the reported playlist.",
     });
 
     return {
