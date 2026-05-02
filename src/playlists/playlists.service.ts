@@ -1146,6 +1146,24 @@ export class PlaylistsService {
       throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
     }
 
+    // Check if the playlist is already liked by the user
+    const existingLike = await this.prisma.playlistLike.findUnique({
+      where: {
+        userId_playlistId: {
+          userId,
+          playlistId: playlist.id,
+        },
+      },
+      select: { userId: true },
+    });
+
+    if (!existingLike) {
+      throw this.badRequest(
+        'PLAYLIST_NOT_LIKED',
+        'Playlist is not liked by you. You cannot unlike a playlist that is not liked.',
+      );
+    }
+
     const removed = await this.prisma.playlistLike.deleteMany({
       where: {
         userId,

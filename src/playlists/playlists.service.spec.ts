@@ -912,6 +912,7 @@ describe("PlaylistsService", () => {
   describe("unlikePlaylist", () => {
     it("unlikes a playlist", async () => {
       prisma.playlist.findFirst.mockResolvedValue({ id: "pl_101" });
+      prisma.playlistLike.findUnique.mockResolvedValue({ userId: "usr_1" });
       prisma.playlistLike.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.unlikePlaylist("usr_1", "pl_101");
@@ -930,6 +931,15 @@ describe("PlaylistsService", () => {
 
       await expect(service.unlikePlaylist("usr_1", "missing")).rejects.toBeInstanceOf(
         NotFoundException,
+      );
+    });
+
+    it("throws when playlist is not liked by the user", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({ id: "pl_101" });
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+
+      await expect(service.unlikePlaylist("usr_1", "pl_101")).rejects.toBeInstanceOf(
+        BadRequestException,
       );
     });
   });
