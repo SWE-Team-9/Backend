@@ -812,76 +812,96 @@ export class PlaylistsService {
 
   async getTopPlaylists(userId?: string): Promise<GetTopPlaylistsResponseDto> {
     const noGenreLabel = 'No Genre';
+    const formatGenreDisplayName = (genreSlug: string) => {
+      if (genreSlug === noGenreLabel) {
+        return noGenreLabel;
+      }
 
-    const playlists = await this.prisma.playlist.findMany({
-      where: {
-        visibility: PlaylistVisibility.PUBLIC,
-        deletedAt: null,
-      },
-      orderBy: [{ likesCount: 'desc' }, { createdAt: 'desc' }],
-      select: {
-        id: true,
-        title: true,
-        visibility: true,
-        coverImageUrl: true,
-        coverArtUrl: true,
-        likesCount: true,
-        genre: {
-          select: {
-            slug: true,
-          },
+      return genreSlug
+        .replace(/[-_]+/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    };
+
+    try {
+      const playlists = await this.prisma.playlist.findMany({
+        where: {
+          visibility: PlaylistVisibility.PUBLIC,
+          deletedAt: null,
         },
-        owner: {
-          select: {
-            id: true,
-            profile: {
-              select: {
-                displayName: true,
+        orderBy: [{ likesCount: 'desc' }, { createdAt: 'desc' }],
+        select: {
+          id: true,
+          title: true,
+          visibility: true,
+          coverImageUrl: true,
+          coverArtUrl: true,
+          likesCount: true,
+          genre: {
+            select: {
+              slug: true,
+            },
+          },
+          owner: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  displayName: true,
+                },
               },
             },
           },
-        },
-        _count: {
-          select: {
-            tracks: true,
+          _count: {
+            select: {
+              tracks: true,
+            },
           },
-        },
-      },
-    });
-
-    // Get liked playlists by current user if authenticated
-    let likedPlaylistIds = new Set<string>();
-    if (userId) {
-      const likedPlaylists = await this.prisma.playlistLike.findMany({
-        where: {
-          userId,
-          playlistId: {
-            in: playlists.map((p) => p.id),
-          },
-        },
-        select: {
-          playlistId: true,
         },
       });
-      likedPlaylistIds = new Set(likedPlaylists.map((like) => like.playlistId));
-    }
 
-    const groupedGenres = new Map<
-      string,
-      {
-        genre: string;
-        playlists: PlaylistItemDto[];
+      // Get liked playlists by current user if authenticated
+      let likedPlaylistIds = new Set<string>();
+      if (userId) {
+        try {
+          const likedPlaylists = await this.prisma.playlistLike.findMany({
+            where: {
+              userId,
+              playlistId: {
+                in: playlists.map((p) => p.id),
+              },
+            },
+            select: {
+              playlistId: true,
+            },
+          });
+          likedPlaylistIds = new Set(likedPlaylists.map((like) => like.playlistId));
+        } catch (error) {
+          this.logger.warn(
+            `getTopPlaylists: unable to load liked playlists for user ${userId}; returning isLiked=false`,
+          );
+        }
       }
-    >();
 
-    for (const playlist of playlists) {
-      const genreName = playlist.genre?.slug ?? noGenreLabel;
-      const groupedGenre = groupedGenres.get(genreName) ?? {
-        genre: genreName,
-        playlists: [] as PlaylistItemDto[],
-      };
+      const groupedGenres = new Map<
+        string,
+        {
+          genre: string;
+          playlists: PlaylistItemDto[];
+        }
+      >();
 
-      if (groupedGenre.playlists.length < 10) {
+      const topPlaylists: PlaylistItemDto[] = [];
+
+      for (const playlist of playlists) {
+        const genreSlug = playlist.genre?.slug ?? noGenreLabel;
+        const groupedGenre = groupedGenres.get(genreSlug) ?? {
+          genre: formatGenreDisplayName(genreSlug),
+          playlists: [] as PlaylistItemDto[],
+        };
+
         const playlistItem: PlaylistItemDto = {
           playlistId: playlist.id,
           title: playlist.title,
@@ -897,24 +917,37 @@ export class PlaylistsService {
           },
         };
 
-        groupedGenre.playlists.push(playlistItem);
+        if (topPlaylists.length < 10) {
+          topPlaylists.push(playlistItem);
+        }
+
+        if (groupedGenre.playlists.length < 10) {
+          groupedGenre.playlists.push(playlistItem);
+        }
+
+        groupedGenres.set(genreSlug, groupedGenre);
       }
 
-      groupedGenres.set(genreName, groupedGenre);
+      const orderedGenres = [...groupedGenres.values()]
+        .filter((group) => group.genre !== noGenreLabel)
+        .sort((left, right) => left.genre.localeCompare(right.genre));
+
+      const noGenreGroup = groupedGenres.get(noGenreLabel);
+      if (noGenreGroup) {
+        orderedGenres.push(noGenreGroup);
+      }
+
+      return {
+        topPlaylists,
+        genres: orderedGenres,
+      };
+    } catch (error) {
+      this.logger.error('getTopPlaylists failed; returning empty arrays to avoid a hard error', error as Error);
+      return {
+        topPlaylists: [],
+        genres: [] as Array<{ genre: string; playlists: PlaylistItemDto[] }>,
+      };
     }
-
-    const orderedGenres = [...groupedGenres.values()]
-      .filter((group) => group.genre !== noGenreLabel)
-      .sort((left, right) => left.genre.localeCompare(right.genre));
-
-    const noGenreGroup = groupedGenres.get(noGenreLabel);
-    if (noGenreGroup) {
-      orderedGenres.push(noGenreGroup);
-    }
-
-    return {
-      genres: orderedGenres,
-    };
   }
 
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
