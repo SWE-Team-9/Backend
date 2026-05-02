@@ -52,6 +52,7 @@ export class DiscoveryService {
             exact_prefix_match: boolean;
             fuzzy_score: number;
             total_count: bigint;
+            comments_count: number;
           }>
         >`
           SELECT
@@ -70,7 +71,8 @@ export class DiscoveryService {
               WHEN to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, '')) @@ plainto_tsquery('english', ${normalized}) THEN 0.5
               ELSE 0
             END AS fuzzy_score,
-            COUNT(*) OVER()::bigint AS total_count
+            COUNT(*) OVER()::bigint AS total_count,
+            (SELECT COUNT(*)::int FROM track_comments WHERE track_id = t.id) AS comments_count
           FROM tracks t
           LEFT JOIN user_profiles up ON up.user_id = t.uploader_id
           LEFT JOIN track_daily_stats tds ON tds.track_id = t.id
@@ -193,6 +195,7 @@ export class DiscoveryService {
       artistHandle: t.artist_handle ?? null,
       duration: typeof t.duration_ms === 'number' ? Math.floor(t.duration_ms / 1000) : null,
       views: t.views != null ? Number(t.views) : 0,
+      commentsCount: t.comments_count,
     }));
 
     const transformedPlaylists = playlists.map((p) => ({
@@ -232,6 +235,7 @@ export class DiscoveryService {
         recent_plays: bigint;
         recent_likes: bigint;
         velocity_score: number;
+        comments_count: number;
       }>
     >`
       SELECT
@@ -242,7 +246,8 @@ export class DiscoveryService {
         t.uploader_id,
         COUNT(pe.id)::bigint AS recent_plays,
         COUNT(l.id)::bigint AS recent_likes,
-        (COUNT(pe.id) + (COUNT(l.id) * 2))::float AS velocity_score
+        (COUNT(pe.id) + (COUNT(l.id) * 2))::float AS velocity_score,
+        (SELECT COUNT(*)::int FROM track_comments WHERE track_id = t.id) AS comments_count
       FROM tracks t
       LEFT JOIN play_events pe
         ON pe.track_id = t.id
@@ -303,6 +308,7 @@ export class DiscoveryService {
         recentPlays: Number(row.recent_plays),
         recentLikes: Number(row.recent_likes),
         velocityScore: row.velocity_score,
+        commentsCount: row.comments_count,
         liked: userLikeMap.get(row.id) ?? false,
       })),
     };
@@ -485,7 +491,7 @@ export class DiscoveryService {
             select: { slug: true, name: true },
           },
           _count: {
-            select: { likes: true, reposts: true },
+            select: { likes: true, reposts: true, comments: true },
           },
         },
       }),
@@ -515,6 +521,7 @@ export class DiscoveryService {
         waveformData: track.waveformData,
         likesCount: track._count.likes,
         repostsCount: track._count.reposts,
+        commentsCount: track._count.comments,
         createdAt: track.createdAt,
         publishedAt: track.publishedAt,
       })),

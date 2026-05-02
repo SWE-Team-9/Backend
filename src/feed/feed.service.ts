@@ -89,6 +89,7 @@ export class FeedService {
             select: {
               likes: true,
               reposts: true,
+              comments: true,
             },
           },
         },
@@ -149,6 +150,7 @@ export class FeedService {
       waveformData: track.waveformData,
       likesCount: track._count.likes,
       repostsCount: track._count.reposts,
+      commentsCount: track._count.comments,
       liked: userLikeMap.get(track.id) ?? false,
       reposted: userRepostMap.get(track.id) ?? false,
     }));
