@@ -242,6 +242,8 @@ export class SubscriptionsService {
         trialStart: null,
         trialEnd: null,
         paymentMethodSummary: null,
+        providerSubscriptionId: null,
+        isRealStripeBilling: this.isRealStripeBilling(),
         latestInvoice: null,
       });
     }
@@ -275,6 +277,8 @@ export class SubscriptionsService {
       paymentMethodSummary: (sub as any).paymentMethodSummary ?? null,
       paymentMethod: paymentMethodData,
       pendingDowngrade,
+      providerSubscriptionId: sub.stripeSubscriptionId,
+      isRealStripeBilling: this.isRealStripeBilling(),
       latestInvoice,
     });
   }
@@ -639,6 +643,13 @@ export class SubscriptionsService {
         code: 'SUBSCRIPTION_NOT_FOUND',
         message: 'No active subscription found.',
       });
+
+    const resumeState = this.getResumeState({
+      cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+      providerSubscriptionId: sub.stripeSubscriptionId,
+      isRealStripeBilling: this.isRealStripeBilling(),
+    });
+
     if (!sub.cancelAtPeriodEnd) {
       throw new ConflictException({
         code: 'SUBSCRIPTION_NOT_CANCELED',
@@ -646,31 +657,23 @@ export class SubscriptionsService {
       });
     }
 
+    if (!resumeState.canResume) {
+      if (resumeState.resumeBlockedReason === 'INVALID_PROVIDER_SUBSCRIPTION_ID') {
+        throw new BadRequestException({
+          code: resumeState.resumeBlockedReason,
+          message: resumeState.resumeBlockedMessage,
+          details: { expectedPrefix: 'sub_' },
+        });
+      }
+
+      throw new ConflictException({
+        code: resumeState.resumeBlockedReason ?? 'SUBSCRIPTION_RESUME_BLOCKED',
+        message:
+          resumeState.resumeBlockedMessage ?? 'Subscription cannot be resumed right now.',
+      });
+    }
+
     const providerSubscriptionId = (sub.stripeSubscriptionId ?? '').trim();
-    if (!providerSubscriptionId) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_PROVIDER_ID_MISSING',
-        message:
-          'This subscription cannot be resumed because the billing provider subscription ID is missing.',
-      });
-    }
-
-    if (providerSubscriptionId.startsWith('cs_')) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_PROVIDER_NOT_READY',
-        message:
-          'This subscription is still linked to a checkout session and cannot be resumed yet. Please retry shortly.',
-      });
-    }
-
-    if (this.isRealStripeBilling() && !providerSubscriptionId.startsWith('sub_')) {
-      throw new BadRequestException({
-        code: 'INVALID_PROVIDER_SUBSCRIPTION_ID',
-        message: 'Invalid Stripe subscription ID format for resume operation.',
-        details: { expectedPrefix: 'sub_' },
-      });
-    }
-
     try {
       await this.billing.resumeSubscription({ providerSubscriptionId });
     } catch (err: unknown) {
@@ -1621,6 +1624,8 @@ export class SubscriptionsService {
       planName: string;
       effectiveAt: string;
     } | null;
+    providerSubscriptionId?: string | null;
+    isRealStripeBilling?: boolean;
     latestInvoice: {
       id: string;
       amountPaidCents: number;
@@ -1635,6 +1640,12 @@ export class SubscriptionsService {
     const remainingUploads = isUnlimited
       ? null
       : Math.max(0, opts.uploadLimit - opts.uploadedTracks);
+    const resumeState = this.getResumeState({
+      cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
+      providerSubscriptionId: opts.providerSubscriptionId,
+      isRealStripeBilling: opts.isRealStripeBilling ?? this.isRealStripeBilling(),
+    });
+
     return {
       userId: opts.userId,
       planCode,
@@ -1659,6 +1670,9 @@ export class SubscriptionsService {
           ? opts.currentPeriodEnd.toISOString()
           : null,
       cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
+      canResume: resumeState.canResume,
+      resumeBlockedReason: resumeState.resumeBlockedReason ?? null,
+      resumeBlockedMessage: resumeState.resumeBlockedMessage ?? null,
       trialStart: opts.trialStart?.toISOString() ?? null,
       trialEnd: opts.trialEnd?.toISOString() ?? null,
       paymentMethodSummary: opts.paymentMethod
@@ -1676,6 +1690,52 @@ export class SubscriptionsService {
           }
         : null,
     };
+  }
+
+  private getResumeState(params: {
+    cancelAtPeriodEnd: boolean;
+    providerSubscriptionId?: string | null;
+    isRealStripeBilling: boolean;
+  }): {
+    canResume: boolean;
+    resumeBlockedReason?:
+      | 'CHECKOUT_SESSION_PENDING'
+      | 'SUBSCRIPTION_PROVIDER_ID_MISSING'
+      | 'INVALID_PROVIDER_SUBSCRIPTION_ID';
+    resumeBlockedMessage?: string;
+  } {
+    if (!params.cancelAtPeriodEnd) {
+      return { canResume: false };
+    }
+
+    const providerSubscriptionId = (params.providerSubscriptionId ?? '').trim();
+    if (!providerSubscriptionId) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'SUBSCRIPTION_PROVIDER_ID_MISSING',
+        resumeBlockedMessage:
+          'This subscription cannot be resumed because the billing provider subscription ID is missing.',
+      };
+    }
+
+    if (providerSubscriptionId.startsWith('cs_')) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'CHECKOUT_SESSION_PENDING',
+        resumeBlockedMessage:
+          'This subscription is still linked to a checkout session and cannot be resumed yet. Please retry shortly.',
+      };
+    }
+
+    if (params.isRealStripeBilling && !providerSubscriptionId.startsWith('sub_')) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'INVALID_PROVIDER_SUBSCRIPTION_ID',
+        resumeBlockedMessage: 'Invalid Stripe subscription ID format for resume operation.',
+      };
+    }
+
+    return { canResume: true };
   }
 
   private buildCheckoutResponse(
