@@ -249,7 +249,7 @@ export class PlaylistsService {
     );
   }
 
-  private normalizeVisibility(visibility: PlaylistVisibility | 'PRIVATE'): 'PUBLIC' | 'SECRET' {
+  private normalizeVisibility(visibility: PlaylistVisibility): 'PUBLIC' | 'SECRET' {
     return visibility === PlaylistVisibility.PUBLIC ? 'PUBLIC' : 'SECRET';
   }
 

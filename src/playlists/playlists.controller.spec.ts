@@ -32,7 +32,7 @@ function buildServiceMock() {
     getTopPlaylists: jest.fn().mockResolvedValue({
       genres: [
         {
-          genre: "Electronic",
+          genre: "electronic",
           playlists: [
             {
               playlistId: "pl_101",
@@ -114,7 +114,7 @@ function buildServiceMock() {
       title: "Late Night Drive",
       description: "chill tracks",
       visibility: "PUBLIC",
-      genre: "Electronic",
+      genre: "electronic",
       releaseDate: null,
       owner: { id: artistId, displayName: "Ahmed Hassan" },
       tracks: [{ trackId, title: "Layali", coverArtUrl: null, durationMs: 0, likesCount: 0, repostsCount: 0, artist: { id: artistId, name: "Ahmed Hassan", handle: "test-user" } }],
@@ -223,7 +223,7 @@ describe("PlaylistsController", () => {
 
       expect(service.getTopPlaylists).toHaveBeenCalled();
       expect(res.body.genres).toHaveLength(1);
-      expect(res.body.genres[0]).toHaveProperty("genre", "Electronic");
+      expect(res.body.genres[0]).toHaveProperty("genre", "electronic");
     });
   });
 

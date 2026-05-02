@@ -129,7 +129,7 @@ export class PlaylistsController {
       example: {
         genres: [
           {
-            genre: "Electronic",
+            genre: "electronic",
             playlists: [
               {
                 playlistId: "pl_101",
@@ -172,7 +172,7 @@ export class PlaylistsController {
             visibility: 'PUBLIC',
             tracksCount: 12,
             likesCount: 10,
-            genre: 'Electronic',
+            genre: 'electronic',
           },
         ],
       },
@@ -283,7 +283,7 @@ export class PlaylistsController {
             playlistId: 'pl_101',
             title: 'Late Night Drive',
             coverImageUrl: 'https://cdn.example.com/playlists/pl_101.jpg',
-            genre: 'Electronic',
+            genre: 'electronic',
             owner: {
               id: 'usr_1',
               display_name: 'Ahmed Hassan',
