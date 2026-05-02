@@ -845,6 +845,7 @@ describe('PlayerService', () => {
       queueTrackIds: ['track-1', 'track-2', 'track-3', 'track-4'],
       currentQueueIndex: 0,
       realTracksSinceLastAd: 0,
+      adRequired: false,
       repeatMode: 'OFF',
       isPlaying: true,
       volume: 0.8,
@@ -910,7 +911,7 @@ describe('PlayerService', () => {
       );
     });
 
-    it('FREE user, counter=3: returns AD and resets counter to 0', async () => {
+    it('FREE user, counter=3: returns AD and sets adRequired=true', async () => {
       (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(
         makeSession({ currentQueueIndex: 1, realTracksSinceLastAd: 3 }),
       );
@@ -922,10 +923,11 @@ describe('PlayerService', () => {
       expect(result).toHaveProperty('ad');
       expect((result as any).ad).toHaveProperty('adId');
       expect((result as any).ad).toHaveProperty('durationSeconds', 15);
+      expect((result as any).canSkip).toBe(false);
       expect(result).toHaveProperty('tracksUntilAd', 3);
       expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { realTracksSinceLastAd: 0 },
+          data: { adRequired: true },
         }),
       );
     });
@@ -1151,7 +1153,7 @@ describe('PlayerService', () => {
       });
     });
 
-    it('FREE user: resets counter to 0, returns tracksUntilAd=3', async () => {
+    it('FREE user: jumps to track, does NOT reset the ad counter', async () => {
       (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(makeSession());
       (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
       (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
@@ -1160,11 +1162,9 @@ describe('PlayerService', () => {
 
       expect(result.type).toBe('TRACK');
       expect(result).toHaveProperty('tracksUntilAd', 3);
-      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ realTracksSinceLastAd: 0, currentTrackId: 'track-2' }),
-        }),
-      );
+      // realTracksSinceLastAd must NOT be in the update (counter preserved)
+      const updateCall = (prismaMock.playerSession.update as jest.Mock).mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('realTracksSinceLastAd');
     });
 
     it('PRO user: returns tracksUntilAd=null', async () => {
@@ -1188,6 +1188,385 @@ describe('PlayerService', () => {
 
       expect((result as any).currentIndex).toBe(2);
       expect((result as any).queueLength).toBe(3);
+    });
+
+    it('should return AD when adRequired is true and user has ads enabled', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        queueTrackIds: ['track-1', 'track-2', 'track-3'],
+        currentQueueIndex: 0,
+        realTracksSinceLastAd: 3,
+        adRequired: true,
+        repeatMode: 'OFF',
+      });
+
+      const result = await service.jumpToTrackInQueue('user-uuid', 'track-3');
+
+      expect((result as any).type).toBe('AD');
+      expect((result as any).canSkip).toBe(false);
+      expect(prismaMock.playerSession.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Ad gating ────────────────────────────────────────────────────────────
+
+  describe('ad gating', () => {
+    const baseSession = {
+      queueTrackIds: ['t1', 't2', 't3', 't4', 't5'],
+      currentQueueIndex: 3,
+      realTracksSinceLastAd: 3,
+      adRequired: false,
+      repeatMode: 'OFF',
+    };
+
+    it('free user hits AD threshold after 3 NEXT calls', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(baseSession);
+
+      const result = await service.getNextTrackInQueue('user-uuid');
+
+      expect(result.type).toBe('AD');
+      expect((result as any).canSkip).toBe(false);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ adRequired: true }) }),
+      );
+    });
+
+    it('re-serves AD on subsequent /next while adRequired is true', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        ...baseSession,
+        adRequired: true,
+        realTracksSinceLastAd: 0,
+      });
+
+      const result = await service.getNextTrackInQueue('user-uuid');
+
+      expect(result.type).toBe('AD');
+      expect((result as any).canSkip).toBe(false);
+      // Should NOT advance the queue
+      expect(prismaMock.playerSession.update).not.toHaveBeenCalled();
+    });
+
+    it('premium user never gets an ad', async () => {
+      setPremiumUser();
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        ...baseSession,
+        realTracksSinceLastAd: 9,
+        adRequired: false,
+      });
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+
+      const result = await service.getNextTrackInQueue('user-uuid');
+
+      expect(result.type).toBe('TRACK');
+    });
+
+    it('completeAd clears adRequired and resets counter', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        ...baseSession,
+        adRequired: true,
+      });
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.completeAd('user-uuid');
+
+      expect(result.adCompleted).toBe(true);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ adRequired: false, realTracksSinceLastAd: 0 }),
+        }),
+      );
+    });
+
+    it('completeAd throws BadRequestException when no ad is pending', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        ...baseSession,
+        adRequired: false,
+      });
+
+      await expect(service.completeAd('user-uuid')).rejects.toThrow('No ad is currently required');
+    });
+
+    it('completeAd throws NotFoundException when session does not exist', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.completeAd('user-uuid')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('loadQueueContext preserves adRequired from existing session', async () => {
+      // Old session has adRequired pending
+      (prismaMock.playerSession.findUnique as jest.Mock)
+        .mockResolvedValueOnce({ adRequired: true }) // first call: check old session
+        .mockResolvedValue(null);                     // further calls
+
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+      (prismaMock.playerSession.upsert as jest.Mock).mockResolvedValue({});
+
+      await service.loadQueueContext('user-uuid', {
+        contextType: 'TRACK',
+        startTrackId: 'track-1',
+      } as any);
+
+      expect(prismaMock.playerSession.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ adRequired: true }),
+        }),
+      );
+    });
+  });
+
+  // ── Queue editing ─────────────────────────────────────────────────────────
+
+  describe('addQueueItem', () => {
+    const baseSession = {
+      queueTrackIds: ['t1', 't2', 't3'],
+      currentQueueIndex: 1,
+      adRequired: false,
+    };
+
+    beforeEach(() => {
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(queueTrackMock);
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+    });
+
+    it('END appends to the back, currentIndex unchanged', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(baseSession);
+
+      const result = await service.addQueueItem('user-uuid', 'track-new', 'END');
+
+      expect(result.queueLength).toBe(4);
+      expect(result.insertedAt).toBe(3);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t1', 't2', 't3', 'track-new'],
+            currentQueueIndex: 1,
+          }),
+        }),
+      );
+    });
+
+    it('NEXT inserts immediately after current, currentIndex unchanged', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(baseSession);
+
+      const result = await service.addQueueItem('user-uuid', 'track-new', 'NEXT');
+
+      expect(result.queueLength).toBe(4);
+      expect(result.insertedAt).toBe(2);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t1', 't2', 'track-new', 't3'],
+            currentQueueIndex: 1,
+          }),
+        }),
+      );
+    });
+
+    it('TOP inserts at position 0, increments currentIndex', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(baseSession);
+
+      const result = await service.addQueueItem('user-uuid', 'track-new', 'TOP');
+
+      expect(result.queueLength).toBe(4);
+      expect(result.insertedAt).toBe(0);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['track-new', 't1', 't2', 't3'],
+            currentQueueIndex: 2,
+          }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException when no queue is loaded', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.addQueueItem('user-uuid', 'track-new', 'END')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException when track does not exist', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(baseSession);
+      (prismaMock.track.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.addQueueItem('user-uuid', 'ghost-track', 'END')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('moveQueueItem', () => {
+    const session = {
+      queueTrackIds: ['t0', 't1', 't2', 't3', 't4'],
+      currentQueueIndex: 2,
+    };
+
+    beforeEach(() => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(session);
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+    });
+
+    it('moves item forward and adjusts currentIndex', async () => {
+      // move t0 (idx 0) to idx 3 — current idx was 2, which shifts left
+      const result = await service.moveQueueItem('user-uuid', 0, 3);
+
+      expect(result.queueLength).toBe(5);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t1', 't2', 't3', 't0', 't4'],
+            currentQueueIndex: 1,
+          }),
+        }),
+      );
+    });
+
+    it('moves item backward and adjusts currentIndex', async () => {
+      // move t4 (idx 4) to idx 1 — current idx was 2, shifts right
+      const result = await service.moveQueueItem('user-uuid', 4, 1);
+
+      expect(result.queueLength).toBe(5);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t0', 't4', 't1', 't2', 't3'],
+            currentQueueIndex: 3,
+          }),
+        }),
+      );
+    });
+
+    it('moves the currently playing item, updating currentIndex to toPosition', async () => {
+      // move current (idx 2) to idx 4
+      await service.moveQueueItem('user-uuid', 2, 4);
+
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t0', 't1', 't3', 't4', 't2'],
+            currentQueueIndex: 4,
+          }),
+        }),
+      );
+    });
+
+    it('no-op when fromPosition === toPosition', async () => {
+      const result = await service.moveQueueItem('user-uuid', 2, 2);
+
+      expect(result.queueLength).toBe(5);
+      expect(prismaMock.playerSession.update).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException for out-of-range fromPosition', async () => {
+      await expect(service.moveQueueItem('user-uuid', 99, 0)).rejects.toThrow('out of range');
+    });
+
+    it('throws BadRequestException for out-of-range toPosition', async () => {
+      await expect(service.moveQueueItem('user-uuid', 0, 99)).rejects.toThrow('out of range');
+    });
+
+    it('throws NotFoundException when no queue is loaded', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.moveQueueItem('user-uuid', 0, 1)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('removeQueueItem', () => {
+    const session = {
+      queueTrackIds: ['t0', 't1', 't2', 't3'],
+      currentQueueIndex: 2,
+    };
+
+    beforeEach(() => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(session);
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+    });
+
+    it('removes item before current index, decrements currentIndex', async () => {
+      await service.removeQueueItem('user-uuid', 0);
+
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t1', 't2', 't3'],
+            currentQueueIndex: 1,
+          }),
+        }),
+      );
+    });
+
+    it('removes item after current index, currentIndex unchanged', async () => {
+      await service.removeQueueItem('user-uuid', 3);
+
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t0', 't1', 't2'],
+            currentQueueIndex: 2,
+          }),
+        }),
+      );
+    });
+
+    it('removes currently playing item, clamps index', async () => {
+      // Remove current (idx 2 of 4); new array has 3 items; idx stays 2 (clamped)
+      await service.removeQueueItem('user-uuid', 2);
+
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: ['t0', 't1', 't3'],
+            currentQueueIndex: 2,
+          }),
+        }),
+      );
+    });
+
+    it('throws BadRequestException for out-of-range position', async () => {
+      await expect(service.removeQueueItem('user-uuid', 99)).rejects.toThrow('out of range');
+    });
+
+    it('throws NotFoundException when no queue is loaded', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.removeQueueItem('user-uuid', 0)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('clearQueue', () => {
+    it('empties the queue, resets counters and ad state', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue({
+        queueTrackIds: ['t1', 't2'],
+        currentQueueIndex: 1,
+        adRequired: true,
+        realTracksSinceLastAd: 3,
+      });
+      (prismaMock.playerSession.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.clearQueue('user-uuid');
+
+      expect(result.message).toMatch(/cleared/i);
+      expect(prismaMock.playerSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            queueTrackIds: [],
+            currentQueueIndex: 0,
+            realTracksSinceLastAd: 0,
+            adRequired: false,
+            currentTrackId: null,
+          }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException when no session exists', async () => {
+      (prismaMock.playerSession.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.clearQueue('user-uuid')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

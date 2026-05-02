@@ -6,7 +6,9 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -27,7 +29,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { RegisterProgressDto, UpdateSessionDto } from './dto';
+import { RegisterProgressDto, UpdateSessionDto, AddQueueItemDto, MoveQueueItemDto } from './dto';
 import { LoadQueueDto } from './dto/load-queue.dto';
 import { JumpToTrackDto } from './dto/jump-to-track.dto';
 import { PlayerService } from './player.service';
@@ -621,6 +623,135 @@ export class PlayerController {
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   getQueue(@CurrentUser('userId') userId: string) {
     return this.playerService.getQueueState(userId);
+  }
+
+  // 17. POST /player/queue/ad-complete
+  @Post('queue/ad-complete')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Mark the current mandatory ad as completed',
+    description:
+      'Called by the client once the non-skippable ad has finished playing. ' +
+      'Clears the `adRequired` gate so the user can continue listening. ' +
+      'After this call, invoke `POST /player/queue/next` to receive the next track. ' +
+      'Returns 400 if no ad is currently pending for this session.',
+  })
+  @ApiOkResponse({
+    description: 'Ad marked as completed.',
+    schema: {
+      example: {
+        adCompleted: true,
+        message: 'Ad completed. Call POST /player/queue/next to continue.',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'No ad is currently pending for this session.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'No active queue session.' })
+  completeAd(@CurrentUser('userId') userId: string) {
+    return this.playerService.completeAd(userId);
+  }
+
+  // 18. POST /player/queue/items
+  @Post('queue/items')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Add a track to the queue',
+    description:
+      'Inserts a track into the current queue. ' +
+      '`mode=END` appends to the back. ' +
+      '`mode=NEXT` inserts immediately after the currently playing track. ' +
+      '`mode=TOP` inserts at position 0 (front of queue).',
+  })
+  @ApiBody({ type: AddQueueItemDto })
+  @ApiOkResponse({
+    description: 'Track added. Returns new queue length and inserted position.',
+    schema: {
+      example: { queueLength: 13, insertedAt: 3 },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid trackId or mode.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'Track or queue session not found.' })
+  addQueueItem(@CurrentUser('userId') userId: string, @Body() body: AddQueueItemDto) {
+    return this.playerService.addQueueItem(userId, body.trackId, body.mode);
+  }
+
+  // 19. PATCH /player/queue/items/:position/move
+  @Patch('queue/items/:position/move')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Move a queued track to a new position',
+    description:
+      'Reorders the queue by moving the item at `position` (0-based) to `toPosition`. ' +
+      'The currently playing track index is adjusted automatically. ' +
+      'Passes through silently if `fromPosition === toPosition`.',
+  })
+  @ApiParam({ name: 'position', type: Number, description: 'Current 0-based index of the item' })
+  @ApiBody({ type: MoveQueueItemDto })
+  @ApiOkResponse({
+    description: 'Item moved. Returns updated queue length.',
+    schema: { example: { queueLength: 12 } },
+  })
+  @ApiResponse({ status: 400, description: 'Position out of range or self-move.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'No active queue session.' })
+  moveQueueItem(
+    @CurrentUser('userId') userId: string,
+    @Param('position', ParseIntPipe) fromPosition: number,
+    @Body() body: MoveQueueItemDto,
+  ) {
+    return this.playerService.moveQueueItem(userId, fromPosition, body.toPosition);
+  }
+
+  // 20. DELETE /player/queue/items/:position
+  @Delete('queue/items/:position')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Remove a track from the queue by position',
+    description:
+      'Removes the item at the given 0-based position from the queue. ' +
+      'The currently playing track index is adjusted if needed. ' +
+      'If the currently playing item is removed, playback continues at the same index ' +
+      '(now pointing to the following track), clamped to the last item.',
+  })
+  @ApiParam({ name: 'position', type: Number, description: '0-based position of the item to remove' })
+  @ApiOkResponse({
+    description: 'Item removed. Returns new queue length.',
+    schema: { example: { queueLength: 11 } },
+  })
+  @ApiResponse({ status: 400, description: 'Position out of range.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'No active queue session.' })
+  removeQueueItem(
+    @CurrentUser('userId') userId: string,
+    @Param('position', ParseIntPipe) position: number,
+  ) {
+    return this.playerService.removeQueueItem(userId, position);
+  }
+
+  // 21. DELETE /player/queue
+  @Delete('queue')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Clear the entire queue',
+    description:
+      'Empties the queue and resets the ad counter and ad-required gate. ' +
+      'The current track is cleared and the player will stop after the currently playing audio ends.',
+  })
+  @ApiOkResponse({
+    description: 'Queue cleared.',
+    schema: { example: { message: 'Queue cleared.' } },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({ status: 404, description: 'No active queue session.' })
+  clearQueue(@CurrentUser('userId') userId: string) {
+    return this.playerService.clearQueue(userId);
   }
 
   // 16. POST /player/queue/jump

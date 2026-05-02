@@ -730,12 +730,21 @@ export class PlayerService {
       if (idx >= 0) startIndex = idx;
     }
 
+    // Preserve any pending adRequired from the old session so the ad cannot
+    // be bypassed by loading a new queue context.
+    const oldSession = await this.prisma.playerSession.findUnique({
+      where: { userId },
+      select: { adRequired: true },
+    });
+    const preserveAdRequired = oldSession?.adRequired ?? false;
+
     await this.prisma.playerSession.upsert({
       where: { userId },
       update: {
         queueTrackIds: trackIds,
         currentQueueIndex: startIndex,
         realTracksSinceLastAd: 0,
+        adRequired: preserveAdRequired,
         queueContext: { type: dto.contextType, id: dto.contextId ?? null },
         shuffle: dto.shuffle ?? false,
         currentTrackId: trackIds[startIndex],
@@ -745,6 +754,7 @@ export class PlayerService {
         queueTrackIds: trackIds,
         currentQueueIndex: startIndex,
         realTracksSinceLastAd: 0,
+        adRequired: false,
         queueContext: { type: dto.contextType, id: dto.contextId ?? null },
         shuffle: dto.shuffle ?? false,
         currentTrackId: trackIds[startIndex],
@@ -780,20 +790,35 @@ export class PlayerService {
 
     const { queueTrackIds, currentQueueIndex, realTracksSinceLastAd, repeatMode } = session;
 
+    // If an ad was already triggered and not yet completed, re-serve it (non-skippable).
+    // This blocks any new track from playing until POST /player/queue/ad-complete is called.
+    if (shouldShowAds && session.adRequired) {
+      return {
+        type: 'AD' as const,
+        ad: this.getNextAd(),
+        canSkip: false,
+        currentIndex: currentQueueIndex,
+        queueLength: queueTrackIds.length,
+        tracksUntilAd: this.AD_EVERY_N_TRACKS,
+      };
+    }
+
     // Inject ad every AD_EVERY_N_TRACKS real tracks (FREE plan users only)
     if (
       shouldShowAds &&
       realTracksSinceLastAd > 0 &&
       realTracksSinceLastAd % this.AD_EVERY_N_TRACKS === 0
     ) {
+      // Set adRequired so reloading queue / jumping cannot bypass the ad.
       await this.prisma.playerSession.update({
         where: { userId },
-        data: { realTracksSinceLastAd: 0 },
+        data: { adRequired: true },
       });
 
       return {
         type: 'AD' as const,
         ad: this.getNextAd(),
+        canSkip: false,
         currentIndex: currentQueueIndex,
         queueLength: queueTrackIds.length,
         tracksUntilAd: this.AD_EVERY_N_TRACKS,
@@ -979,6 +1004,18 @@ export class PlayerService {
       });
     }
 
+    // Block jump when an ad is pending — ad must be completed first.
+    if (shouldShowAds && session.adRequired) {
+      return {
+        type: 'AD' as const,
+        ad: this.getNextAd(),
+        canSkip: false,
+        currentIndex: session.currentQueueIndex,
+        queueLength: session.queueTrackIds.length,
+        tracksUntilAd: this.AD_EVERY_N_TRACKS,
+      };
+    }
+
     const index = session.queueTrackIds.indexOf(trackId);
     if (index === -1) {
       throw new NotFoundException({
@@ -992,7 +1029,8 @@ export class PlayerService {
       data: {
         currentQueueIndex: index,
         currentTrackId: trackId,
-        realTracksSinceLastAd: 0,
+        // Intentionally do NOT reset realTracksSinceLastAd here — jumping does
+        // not clear the ad counter (only ad completion does).
       },
     });
 
@@ -1005,6 +1043,155 @@ export class PlayerService {
       queueLength: session.queueTrackIds.length,
       tracksUntilAd: shouldShowAds ? this.AD_EVERY_N_TRACKS : null,
     };
+  }
+
+  // 17. POST /player/queue/ad-complete
+  async completeAd(userId: string) {
+    const session = await this.prisma.playerSession.findUnique({ where: { userId } });
+    if (!session) {
+      throw new NotFoundException({ code: 'NO_QUEUE', message: 'No active queue session.' });
+    }
+    if (!session.adRequired) {
+      throw new BadRequestException({
+        code: 'NO_AD_PENDING',
+        message: 'No ad is currently required for this session.',
+      });
+    }
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: { adRequired: false, realTracksSinceLastAd: 0 },
+    });
+    return { adCompleted: true, message: 'Ad completed. Call POST /player/queue/next to continue.' };
+  }
+
+  // 18. POST /player/queue/items
+  async addQueueItem(userId: string, trackId: string, mode: 'END' | 'NEXT' | 'TOP') {
+    await this.findTrackOrFail(trackId);
+
+    const session = await this.prisma.playerSession.findUnique({ where: { userId } });
+    if (!session?.queueTrackIds.length) {
+      throw new NotFoundException({ code: 'NO_QUEUE', message: 'No queue loaded.' });
+    }
+
+    const ids = [...session.queueTrackIds];
+    const currentIndex = session.currentQueueIndex;
+    let newCurrentIndex = currentIndex;
+
+    if (mode === 'END') {
+      ids.push(trackId);
+    } else if (mode === 'TOP') {
+      ids.unshift(trackId);
+      newCurrentIndex = currentIndex + 1; // playing track shifts right
+    } else {
+      // NEXT — insert immediately after current
+      ids.splice(currentIndex + 1, 0, trackId);
+    }
+
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: { queueTrackIds: ids, currentQueueIndex: newCurrentIndex },
+    });
+
+    const insertedAt = mode === 'END' ? ids.length - 1 : mode === 'TOP' ? 0 : currentIndex + 1;
+    return { queueLength: ids.length, insertedAt };
+  }
+
+  // 19. PATCH /player/queue/items/:position/move
+  async moveQueueItem(userId: string, fromPosition: number, toPosition: number) {
+    const session = await this.prisma.playerSession.findUnique({ where: { userId } });
+    if (!session?.queueTrackIds.length) {
+      throw new NotFoundException({ code: 'NO_QUEUE', message: 'No queue loaded.' });
+    }
+
+    const ids = [...session.queueTrackIds];
+    const len = ids.length;
+
+    if (fromPosition < 0 || fromPosition >= len) {
+      throw new BadRequestException(
+        `fromPosition ${fromPosition} is out of range [0, ${len - 1}].`,
+      );
+    }
+    if (toPosition < 0 || toPosition >= len) {
+      throw new BadRequestException(
+        `toPosition ${toPosition} is out of range [0, ${len - 1}].`,
+      );
+    }
+    if (fromPosition === toPosition) {
+      return { queueLength: len };
+    }
+
+    const [item] = ids.splice(fromPosition, 1);
+    ids.splice(toPosition, 0, item);
+
+    // Adjust the playing cursor
+    let newCurrentIndex = session.currentQueueIndex;
+    const ci = session.currentQueueIndex;
+    if (fromPosition === ci) {
+      newCurrentIndex = toPosition;
+    } else if (fromPosition < ci && toPosition >= ci) {
+      newCurrentIndex = ci - 1;
+    } else if (fromPosition > ci && toPosition <= ci) {
+      newCurrentIndex = ci + 1;
+    }
+
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: { queueTrackIds: ids, currentQueueIndex: newCurrentIndex },
+    });
+
+    return { queueLength: len };
+  }
+
+  // 20. DELETE /player/queue/items/:position
+  async removeQueueItem(userId: string, position: number) {
+    const session = await this.prisma.playerSession.findUnique({ where: { userId } });
+    if (!session?.queueTrackIds.length) {
+      throw new NotFoundException({ code: 'NO_QUEUE', message: 'No queue loaded.' });
+    }
+
+    const ids = [...session.queueTrackIds];
+    const len = ids.length;
+
+    if (position < 0 || position >= len) {
+      throw new BadRequestException(`position ${position} is out of range [0, ${len - 1}].`);
+    }
+
+    ids.splice(position, 1);
+
+    let newCurrentIndex = session.currentQueueIndex;
+    if (position < session.currentQueueIndex) {
+      newCurrentIndex = session.currentQueueIndex - 1;
+    } else if (position === session.currentQueueIndex && ids.length > 0) {
+      newCurrentIndex = Math.min(session.currentQueueIndex, ids.length - 1);
+    }
+
+    const updateData: Record<string, unknown> = {
+      queueTrackIds: ids,
+      currentQueueIndex: ids.length === 0 ? 0 : newCurrentIndex,
+    };
+    if (ids.length === 0) updateData.currentTrackId = null;
+
+    await this.prisma.playerSession.update({ where: { userId }, data: updateData });
+    return { queueLength: ids.length };
+  }
+
+  // 21. DELETE /player/queue
+  async clearQueue(userId: string) {
+    const session = await this.prisma.playerSession.findUnique({ where: { userId } });
+    if (!session) {
+      throw new NotFoundException({ code: 'NO_QUEUE', message: 'No active queue session.' });
+    }
+    await this.prisma.playerSession.update({
+      where: { userId },
+      data: {
+        queueTrackIds: [],
+        currentQueueIndex: 0,
+        realTracksSinceLastAd: 0,
+        adRequired: false,
+        currentTrackId: null,
+      },
+    });
+    return { message: 'Queue cleared.' };
   }
 
   // -- Private helpers
