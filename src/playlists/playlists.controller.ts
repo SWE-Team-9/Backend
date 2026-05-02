@@ -120,7 +120,7 @@ export class PlaylistsController {
   @Public()
   @ApiOperation({
     summary: "Get top playlists",
-    description: "Returns the top 10 public playlists per genre ordered by likes count.",
+    description: "Returns the top 10 public playlists globally and the same playlists grouped by genre.",
   })
   @ApiResponse({
     status: 200,
@@ -128,15 +128,39 @@ export class PlaylistsController {
     type: GetTopPlaylistsResponseDto,
     schema: {
       example: {
+        topPlaylists: [
+          {
+            playlistId: "pl_101",
+            title: "Late Night Drive",
+            visibility: "PUBLIC",
+            coverImageUrl: null,
+            likesCount: 48,
+            isLiked: false,
+            genre: "electronic",
+            tracksCount: 12,
+            owner: {
+              id: "usr_1",
+              displayName: "User One",
+            },
+          },
+        ],
         genres: [
           {
-            genre: "electronic",
+            genre: "Electronic",
             playlists: [
               {
                 playlistId: "pl_101",
                 title: "Late Night Drive",
                 visibility: "PUBLIC",
+                coverImageUrl: null,
                 likesCount: 48,
+                isLiked: false,
+                genre: "electronic",
+                tracksCount: 12,
+                owner: {
+                  id: "usr_1",
+                  displayName: "User One",
+                },
               },
             ],
           },
@@ -144,6 +168,7 @@ export class PlaylistsController {
       },
     },
   })
+  @ApiResponse({ status: 500, description: 'Unexpected server error. This endpoint falls back to empty arrays when possible.' })
   getTopPlaylists(@CurrentUser('userId') userId?: string) {
     return this.playlistsService.getTopPlaylists(userId);
   }

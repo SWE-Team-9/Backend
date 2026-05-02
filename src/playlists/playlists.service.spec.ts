@@ -755,9 +755,67 @@ describe("PlaylistsService", () => {
         }),
       );
       expect(result).toEqual({
+        topPlaylists: [
+          {
+            playlistId: "pl_101",
+            title: "Late Night Drive",
+            visibility: PlaylistVisibility.PUBLIC,
+            coverImageUrl: null,
+            likesCount: 48,
+            isLiked: false,
+            genre: "electronic",
+            tracksCount: 12,
+            owner: {
+              id: "usr_1",
+              displayName: "User One",
+            },
+          },
+          {
+            playlistId: "pl_201",
+            title: "Sunrise Club",
+            visibility: PlaylistVisibility.PUBLIC,
+            coverImageUrl: null,
+            likesCount: 33,
+            isLiked: false,
+            genre: "house",
+            tracksCount: 8,
+            owner: {
+              id: "usr_2",
+              displayName: "User Two",
+            },
+          },
+          {
+            playlistId: "pl_102",
+            title: "Neon Pulse",
+            visibility: PlaylistVisibility.PUBLIC,
+            coverImageUrl: null,
+            likesCount: 20,
+            isLiked: false,
+            genre: "electronic",
+            tracksCount: 15,
+            owner: {
+              id: "usr_3",
+              displayName: "User Three",
+            },
+          },
+          {
+            playlistId: "pl_301",
+            title: "Midnight Float",
+            visibility: PlaylistVisibility.PUBLIC,
+            coverImageUrl: null,
+            likesCount: 12,
+            isLiked: false,
+            genre: null,
+            tracksCount: 5,
+            owner: {
+              id: "usr_4",
+              displayName: "User Four",
+            },
+          },
+        ],
         genres: [
           {
-            genre: "electronic",
+            genre: "Electronic",
             playlists: [
               {
                 playlistId: "pl_101",
@@ -790,7 +848,7 @@ describe("PlaylistsService", () => {
             ],
           },
           {
-            genre: "house",
+            genre: "House",
             playlists: [
               {
                 playlistId: "pl_201",
