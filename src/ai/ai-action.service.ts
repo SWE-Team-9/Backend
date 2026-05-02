@@ -1,49 +1,71 @@
 import { Injectable, Logger } from '@nestjs/common';
+import {
+  ModerationState,
+  PlaylistVisibility,
+  Prisma,
+  TrackStatus,
+  TrackVisibility,
+} from '@prisma/client';
+
 import { AiIntentResult, AiResponse } from './types';
 import { DiscoveryService } from '../discovery/discovery.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
+import { MessagesService } from '../messages/messages.service';
+import { PlayerService } from '../player/player.service';
 import { PlaylistsService } from '../playlists/playlists.service';
+import { PrismaService } from '../prisma/prisma.service';
 
-const FAQ_ANSWERS: Record<string, string> = {
-  upload: 'You can upload tracks from the Upload page. FREE users: 3 tracks max. PRO: 100 tracks. GO+: 1000 tracks.',
-  subscription: 'Plans: FREE (3 uploads, ads, no downloads), PRO ($9.99/mo, 100 uploads, 7-day trial, ad-free, downloads), GO+ ($19.99/mo, 1000 uploads, no trial, ad-free, downloads).',
-  free: 'FREE plan: 3 track uploads, ads enabled, no downloads. Upgrade to PRO or GO+ to remove limits.',
-  pro: 'PRO plan: $9.99/month, 100 uploads, 7-day trial (first time only), ad-free, downloads.',
-  goplus: 'GO+ plan: $19.99/month, 1000 uploads, no trial, ad-free, downloads. Best for serious creators.',
-  playlist: 'Create playlists from the Playlists page. Add tracks from any track page.',
-  private: 'Set track visibility to private when uploading or from the track edit page.',
-  queue: 'Click any track to play it. Use the queue icon to see your queue.',
-  search: 'Use the search bar at the top to find tracks by title, artist, or genre.',
-  likes: 'Like a track by clicking the heart icon. View liked tracks in your library.',
-  reposts: 'Repost a track to share it with your followers.',
-  comments: 'Leave comments on any track page.',
-  report: 'Report inappropriate content using the flag icon on track or profile pages.',
-  messages: 'Send messages from a user profile page or from any track page.',
-  notifications: 'Notifications appear in the bell icon. Manage in Settings > Notifications.',
-  profile: 'Edit your profile from Settings > Profile.',
-  account: 'Manage your account from Settings.',
-  download: 'PRO and GO+ subscribers can download tracks. FREE users cannot.',
-  ads: 'FREE users see ads every few tracks. PRO and GO+ plans are ad-free.',
-};
+type AiProvider = 'mock' | 'n8n' | 'openai' | 'ollama';
+
+interface TrackCard {
+  trackId: string;
+  title: string;
+  slug?: string | null;
+  coverArtUrl?: string | null;
+  durationMs?: number | null;
+  likesCount?: number;
+  artist?: {
+    id?: string;
+    displayName?: string | null;
+    handle?: string | null;
+    avatarUrl?: string | null;
+  };
+}
 
 @Injectable()
 export class AiActionService {
   private readonly logger = new Logger(AiActionService.name);
+  private readonly playlistTrackCap = 25;
 
   constructor(
     private readonly discovery: DiscoveryService,
     private readonly playlists: PlaylistsService,
+    private readonly messages: MessagesService,
+    private readonly player: PlayerService,
+    private readonly entitlements: EntitlementsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(
     userId: string,
     intentResult: AiIntentResult,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const { intent, parameters, needsConfirmation, clarifyingQuestion } = intentResult;
+    const { intent, needsConfirmation, clarifyingQuestion } = intentResult;
 
-    if (intent === 'clarification_needed') {
+    if (!userId) {
       return {
-        reply: clarifyingQuestion ?? 'Could you clarify what you\'d like to do?',
+        reply: 'Please sign in first so I can help with your library, playlists, messages, and queue.',
+        provider,
+        intent: 'auth_required',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
+    if (intent === 'clarification_needed' || needsConfirmation) {
+      return {
+        reply: clarifyingQuestion ?? 'Could you clarify what you would like me to do?',
         provider,
         intent,
         actionsTaken: [],
@@ -51,319 +73,441 @@ export class AiActionService {
       };
     }
 
-    switch (intent) {
-      case 'faq_help': return this.execFaqHelp(parameters, provider);
-      case 'search_tracks': return this.execSearchTracks(parameters, provider);
-      case 'get_trending_tracks': return this.execGetTrending(provider);
-      case 'recommend_by_genre': return this.execRecommendByGenre(parameters, provider);
-      case 'create_playlist': return this.execCreatePlaylist(userId, parameters, provider);
-      case 'list_my_playlists': return this.execListPlaylists(userId, provider);
-      case 'add_track_to_playlist': return this.execAddTrackToPlaylist(userId, parameters, provider);
-      case 'create_playlist_from_genre': return this.execCreatePlaylistFromGenre(userId, parameters, provider);
-      case 'create_playlist_from_artist_genre': return this.execCreatePlaylistFromArtistGenre(userId, parameters, provider);
-      case 'share_track_message': return this.execShareTrack(userId, parameters, needsConfirmation, provider);
-      case 'queue_track_or_play_next': return this.execQueueTrack(parameters, provider);
-      case 'profile_or_subscription_help': return this.execProfileHelp(userId, provider);
-      default:
-        return {
-          reply: 'I can help with: searching tracks, discovering trending music, creating playlists, and answering app questions. Try: "find sha3by tracks", "create playlist called Gym", or "how do I upload?"',
-          provider,
-          intent: 'unknown',
-          actionsTaken: [],
-          suggestions: [
-            'find trending tracks',
-            'search for sha3by',
-            'create playlist called [name]',
-            'how do I upload?',
-          ],
-        };
+    try {
+      switch (intent) {
+        case 'faq_help':
+          return this.execFaqHelp(intentResult.parameters, provider);
+
+        case 'search_tracks':
+          return this.execSearchTracks(intentResult.parameters, provider);
+
+        case 'get_trending_tracks':
+          return this.execGetTrending(userId, intentResult.parameters, provider);
+
+        case 'recommend_by_genre':
+          return this.execRecommendByGenre(intentResult.parameters, provider);
+
+        case 'create_playlist':
+          return this.execCreatePlaylist(userId, intentResult.parameters, provider);
+
+        case 'list_my_playlists':
+          return this.execListPlaylists(userId, provider);
+
+        case 'add_track_to_playlist':
+          return this.execAddTrackToPlaylist(userId, intentResult.parameters, provider);
+
+        case 'create_playlist_from_genre':
+          return this.execCreatePlaylistFromGenre(userId, intentResult.parameters, provider);
+
+        case 'create_playlist_from_artist_genre':
+          return this.execCreatePlaylistFromArtistGenre(userId, intentResult.parameters, provider);
+
+        case 'share_track_message':
+          return this.execShareTrack(userId, intentResult.parameters, provider);
+
+        case 'queue_track_or_play_next':
+          return this.execQueueTrack(userId, intentResult.parameters, provider);
+
+        case 'profile_or_subscription_help':
+          return this.execProfileHelp(userId, provider);
+
+        default:
+          return this.unknownResponse(provider);
+      }
+    } catch (error) {
+      this.logger.error(`[AI] action ${intent} failed`, error instanceof Error ? error.stack : String(error));
+
+      return {
+        reply:
+          'I could not complete that action safely. Nothing was changed. Please try again or use the regular page for this action.',
+        provider,
+        intent,
+        actionsTaken: [],
+        suggestions: [
+          'Search for tracks',
+          'Create a playlist from a genre',
+          'Open /library/playlists',
+        ],
+      };
     }
   }
 
-  private execFaqHelp(
-    params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
-  ): AiResponse {
-    const msg = String(params['originalMessage'] ?? '').toLowerCase();
-    const matched: string[] = [];
-    for (const [kw, answer] of Object.entries(FAQ_ANSWERS)) {
-      if (msg.includes(kw) || (kw === 'goplus' && (msg.includes('go+') || msg.includes('go plus')))) {
-        matched.push(answer);
-      }
+  private execFaqHelp(params: Record<string, unknown>, provider: AiProvider): AiResponse {
+    const msg = String(params.originalMessage ?? '').toLowerCase();
+
+    const answers: string[] = [];
+
+    if (/upload|track limit|formats?/.test(msg)) {
+      answers.push('Upload music from /upload. FREE users can upload 3 tracks, PRO users can upload 100, and GO+ users can upload 1000.');
     }
+
+    if (/subscription|plan|free|pro|go\+|go plus|uploads? left/.test(msg)) {
+      answers.push('Plans are managed from /subscriptions. FREE has ads and 3 uploads. PRO has 100 uploads and a first-time 7-day trial. GO+ has 1000 uploads and no trial.');
+    }
+
+    if (/playlist|set/.test(msg)) {
+      answers.push('Playlists live under /library/playlists. I can create a playlist, add the current track, or build one from a genre.');
+    }
+
+    if (/search|discover|find/.test(msg)) {
+      answers.push('Use /search or /discover to browse. You can also ask me things like “find sha3by tracks” or “show trending tracks.”');
+    }
+
+    if (/message|send|share/.test(msg)) {
+      answers.push('Messages are available at /messages. If you are on a track page and name a recipient clearly, I can send the track as a message.');
+    }
+
+    if (/queue|play next|playback/.test(msg)) {
+      answers.push('The queue controls what plays next. If you are on a track page, you can ask me to add it to the queue or play it next.');
+    }
+
+    if (/profile|account|settings/.test(msg)) {
+      answers.push('Profile and account settings are under /settings.');
+    }
+
     const reply =
-      matched.length > 0
-        ? matched.slice(0, 2).join('\n\n')
-        : 'I can help with uploads, subscriptions, playlists, search, and account settings. What would you like to know?';
+      answers.length > 0
+        ? answers.join('\n\n')
+        : 'I can help with uploads, subscriptions, playlists, search, queue, messages, profile settings, likes, reposts, comments, and reports.';
+
     return {
       reply,
       provider,
       intent: 'faq_help',
       actionsTaken: ['answered FAQ'],
-      suggestions: ['how to subscribe?', 'how to create a playlist?', 'how to upload?'],
+      suggestions: [
+        'Create a Sha3by playlist',
+        'Find trending tracks',
+        'How do I upload music?',
+      ],
     };
   }
 
   private async execSearchTracks(
     params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const query = String(params['query'] ?? '').trim();
+    const query = this.cleanString(params.query);
     if (!query) {
       return {
-        reply: 'What would you like to search for? Try: "find sha3by tracks"',
+        reply: 'What would you like to search for? For example: “find sha3by tracks.”',
         provider,
         intent: 'search_tracks',
         actionsTaken: [],
+        needsConfirmation: true,
       };
     }
-    try {
-      // discovery.search(q, type, page, limit) — verified from discovery.service.ts
-      const results = await this.discovery.search(query, 'tracks', 1, 8);
-      const tracks = (results.data as any).tracks ?? [];
-      const count = tracks.length;
-      if (count === 0) {
-        return {
-          reply: `No tracks found for "${query}". Try a different search term or browse the Discover page.`,
-          provider,
-          intent: 'search_tracks',
-          actionsTaken: [`searched: "${query}"`],
-          data: { query, results: [] },
-          suggestions: ['find trending tracks', 'search for popular music'],
-        };
-      }
-      const trackList = tracks
-        .slice(0, 5)
-        .map((t: any) => `• ${t.title} by @${t.artist_handle}`)
-        .join('\n');
+
+    const results = await this.discovery.search(query, 'tracks', 1, 8);
+    const tracks = this.normalizeDiscoveryTracks((results.data as any)?.tracks ?? []);
+
+    if (tracks.length === 0) {
       return {
-        reply: `Found ${count} tracks for "${query}":\n${trackList}`,
+        reply: `No tracks found for "${query}". Try a different title, artist, or genre.`,
         provider,
         intent: 'search_tracks',
-        actionsTaken: [`searched: "${query}", found ${count} results`],
-        data: { query, results: tracks.slice(0, 5) },
-        suggestions: [`create a ${query} playlist`, `recommend ${query} tracks`],
-      };
-    } catch (err) {
-      this.logger.error(`[AI] search failed: ${err}`);
-      return {
-        reply: 'Search temporarily unavailable. Try the search bar at the top.',
-        provider,
-        intent: 'search_tracks',
-        actionsTaken: [],
+        actionsTaken: [`searched tracks for "${query}"`],
+        data: { query, tracks: [] },
+        suggestions: ['Show trending tracks', 'Search for rap tracks'],
       };
     }
+
+    return {
+      reply: `Found ${tracks.length} track${tracks.length === 1 ? '' : 's'} for "${query}".`,
+      provider,
+      intent: 'search_tracks',
+      actionsTaken: [`searched tracks for "${query}"`],
+      data: { query, tracks },
+      suggestions: [
+        `Create a playlist from ${query}`,
+        'Show trending tracks',
+      ],
+    };
   }
 
   private async execGetTrending(
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    userId: string,
+    params: Record<string, unknown>,
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    try {
-      const results = await this.discovery.search('music', 'tracks', 1, 5);
-      const tracks = (results.data as any).tracks ?? [];
-      if (tracks.length === 0) {
-        return {
-          reply: 'Check the Discover page for trending tracks right now!',
-          provider,
-          intent: 'get_trending_tracks',
-          actionsTaken: ['fetched trending'],
-          suggestions: ['create playlist from trending', 'recommend rap tracks'],
-        };
-      }
-      const trackList = tracks
-        .slice(0, 5)
-        .map((t: any) => `• ${t.title} by @${t.artist_handle}`)
-        .join('\n');
+    const limit = this.safeLimit(params.limit, 10);
+    const trending = await this.discovery.trending(limit, 7, userId);
+    const tracks = this.normalizeTrendingTracks((trending as any)?.items ?? []);
+
+    if (tracks.length === 0) {
       return {
-        reply: `Here are some popular tracks right now:\n${trackList}\n\nVisit the Discover page for the full trending list!`,
+        reply: 'No trending tracks are available right now. Try the Discover page.',
         provider,
         intent: 'get_trending_tracks',
-        actionsTaken: ['fetched trending'],
-        data: { tracks: tracks.slice(0, 5) },
-        suggestions: ['recommend rap tracks', 'create playlist from trending'],
-      };
-    } catch (err) {
-      this.logger.error(`[AI] trending failed: ${err}`);
-      return {
-        reply: 'Try the Discover page for trending tracks.',
-        provider,
-        intent: 'get_trending_tracks',
-        actionsTaken: [],
+        actionsTaken: ['checked trending tracks'],
+        data: { tracks: [] },
       };
     }
+
+    return {
+      reply: `Here are ${tracks.length} trending tracks right now.`,
+      provider,
+      intent: 'get_trending_tracks',
+      actionsTaken: ['fetched trending tracks'],
+      data: { tracks },
+      suggestions: ['Create playlist with top 10 tracks', 'Recommend Sha3by tracks'],
+    };
   }
 
   private async execRecommendByGenre(
     params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = String(params['genre'] ?? 'popular');
-    const limit = Math.min(Number(params['limit'] ?? 5), 25);
-    try {
-      const results = await this.discovery.search(genre, 'tracks', 1, limit);
-      const tracks = (results.data as any).tracks ?? [];
-      if (tracks.length === 0) {
-        return {
-          reply: `Looking for ${limit} ${genre} tracks! Use the search bar or Discover page to browse by genre.`,
-          provider,
-          intent: 'recommend_by_genre',
-          actionsTaken: [`genre search: ${genre}`],
-          data: { genre, limit },
-          suggestions: [`create a ${genre} playlist`, 'show trending tracks'],
-        };
-      }
-      const trackList = tracks
-        .slice(0, limit)
-        .map((t: any) => `• ${t.title} by @${t.artist_handle}`)
-        .join('\n');
-      return {
-        reply: `Here are ${tracks.length} ${genre} tracks:\n${trackList}`,
-        provider,
-        intent: 'recommend_by_genre',
-        actionsTaken: [`genre search: ${genre}`],
-        data: { genre, limit, tracks: tracks.slice(0, limit) },
-        suggestions: [`create a ${genre} playlist`, 'show trending tracks'],
-      };
-    } catch (err) {
-      this.logger.error(`[AI] recommend_by_genre failed: ${err}`);
-      return {
-        reply: `Looking for ${limit} ${genre} tracks! Use the search bar or Discover page to browse by genre.`,
-        provider,
-        intent: 'recommend_by_genre',
-        actionsTaken: [`genre search: ${genre}`],
-        data: { genre, limit },
-        suggestions: [`create a ${genre} playlist`, 'show trending tracks'],
-      };
-    }
-  }
+    const genre = this.cleanString(params.genre) || 'mixed';
+    const limit = this.safeLimit(params.limit, 5);
+    const tracks = await this.findPublicTracksByGenre({ genre, limit });
 
-  private async execCreatePlaylist(
-    _userId: string,
-    params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
-  ): Promise<AiResponse> {
-    const playlistName = String(params['playlistName'] ?? '').trim();
-    if (!playlistName) {
+    if (tracks.length === 0) {
       return {
-        reply: 'What would you like to name your playlist? Try: "create playlist called Gym Beats"',
+        reply: `I could not find public finished tracks for "${genre}". Try another genre or use /discover.`,
         provider,
-        intent: 'create_playlist',
-        actionsTaken: [],
+        intent: 'recommend_by_genre',
+        actionsTaken: [`searched genre "${genre}"`],
+        data: { genre, tracks: [] },
       };
     }
-    // Note: PlaylistsService.create() requires trackIds and other fields that we don't have
-    // from an AI chat context, so we guide the user to the Playlists page instead.
+
     return {
-      reply: `Playlist "${playlistName}" is ready to create! Go to the Playlists page or say "create sha3by playlist with 10 songs".`,
+      reply: `Here are ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'} I found.`,
       provider,
-      intent: 'create_playlist',
-      actionsTaken: [`prepared: ${playlistName}`],
-      data: { playlistName },
-      suggestions: [`add tracks to ${playlistName}`],
+      intent: 'recommend_by_genre',
+      actionsTaken: [`recommended ${tracks.length} ${genre} tracks`],
+      data: { genre, tracks },
+      suggestions: [`Create a ${genre} playlist`, 'Show trending tracks'],
     };
   }
 
-  private async execListPlaylists(
-    _userId: string,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+  private async execCreatePlaylist(
+    userId: string,
+    params: Record<string, unknown>,
+    provider: AiProvider,
   ): Promise<AiResponse> {
+    const playlistName = this.cleanString(params.playlistName);
+    if (!playlistName) {
+      return {
+        reply: 'What would you like to name your playlist?',
+        provider,
+        intent: 'create_playlist',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
+    const playlist = await this.createPlaylistRecord(userId, {
+      title: playlistName,
+      trackIds: [],
+      genre: null,
+    });
+
     return {
-      reply: 'Your playlists are on the Playlists page. Go there to manage them.',
+      reply: `Created playlist "${playlist.title}".`,
+      provider,
+      intent: 'create_playlist',
+      actionsTaken: ['created playlist'],
+      data: { playlist },
+      suggestions: ['Add this track to the playlist', 'Create a playlist from Sha3by tracks'],
+    };
+  }
+
+  private async execListPlaylists(userId: string, provider: AiProvider): Promise<AiResponse> {
+    const result = await this.playlists.getMyPlaylists(userId, { page: 1, limit: 10 });
+    const playlists = result.playlists ?? [];
+
+    if (playlists.length === 0) {
+      return {
+        reply: 'You do not have playlists yet. Ask me to create one.',
+        provider,
+        intent: 'list_my_playlists',
+        actionsTaken: ['checked your playlists'],
+        data: { playlists: [] },
+        suggestions: ['Create playlist called Gym', 'Create a Sha3by playlist'],
+      };
+    }
+
+    return {
+      reply: `You have ${result.total} playlist${result.total === 1 ? '' : 's'}.`,
       provider,
       intent: 'list_my_playlists',
-      actionsTaken: [],
-      suggestions: ['create playlist called [name]'],
+      actionsTaken: ['listed your playlists'],
+      data: { playlists },
+      suggestions: ['Create a new playlist', 'Add this track to a playlist'],
     };
   }
 
   private async execAddTrackToPlaylist(
-    _userId: string,
+    userId: string,
     params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const trackId = params['trackId'] as string | undefined;
-    const playlistName = params['playlistName'] as string | undefined;
+    const trackId = this.cleanString(params.trackId);
+    const playlistIdFromParams = this.cleanString(params.playlistId);
+    const playlistName = this.cleanString(params.playlistName);
+
     if (!trackId) {
       return {
-        reply: 'Please go to a track page first, then ask me to add it to a playlist.',
-        provider,
-        intent: 'add_track_to_playlist',
-        actionsTaken: [],
-        suggestions: ['show my playlists'],
-      };
-    }
-    if (!playlistName) {
-      return {
-        reply: 'Which playlist? Try: "add to Gym Beats"',
+        reply: 'Please open a track first, then ask me to add it to a playlist.',
         provider,
         intent: 'add_track_to_playlist',
         actionsTaken: [],
         needsConfirmation: true,
       };
     }
+
+    const playlist =
+      playlistIdFromParams
+        ? await this.findOwnedPlaylistById(userId, playlistIdFromParams)
+        : await this.findOwnedPlaylistByName(userId, playlistName);
+
+    if (!playlist) {
+      return {
+        reply: playlistName
+          ? `I could not find one of your playlists named "${playlistName}".`
+          : 'Which playlist should I add this track to?',
+        provider,
+        intent: 'add_track_to_playlist',
+        actionsTaken: [],
+        needsConfirmation: true,
+        suggestions: ['Show my playlists', 'Create playlist called Favorites'],
+      };
+    }
+
+    const added = await this.playlists.addTrack(userId, playlist.id, { trackId });
+
     return {
-      reply: `To add this track to "${playlistName}", use the ⋮ menu → "Add to playlist".`,
+      reply: `Added "${added.title}" to "${playlist.title}".`,
       provider,
       intent: 'add_track_to_playlist',
-      actionsTaken: [],
-      data: { trackId, playlistName },
+      actionsTaken: ['added track to playlist'],
+      data: {
+        playlist: {
+          playlistId: playlist.id,
+          title: playlist.title,
+        },
+        track: added,
+      },
+      suggestions: ['Show my playlists', 'Find similar tracks'],
     };
   }
 
   private async execCreatePlaylistFromGenre(
-    _userId: string,
+    userId: string,
     params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = String(params['genre'] ?? 'mixed');
-    const limit = Math.min(Number(params['limit'] ?? 10), 25);
-    const playlistName = String(params['playlistName'] ?? `My ${genre} Playlist`);
-    const allRequested = !!params['allRequested'];
-    const capNote = allRequested ? ` (capped at ${limit} tracks)` : '';
+    const genre = this.cleanString(params.genre) || 'mixed';
+    const limit = this.safeLimit(params.limit, 10);
+    const allRequested = Boolean(params.allRequested);
+    const playlistName =
+      this.cleanString(params.playlistName) || `${this.titleCase(genre)} Mix`;
+
+    const tracks = await this.findPublicTracksByGenre({ genre, limit });
+
+    if (tracks.length === 0) {
+      return {
+        reply: `I could not find public finished tracks for "${genre}", so I did not create the playlist.`,
+        provider,
+        intent: 'create_playlist_from_genre',
+        actionsTaken: [`searched genre "${genre}"`],
+        data: { genre, tracks: [] },
+        suggestions: ['Try another genre', 'Show trending tracks'],
+      };
+    }
+
+    const playlist = await this.createPlaylistRecord(userId, {
+      title: playlistName,
+      trackIds: tracks.map((track) => track.trackId),
+      genre: genre === 'mixed' ? null : genre,
+    });
+
     return {
-      reply: `Building a ${genre} playlist "${playlistName}" with ${limit} tracks${capNote}! Search for "${genre}" tracks and use the Playlists page to create it.`,
+      reply: `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}${allRequested ? `, capped at ${tracks.length}.` : '.'}`,
       provider,
       intent: 'create_playlist_from_genre',
-      actionsTaken: [`genre: ${genre}, limit: ${limit}`],
-      data: { genre, limit, playlistName },
-      suggestions: [`search for ${genre} tracks`],
+      actionsTaken: ['searched tracks by genre', 'created playlist', `added ${tracks.length} tracks`],
+      data: {
+        playlist,
+        genre,
+        tracks,
+      },
+      suggestions: ['Open the playlist', `Find more ${genre} tracks`],
     };
   }
 
   private async execCreatePlaylistFromArtistGenre(
-    _userId: string,
+    userId: string,
     params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = String(params['genre'] ?? 'mixed');
-    const artist = params['artist'] as string | undefined;
+    const genre = this.cleanString(params.genre) || 'mixed';
+    const artist = this.cleanString(params.artist);
+    const limit = this.safeLimit(params.limit, 10);
+    const playlistName =
+      this.cleanString(params.playlistName) ||
+      `${this.titleCase(genre)} by ${artist ?? 'Artist'}`;
+
     if (!artist) {
       return {
-        reply: 'Which artist? Try: "create playlist with sha3by tracks from artist Ahmed"',
+        reply: 'Which artist should I use?',
         provider,
         intent: 'create_playlist_from_artist_genre',
         actionsTaken: [],
         needsConfirmation: true,
       };
     }
+
+    const tracks = await this.findPublicTracksByGenre({ genre, artist, limit });
+
+    if (tracks.length === 0) {
+      return {
+        reply: `I could not find public finished ${genre} tracks from "${artist}", so I did not create the playlist.`,
+        provider,
+        intent: 'create_playlist_from_artist_genre',
+        actionsTaken: [`searched ${genre} tracks from ${artist}`],
+        data: { genre, artist, tracks: [] },
+        suggestions: ['Try a different artist', 'Search tracks by artist'],
+      };
+    }
+
+    const playlist = await this.createPlaylistRecord(userId, {
+      title: playlistName,
+      trackIds: tracks.map((track) => track.trackId),
+      genre: genre === 'mixed' ? null : genre,
+    });
+
     return {
-      reply: `Looking for ${genre} tracks by "${artist}"! Search for the artist on the Discover page, then create a playlist from their tracks.`,
+      reply: `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'} from "${artist}".`,
       provider,
       intent: 'create_playlist_from_artist_genre',
-      actionsTaken: [`genre: ${genre}, artist: ${artist}`],
-      data: { genre, artist },
+      actionsTaken: ['searched by artist and genre', 'created playlist', `added ${tracks.length} tracks`],
+      data: { playlist, genre, artist, tracks },
+      suggestions: ['Open the playlist', `Find more by ${artist}`],
     };
   }
 
   private async execShareTrack(
-    _userId: string,
+    userId: string,
     params: Record<string, unknown>,
-    needsConfirmation: boolean,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const recipient = params['recipient'] as string | undefined;
-    const trackId = params['trackId'] as string | undefined;
-    if (!recipient) {
+    const recipientQuery = this.cleanString(params.recipient);
+    const trackId = this.cleanString(params.trackId);
+
+    if (!trackId) {
+      return {
+        reply: 'Please open a track first, then ask me to send it.',
+        provider,
+        intent: 'share_track_message',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
+    if (!recipientQuery) {
       return {
         reply: 'Who would you like to send this track to?',
         provider,
@@ -372,55 +516,558 @@ export class AiActionService {
         needsConfirmation: true,
       };
     }
-    if (!trackId) {
+
+    const [recipient, track] = await Promise.all([
+      this.findUserByHandleOrName(recipientQuery),
+      this.findPublicTrackById(trackId),
+    ]);
+
+    if (!recipient) {
       return {
-        reply: 'Please navigate to a track page first, then ask me to share it.',
+        reply: `I could not find a user matching "${recipientQuery}".`,
         provider,
         intent: 'share_track_message',
         actionsTaken: [],
+        needsConfirmation: true,
       };
     }
+
+    if (!track) {
+      return {
+        reply: 'I could not find this track or it is not available to share.',
+        provider,
+        intent: 'share_track_message',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
+    const text = `Check out this track on IQA3: ${track.title}`;
+    const message = await this.messages.sendMessage(userId, recipient.id, text);
+
     return {
-      reply: `To send this track to "${recipient}", use the share button on the track page.`,
+      reply: `Sent "${track.title}" to ${recipient.displayName ?? recipient.handle ?? 'the user'}.`,
       provider,
       intent: 'share_track_message',
-      actionsTaken: [],
-      data: { recipient, trackId },
+      actionsTaken: ['sent track message'],
+      data: {
+        recipient,
+        track,
+        message,
+      },
+      suggestions: ['Open messages', 'Share another track'],
     };
   }
 
   private async execQueueTrack(
+    userId: string,
     params: Record<string, unknown>,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
+    provider: AiProvider,
   ): Promise<AiResponse> {
-    const trackId = params['trackId'] as string | undefined;
+    const trackId = this.cleanString(params.trackId);
+    const rawMode = String(params.mode ?? 'END').toUpperCase();
+    const mode = rawMode === 'NEXT' || rawMode === 'TOP' ? rawMode : 'END';
+
     if (!trackId) {
       return {
-        reply: 'Navigate to a track page first, then ask me to add it to your queue.',
+        reply: 'Please open a track first, then ask me to add it to your queue.',
         provider,
         intent: 'queue_track_or_play_next',
         actionsTaken: [],
+        needsConfirmation: true,
       };
     }
+
+    try {
+      const result = await this.player.addQueueItem(userId, trackId, mode);
+
+      return {
+        reply: mode === 'NEXT' ? 'Added this track to play next.' : 'Added this track to your queue.',
+        provider,
+        intent: 'queue_track_or_play_next',
+        actionsTaken: [mode === 'NEXT' ? 'added track to play next' : 'added track to queue'],
+        data: result,
+        suggestions: ['Show queue', 'Find similar tracks'],
+      };
+    } catch {
+      const loaded = await this.player.loadQueueContext(userId, {
+        contextType: 'TRACK',
+        startTrackId: trackId,
+        shuffle: false,
+      });
+
+      return {
+        reply: 'Started a new queue from this track.',
+        provider,
+        intent: 'queue_track_or_play_next',
+        actionsTaken: ['loaded queue from current track'],
+        data: loaded,
+        suggestions: ['Play next track', 'Add another track to queue'],
+      };
+    }
+  }
+
+  private async execProfileHelp(userId: string, provider: AiProvider): Promise<AiResponse> {
+    const entitlements = await this.entitlements.getUserEntitlements(userId);
+
     return {
-      reply: 'Use the ⋮ menu on the track and select "Add to Queue" or "Play Next".',
+      reply:
+        `Your current plan is ${entitlements.planCode}. ` +
+        `You have uploaded ${entitlements.uploadedCount}/${entitlements.uploadLimit < 0 ? 'unlimited' : entitlements.uploadLimit} tracks. ` +
+        `Remaining uploads: ${entitlements.remainingUploads ?? 'unlimited'}. ` +
+        `${entitlements.canDownload ? 'Downloads are enabled.' : 'Downloads are not available on FREE.'}`,
       provider,
-      intent: 'queue_track_or_play_next',
-      actionsTaken: [],
-      data: { trackId },
+      intent: 'profile_or_subscription_help',
+      actionsTaken: ['checked subscription entitlements'],
+      data: { entitlements },
+      suggestions: ['Open /subscriptions', 'How do I upload music?'],
     };
   }
 
-  private async execProfileHelp(
-    _userId: string,
-    provider: 'mock' | 'n8n' | 'openai' | 'ollama',
-  ): Promise<AiResponse> {
+  private unknownResponse(provider: AiProvider): AiResponse {
     return {
-      reply: 'Check your subscription and usage from Settings > Subscription. Go there to see your current plan, uploads remaining, and upgrade options.',
+      reply:
+        'I can help you search tracks, discover music, create playlists, add tracks to playlists, queue tracks, send track messages, and answer app questions. Try: “create a Sha3by playlist with 5 songs.”',
       provider,
-      intent: 'profile_or_subscription_help',
+      intent: 'unknown',
       actionsTaken: [],
-      suggestions: ['what is my plan?', 'how do I upgrade?'],
+      suggestions: [
+        'Create a Sha3by playlist',
+        'Find trending tracks',
+        'How do I upload music?',
+        'Show my playlists',
+      ],
     };
+  }
+
+  private async findPublicTracksByGenre(options: {
+    genre: string;
+    artist?: string;
+    limit: number;
+  }): Promise<TrackCard[]> {
+    const genre = options.genre.toLowerCase().trim();
+    const limit = Math.min(Math.max(options.limit, 1), this.playlistTrackCap);
+
+    if (genre !== 'mixed' && !options.artist) {
+      try {
+        const byGenre = await this.discovery.getTrendingTracksByGenre(genre, limit);
+        const tracks = ((byGenre as any)?.tracks ?? []) as any[];
+        if (tracks.length > 0) {
+          return tracks.slice(0, limit).map((track) => ({
+            trackId: track.trackId,
+            title: track.title,
+            slug: track.slug,
+            coverArtUrl: track.coverArtUrl,
+            durationMs: track.durationMs,
+            likesCount: track.likesCount,
+            artist: track.artist,
+          }));
+        }
+      } catch {
+        // Not every search word is a valid Genre row. Fallback below.
+      }
+    }
+
+    const where: Prisma.TrackWhereInput = {
+      deletedAt: null,
+      visibility: TrackVisibility.PUBLIC,
+      status: TrackStatus.FINISHED,
+      moderationState: ModerationState.VISIBLE,
+    };
+
+    if (genre !== 'mixed') {
+      where.OR = [
+        {
+          primaryGenre: {
+            is: {
+              slug: {
+                equals: genre,
+                mode: 'insensitive',
+              },
+            },
+          },
+        } as Prisma.TrackWhereInput,
+        {
+          title: {
+            contains: genre,
+            mode: 'insensitive',
+          },
+        },
+        {
+          description: {
+            contains: genre,
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
+
+    if (options.artist) {
+      where.uploader = {
+        profile: {
+          is: {
+            OR: [
+              {
+                handle: {
+                  contains: options.artist,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                displayName: {
+                  contains: options.artist,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          },
+        },
+      } as any;
+    }
+
+    const rows = await this.prisma.track.findMany({
+      where,
+      orderBy: [{ likes: { _count: 'desc' } }, { createdAt: 'desc' }],
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        coverArtUrl: true,
+        durationMs: true,
+        uploader: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+                handle: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            likes: true,
+          },
+        },
+      },
+    });
+
+    return rows.map((track) => ({
+      trackId: track.id,
+      title: track.title,
+      slug: track.slug,
+      coverArtUrl: track.coverArtUrl,
+      durationMs: track.durationMs,
+      likesCount: track._count.likes,
+      artist: {
+        id: track.uploader.id,
+        displayName: track.uploader.profile?.displayName ?? null,
+        handle: track.uploader.profile?.handle ?? null,
+        avatarUrl: track.uploader.profile?.avatarUrl ?? null,
+      },
+    }));
+  }
+
+  private async createPlaylistRecord(
+    userId: string,
+    input: {
+      title: string;
+      trackIds: string[];
+      genre: string | null;
+    },
+  ) {
+    const title = input.title.trim().slice(0, 100);
+    const slug = await this.generateUniquePlaylistSlug(title);
+    const genreId = input.genre ? await this.resolveGenreId(input.genre) : null;
+    const uniqueTrackIds = Array.from(new Set(input.trackIds)).slice(0, this.playlistTrackCap);
+
+    const playlist = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.playlist.create({
+        data: {
+          ownerId: userId,
+          title,
+          slug,
+          visibility: PlaylistVisibility.PUBLIC,
+          genreId,
+        },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          visibility: true,
+          coverImageUrl: true,
+          coverArtUrl: true,
+          genre: {
+            select: {
+              slug: true,
+            },
+          },
+          _count: {
+            select: {
+              tracks: true,
+            },
+          },
+        },
+      });
+
+      if (uniqueTrackIds.length > 0) {
+        await tx.playlistTrack.createMany({
+          data: uniqueTrackIds.map((trackId, position) => ({
+            playlistId: created.id,
+            trackId,
+            position,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return created;
+    });
+
+    return {
+      playlistId: playlist.id,
+      title: playlist.title,
+      slug: playlist.slug,
+      visibility: playlist.visibility,
+      coverImageUrl: playlist.coverImageUrl ?? playlist.coverArtUrl ?? null,
+      genre: playlist.genre?.slug ?? input.genre,
+      tracksCount: uniqueTrackIds.length,
+    };
+  }
+
+  private async findOwnedPlaylistById(userId: string, playlistId: string) {
+    return this.prisma.playlist.findFirst({
+      where: {
+        id: playlistId,
+        ownerId: userId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+    });
+  }
+
+  private async findOwnedPlaylistByName(userId: string, playlistName?: string) {
+    if (!playlistName) return null;
+
+    const playlists = await this.prisma.playlist.findMany({
+      where: {
+        ownerId: userId,
+        deletedAt: null,
+        title: {
+          contains: playlistName,
+          mode: 'insensitive',
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 2,
+      select: {
+        id: true,
+        title: true,
+      },
+    });
+
+    return playlists.length === 1 ? playlists[0] : null;
+  }
+
+  private async findUserByHandleOrName(query: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        profile: {
+          is: {
+            OR: [
+              {
+                handle: {
+                  contains: query,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                displayName: {
+                  contains: query,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          },
+        },
+      } as any,
+      take: 2,
+      select: {
+        id: true,
+        profile: {
+          select: {
+            displayName: true,
+            handle: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    if (users.length !== 1) return null;
+
+    return {
+      id: users[0].id,
+      displayName: users[0].profile?.displayName ?? null,
+      handle: users[0].profile?.handle ?? null,
+      avatarUrl: users[0].profile?.avatarUrl ?? null,
+    };
+  }
+
+  private async findPublicTrackById(trackId: string): Promise<TrackCard | null> {
+    const track = await this.prisma.track.findFirst({
+      where: {
+        id: trackId,
+        deletedAt: null,
+        OR: [
+          {
+            visibility: TrackVisibility.PUBLIC,
+            status: TrackStatus.FINISHED,
+            moderationState: ModerationState.VISIBLE,
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        coverArtUrl: true,
+        durationMs: true,
+        uploader: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+                handle: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!track) return null;
+
+    return {
+      trackId: track.id,
+      title: track.title,
+      slug: track.slug,
+      coverArtUrl: track.coverArtUrl,
+      durationMs: track.durationMs,
+      artist: {
+        id: track.uploader.id,
+        displayName: track.uploader.profile?.displayName ?? null,
+        handle: track.uploader.profile?.handle ?? null,
+        avatarUrl: track.uploader.profile?.avatarUrl ?? null,
+      },
+    };
+  }
+
+  private async resolveGenreId(slug: string): Promise<number | null> {
+    const genre = await this.prisma.genre.findFirst({
+      where: {
+        slug: {
+          equals: slug,
+          mode: 'insensitive',
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return genre?.id ?? null;
+  }
+
+  private async generateUniquePlaylistSlug(title: string): Promise<string> {
+    const base = this.slugify(title) || 'playlist';
+
+    const baseExists = await this.prisma.playlist.findFirst({
+      where: { slug: base },
+      select: { id: true },
+    });
+
+    if (!baseExists) return base;
+
+    for (let i = 0; i < 10; i += 1) {
+      const candidate = `${base}-${Math.random().toString(16).slice(2, 8)}`;
+      const exists = await this.prisma.playlist.findFirst({
+        where: { slug: candidate },
+        select: { id: true },
+      });
+
+      if (!exists) return candidate;
+    }
+
+    return `${base}-${Date.now()}`;
+  }
+
+  private slugify(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+  }
+
+  private normalizeDiscoveryTracks(rows: any[]): TrackCard[] {
+    return rows.slice(0, 8).map((track) => ({
+      trackId: track.trackId ?? track.id,
+      title: track.title,
+      slug: track.slug ?? null,
+      coverArtUrl: track.coverArtUrl ?? null,
+      durationMs: typeof track.durationMs === 'number' ? track.durationMs : null,
+      artist: {
+        id: track.uploaderId,
+        handle: track.artistHandle ?? track.artist_handle ?? null,
+        displayName: track.artistName ?? track.artistDisplayName ?? null,
+      },
+    }));
+  }
+
+  private normalizeTrendingTracks(rows: any[]): TrackCard[] {
+    return rows.slice(0, 10).map((track) => ({
+      trackId: track.trackId ?? track.id,
+      title: track.title,
+      slug: track.slug ?? null,
+      coverArtUrl: track.coverArtUrl ?? null,
+      likesCount: track.recentLikes ?? track.likesCount ?? 0,
+      artist: {
+        id: track.uploaderId,
+        displayName: track.uploader?.displayName ?? null,
+        handle: track.uploader?.handle ?? null,
+      },
+    }));
+  }
+
+  private safeLimit(value: unknown, fallback: number): number {
+    const parsed = Number(value ?? fallback);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(Math.max(Math.floor(parsed), 1), this.playlistTrackCap);
+  }
+
+  private cleanString(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private titleCase(value: string): string {
+    return value
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 }
