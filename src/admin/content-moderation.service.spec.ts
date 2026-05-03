@@ -195,6 +195,70 @@ describe("ContentModerationService", () => {
     );
   });
 
+  it("moderateTrack: removal with linked report notifies reporter separately from track owner", async () => {
+    mockPrisma.track.findUnique.mockResolvedValueOnce({
+      id: "track-linked",
+      title: "Reported Track",
+      uploaderId: "target-user",
+      moderationState: "VISIBLE",
+    });
+    mockPrisma.moderationReport.findUnique
+      .mockResolvedValueOnce({ id: "mod-report-track" })
+      .mockResolvedValueOnce({
+        id: "mod-report-track",
+        reporterId: "reporter-user",
+        status: "PENDING",
+      });
+    mockPrisma.moderationAction.create.mockResolvedValueOnce({
+      id: "action-linked-track",
+      actionType: "REMOVE_TRACK",
+      createdAt: new Date(),
+    });
+    mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+    await service.moderateTrack("admin-1", "track-linked", {
+      moderationState: "REMOVED",
+      reason: "Serious policy violation.",
+      reportId: "mod-report-track",
+    });
+
+    expect(mockPrisma.moderationReport.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trackId: "track-linked",
+          id: { not: "mod-report-track" },
+        }),
+      }),
+    );
+    expect((mockPrisma.moderationReport as any).update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "mod-report-track" } }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        recipientId: "target-user",
+        entityType: "TRACK",
+        metadata: expect.objectContaining({
+          batchMessage: "Your track was removed by moderation.",
+        }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        recipientId: "reporter-user",
+        entityType: "USER",
+        eventType: "REPORT_RESOLVED",
+        metadata: expect.objectContaining({
+          outcome: "ACTION_TAKEN",
+        }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "LIKE" }),
+    );
+  });
+
   it("moderateTrack: hard-deletes an already REMOVED track when removal is requested", async () => {
     mockPrisma.track.findUnique.mockResolvedValueOnce({
       id: "track-2b",

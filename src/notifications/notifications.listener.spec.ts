@@ -18,6 +18,15 @@ const mockPrisma = {
   user: {
     findMany: jest.fn(),
   },
+  track: {
+    findUnique: jest.fn(),
+  },
+  comment: {
+    findUnique: jest.fn(),
+  },
+  playlist: {
+    findUnique: jest.fn(),
+  },
 };
 
 describe("NotificationsListener", () => {
@@ -105,6 +114,7 @@ describe("NotificationsListener", () => {
       reporterId: "user-X",
       category: "SPAM",
       targetType: "TRACK",
+      targetId: "track-1",
     };
 
     await listener.handleReportCreated(event);
@@ -119,6 +129,63 @@ describe("NotificationsListener", () => {
     );
     expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ recipientId: "mod-1" }),
+    );
+  });
+
+  it("handleReportCreated: excludes reported track owner from admin/moderator fanout", async () => {
+    mockPrisma.track.findUnique.mockResolvedValueOnce({ uploaderId: "mod-owner" });
+    mockPrisma.user.findMany.mockResolvedValue([{ id: "admin-1" }]);
+    mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+    await listener.handleReportCreated({
+      reportId: "report-track-owner",
+      reporterId: "reporter-1",
+      category: "SPAM",
+      targetType: "TRACK",
+      targetId: "track-owned-by-mod",
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { not: "mod-owner" },
+        }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(1);
+    expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientId: "admin-1" }),
+    );
+    expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ recipientId: "mod-owner" }),
+    );
+  });
+
+  it("handleReportCreated: excludes reported user from admin/moderator fanout", async () => {
+    mockPrisma.user.findMany.mockResolvedValue([{ id: "admin-1" }]);
+    mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+    await listener.handleReportCreated({
+      reportId: "report-user",
+      reporterId: "reporter-1",
+      category: "HARASSMENT",
+      targetType: "USER",
+      targetId: "reported-admin",
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { not: "reported-admin" },
+        }),
+      }),
+    );
+    expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+      expect.objectContaining({ recipientId: "reported-admin" }),
     );
   });
 
