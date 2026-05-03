@@ -194,7 +194,7 @@ export function detectMockIntent(
     return {
       intent: 'search_tracks',
       parameters: {
-        artist,
+        profileName: artist,
         limit: extractLimit(msg, 1),
         mode: 'artist_best',
       },
@@ -240,6 +240,22 @@ export function detectMockIntent(
       needsConfirmation: !artist,
       clarifyingQuestion: artist ? undefined : 'Which artist should I use?',
     };
+  }
+
+  if (/(create|make).*(playlist).*(tracks?|songs?|music)/i.test(msg)) {
+    const profileName = extractProfileNameForPlaylist(original);
+    if (profileName) {
+      return {
+        intent: 'create_playlist_from_profile',
+        parameters: {
+          profileName,
+          limit: extractLimit(msg, 10),
+          playlistName: `${capitalize(profileName)} Mix`,
+        },
+        confidence: 0.9,
+        needsConfirmation: false,
+      };
+    }
   }
 
   if (/(create|make).*(playlist)/i.test(msg) && !extractPlaylistName(original)) {
@@ -367,6 +383,14 @@ export function detectMockIntent(
     const query =
       msg.match(/(?:search\s+for|find|show)\s+(.+?)\s+(?:tracks?|songs?|music)/i)?.[1]?.trim() ||
       original;
+    if (isLikelyProfileTrackQuery(query)) {
+      return {
+        intent: 'search_tracks',
+        parameters: { profileName: cleanProfileName(query), limit: extractLimit(msg, 10) },
+        confidence: 0.84,
+        needsConfirmation: false,
+      };
+    }
     const genre = extractGenre(query);
     if (genre !== 'mixed') {
       return {
@@ -438,6 +462,30 @@ function extractGenre(msg: string): string {
   if (['koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'].includes(found)) return 'quran';
   if (found === 'راب') return 'rap';
   return found;
+}
+
+function extractProfileNameForPlaylist(message: string): string | undefined {
+  const match = message.match(/playlist\s+(?:with|from|of)\s+(?:profile\s+)?(.+?)\s+(?:tracks?|songs?|music)/i);
+  if (/\b(best|top|all)\b/i.test(match?.[1] ?? '')) return undefined;
+  const cleaned = match?.[1] ? cleanProfileName(match[1]) : undefined;
+  return cleaned && !/^\d+$/.test(cleaned) && !isKnownGenreTerm(cleaned) ? cleaned : undefined;
+}
+
+function isLikelyProfileTrackQuery(query: string): boolean {
+  const cleaned = cleanProfileName(query);
+  return /^[a-z0-9_ -]{2,40}$/i.test(cleaned) && !isKnownGenreTerm(cleaned);
+}
+
+function cleanProfileName(value: string): string {
+  return value
+    .replace(/\b(profile|user|artist|tracks?|songs?|music|me)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isKnownGenreTerm(value: string): boolean {
+  const normalized = value.toLowerCase().trim();
+  return GENRE_WORDS.some((genre) => containsGenreTerm(normalized, genre));
 }
 
 function isCancelPendingMessage(message: string): boolean {
