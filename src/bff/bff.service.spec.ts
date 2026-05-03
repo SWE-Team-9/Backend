@@ -23,6 +23,7 @@ const mockMe = {
   is_verified: true,
   account_type: "LISTENER",
   system_role: "USER",
+  account_status: "ACTIVE",
   subscription_tier: "FREE",
 };
 

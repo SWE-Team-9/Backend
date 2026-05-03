@@ -5,13 +5,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage/storage.service";
 
-import { FileRole, FileStatus, Prisma, TrackStatus, TrackVisibility } from "@prisma/client";
+import { FileRole, FileStatus, ModerationState, Prisma, TrackStatus, TrackVisibility } from "@prisma/client";
 import { nanoid } from "nanoid";
 import { CreateTrackDto } from "./dto/create-track.dto";
 import { UpdateTrackDto } from "./dto/update-track.dto";
@@ -136,6 +137,7 @@ const TRACK_DETAIL_SELECT = {
   publishedAt: true,
   createdAt: true,
   updatedAt: true,
+  moderationState: true,
   uploader: {
     select: {
       id: true,
@@ -185,6 +187,7 @@ const TRACK_LIST_SELECT = {
   visibility: true,
   status: true,
   coverArtUrl: true,
+  moderationState: true,
   createdAt: true,
   uploader: {
     select: {
@@ -444,6 +447,11 @@ export class TracksService {
       throw new NotFoundException("Track not found.");
     }
 
+    // Hidden/removed tracks are only visible to the owner.
+    if (track.moderationState !== "VISIBLE" && track.uploader.id !== requesterId) {
+      throw new NotFoundException("Track not found.");
+    }
+
     const base = this.formatDetailResponse(track);
 
     if (!requesterId) return base;
@@ -473,12 +481,15 @@ export class TracksService {
   async getTrackStatus(trackId: string, requesterId?: string) {
     const track = await this.prisma.track.findFirst({
       where: { id: trackId, deletedAt: null },
-      select: { id: true, status: true, uploaderId: true, visibility: true },
+      select: { id: true, status: true, uploaderId: true, visibility: true, moderationState: true },
     });
     if (!track) {
       throw new NotFoundException("Track not found.");
     }
     if (track.visibility === TrackVisibility.PRIVATE && track.uploaderId !== requesterId) {
+      throw new NotFoundException("Track not found.");
+    }
+    if (track.moderationState !== "VISIBLE" && track.uploaderId !== requesterId) {
       throw new NotFoundException("Track not found.");
     }
     return { trackId: track.id, status: track.status };
@@ -495,6 +506,10 @@ export class TracksService {
     coverArtFile?: Express.Multer.File,
   ) {
     const track = await this.findOwnedTrack(trackId, userId);
+
+    if (track.moderationState !== "VISIBLE") {
+      throw new ConflictException("Cannot modify a track while it is hidden or removed by moderation.");
+    }
 
     // Block edits while the track is still being processed
     const fullTrack = await this.prisma.track.findUnique({
@@ -599,6 +614,10 @@ export class TracksService {
   async changeVisibility(trackId: string, userId: string, visibility: TrackVisibility) {
     const track = await this.findOwnedTrack(trackId, userId);
 
+    if (track.moderationState !== "VISIBLE") {
+      throw new ConflictException("Cannot change visibility of a track hidden or removed by moderation.");
+    }
+
     const data: Prisma.TrackUpdateInput = { visibility };
 
     // Regenerate secret token when switching to PRIVATE
@@ -639,6 +658,7 @@ export class TracksService {
       ...(!isOwner && {
         visibility: TrackVisibility.PUBLIC,
         status: TrackStatus.FINISHED,
+        moderationState: "VISIBLE",
       }),
     };
 
@@ -676,6 +696,65 @@ export class TracksService {
       totalTracks,
       tracks: tracks.map((t) => this.formatListItem(t)),
     };
+  }
+
+  async search(query: string) {
+    const normalized = query.trim();
+
+    if (normalized.length < 2) {
+      return [];
+    }
+
+    try {
+      const tracks = await this.prisma.track.findMany({
+        where: this.buildSearchWhere(normalized),
+        take: 10,
+        orderBy: [{ createdAt: "desc" }],
+        select: TRACK_LIST_SELECT,
+      });
+
+      return tracks.map((track) => this.formatListItem(track));
+    } catch (error) {
+      if (this.isTimeoutError(error)) {
+        this.logger.warn(`Track search timed out for query "${normalized}"`);
+        throw new ServiceUnavailableException("Track search is temporarily unavailable.");
+      }
+
+      throw error;
+    }
+  }
+
+  async getSuggestions(query: string) {
+    const normalized = query.trim();
+
+    if (normalized.length < 2) {
+      return [] as string[];
+    }
+
+    try {
+      const tracks = await this.prisma.track.findMany({
+        where: {
+          deletedAt: null,
+          visibility: TrackVisibility.PUBLIC,
+          status: TrackStatus.FINISHED,
+          moderationState: ModerationState.VISIBLE,
+          title: { contains: normalized, mode: "insensitive" },
+        },
+        select: { title: true },
+        distinct: ["title"],
+        orderBy: [{ title: "asc" }],
+        take: 5,
+      });
+
+      return tracks.map((track) => track.title);
+    } catch (error) {
+      if (this.isTimeoutError(error)) {
+        this.logger.warn(`Track suggestions timed out for query "${normalized}"`);
+        throw new ServiceUnavailableException("Track suggestions are temporarily unavailable.");
+      }
+
+      throw error;
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -765,7 +844,7 @@ export class TracksService {
 
   async getTrackBySecretToken(secretToken: string) {
     const track = await this.prisma.track.findFirst({
-      where: { secretToken, deletedAt: null },
+      where: { secretToken, deletedAt: null, moderationState: "VISIBLE" },
       select: TRACK_DETAIL_SELECT,
     });
     if (!track) {
@@ -774,6 +853,37 @@ export class TracksService {
     return {
       ...this.formatDetailResponse(track),
       message: "Access granted via secret token",
+    };
+  }
+
+  async findTrackShareTarget(identifier: string): Promise<{ id: string; artistHandle: string | null } | null> {
+    const track = await this.prisma.track.findFirst({
+      where: {
+        deletedAt: null,
+        moderationState: "VISIBLE",
+        OR: [{ id: identifier }, { slug: identifier }],
+      },
+      select: {
+        id: true,
+        uploader: {
+          select: {
+            profile: {
+              select: {
+                handle: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!track) {
+      return null;
+    }
+
+    return {
+      id: track.id,
+      artistHandle: track.uploader?.profile?.handle ?? null,
     };
   }
 
@@ -788,7 +898,7 @@ export class TracksService {
   private async findOwnedTrack(trackId: string, userId: string) {
     const track = await this.prisma.track.findFirst({
       where: { id: trackId, deletedAt: null },
-      select: { id: true, uploaderId: true, publishedAt: true },
+      select: { id: true, uploaderId: true, publishedAt: true, moderationState: true },
     });
     if (!track) {
       throw new NotFoundException("Track not found.");
@@ -890,6 +1000,39 @@ export class TracksService {
         this.logger.warn(`Failed to delete file ${file.storageKey}: ${err}`);
       }
     }
+  }
+
+  private buildSearchWhere(normalizedQuery: string): Prisma.TrackWhereInput {
+    return {
+      deletedAt: null,
+      visibility: TrackVisibility.PUBLIC,
+      status: TrackStatus.FINISHED,
+      moderationState: ModerationState.VISIBLE,
+      OR: [
+        { title: { contains: normalizedQuery, mode: "insensitive" } },
+        {
+          uploader: {
+            profile: {
+              OR: [
+                { displayName: { contains: normalizedQuery, mode: "insensitive" } },
+                { handle: { contains: normalizedQuery, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  private isTimeoutError(error: unknown): boolean {
+    const maybeError = error as { code?: string; message?: string };
+    const message = maybeError.message?.toLowerCase() ?? "";
+
+    return (
+      maybeError.code === "P1008" ||
+      maybeError.code === "P2024" ||
+      message.includes("timeout")
+    );
   }
 
   /** Format a raw track record into the upload response shape */

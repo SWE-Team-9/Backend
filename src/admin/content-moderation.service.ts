@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { ModerationActionType, ModerationState } from "@prisma/client";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ModerationActionType, ModerationState, ReportTargetType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import {
@@ -36,10 +36,82 @@ function playlistStateToActionType(state: ModerationState): ModerationActionType
 
 @Injectable()
 export class ContentModerationService {
+  private readonly logger = new Logger(ContentModerationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async createNotificationSafely(payload: any): Promise<void> {
+    try {
+      await this.notificationsService.createNotification(payload);
+    } catch (error) {
+      this.logger.error(
+        `Non-fatal notification failure during content moderation: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async notifyReporterForLinkedReport(params: {
+    reportId?: string;
+    adminId: string;
+    targetUserId: string;
+    message: string;
+  }): Promise<void> {
+    if (!params.reportId) return;
+
+    const report = await this.prisma.moderationReport.findUnique({
+      where: { id: params.reportId },
+      select: { id: true, reporterId: true, status: true },
+    });
+    if (!report) return;
+
+    if (report.status === "RESOLVED" || report.status === "REJECTED") {
+      return;
+    }
+
+    await this.prisma.moderationReport.update({
+      where: { id: report.id },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (report.reporterId === params.targetUserId) {
+      return;
+    }
+
+    await this.createNotificationSafely({
+      recipientId: report.reporterId,
+      actorId: params.adminId,
+      entityType: "USER",
+      eventType: "REPORT_RESOLVED",
+      metadata: {
+        batchMessage: params.message,
+        reportId: report.id,
+        outcome: "ACTION_TAKEN",
+      },
+    });
+  }
+  
+  private async resolveModerationReportId(
+    reportId?: string,
+  ): Promise<string | undefined> {
+    if (!reportId) {
+      return undefined;
+    }
+    
+    const report = await this.prisma.moderationReport.findUnique({
+      where: { id: reportId },
+      select: { id: true },
+    });
+    
+    return report?.id;
+  }
 
   // ─── Moderate track ──────────────────────────────────────────────────────────
 
@@ -61,7 +133,7 @@ export class ContentModerationService {
       });
     }
 
-    if (track.moderationState === dto.moderationState) {
+    if (track.moderationState === dto.moderationState && dto.moderationState !== "REMOVED") {
       throw new BadRequestException({
         code: "NO_STATE_CHANGE",
         message: "Track is already in this moderation state.",
@@ -70,30 +142,91 @@ export class ContentModerationService {
 
     const previousState = track.moderationState;
     const actionType = stateToActionType(dto.moderationState);
+    const moderationReportId = await this.resolveModerationReportId(dto.reportId);
 
-    await this.prisma.track.update({
-      where: { id: trackId },
-      data: { moderationState: dto.moderationState },
+    const action = await this.prisma.$transaction(async (tx) => {
+      if (dto.moderationState === "REMOVED") {
+        const createdAction = await tx.moderationAction.create({
+          data: {
+            adminId,
+            targetUserId: track.uploaderId,
+            actionType,
+            notes: dto.reason,
+            reportId: moderationReportId,
+          },
+        });
+
+        await tx.report.updateMany({
+          where: {
+            targetType: ReportTargetType.TRACK,
+            targetId: trackId,
+            status: { in: ["PENDING", "UNDER_REVIEW"] },
+          },
+          data: {
+            status: "RESOLVED",
+            resolvedAt: new Date(),
+            resolvedBy: adminId,
+          },
+        });
+
+        await tx.moderationReport.updateMany({
+          where: {
+            trackId,
+            status: { in: ["PENDING", "UNDER_REVIEW"] },
+            ...(moderationReportId ? { id: { not: moderationReportId } } : {}),
+          },
+          data: {
+            status: "RESOLVED",
+            resolvedAt: new Date(),
+          },
+        });
+
+        await tx.track.delete({ where: { id: trackId } });
+        return createdAction;
+      }
+
+      await tx.track.update({
+        where: { id: trackId },
+        data: { moderationState: dto.moderationState },
+      });
+
+      return tx.moderationAction.create({
+        data: {
+          adminId,
+          trackId,
+          targetUserId: track.uploaderId,
+          actionType,
+          notes: dto.reason,
+          reportId: moderationReportId,
+        },
+      });
     });
 
-    const action = await this.prisma.moderationAction.create({
-      data: {
-        adminId,
-        trackId,
-        targetUserId: track.uploaderId,
-        actionType,
-        notes: dto.reason,
-        reportId: dto.reportId ?? null,
-      },
-    });
+    const trackActionLabel =
+      dto.moderationState === "REMOVED"
+        ? "removed"
+        : dto.moderationState === "HIDDEN"
+          ? "hidden"
+          : "restored";
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: track.uploaderId,
       actorId: adminId,
       entityType: "TRACK",
       eventType: "REPORT_RESOLVED",
       trackId,
-      metadata: { actionType, reason: dto.reason },
+      metadata: {
+        actionType,
+        reason: dto.reason,
+        batchMessage: `Your track was ${trackActionLabel} by moderation.`,
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: moderationReportId,
+      adminId,
+      targetUserId: track.uploaderId,
+      message: "Your report was reviewed. Action was taken on the reported track.",
     });
 
     return {
@@ -142,6 +275,8 @@ export class ContentModerationService {
       data: { moderationState: newState },
     });
 
+    const moderationReportId = await this.resolveModerationReportId(dto.reportId);
+    
     const action = await this.prisma.moderationAction.create({
       data: {
         adminId,
@@ -149,17 +284,30 @@ export class ContentModerationService {
         targetUserId: comment.userId,
         actionType,
         notes: dto.reason,
-        reportId: dto.reportId ?? null,
+        reportId: moderationReportId,
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: comment.userId,
       actorId: adminId,
       entityType: "COMMENT",
       eventType: "REPORT_RESOLVED",
       commentId,
-      metadata: { actionType, reason: dto.reason },
+      metadata: {
+        actionType,
+        reason: dto.reason,
+        batchMessage: dto.isHidden
+          ? "Your comment was hidden by moderation."
+          : "Your comment was restored by moderation.",
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: moderationReportId,
+      adminId,
+      targetUserId: comment.userId,
+      message: "Your report was reviewed. Action was taken on the reported comment.",
     });
 
     return {
@@ -206,6 +354,8 @@ export class ContentModerationService {
       data: { moderationState: dto.moderationState },
     });
 
+    const moderationReportId = await this.resolveModerationReportId(dto.reportId);
+    
     const action = await this.prisma.moderationAction.create({
       data: {
         adminId,
@@ -213,17 +363,33 @@ export class ContentModerationService {
         targetUserId: playlist.ownerId,
         actionType,
         notes: dto.reason,
-        reportId: dto.reportId ?? null,
+        reportId: moderationReportId,
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: playlist.ownerId,
       actorId: adminId,
       entityType: "PLAYLIST",
       eventType: "REPORT_RESOLVED",
       playlistId,
-      metadata: { actionType, reason: dto.reason },
+      metadata: {
+        actionType,
+        reason: dto.reason,
+        batchMessage:
+          dto.moderationState === "REMOVED"
+            ? "Your playlist was removed by moderation."
+            : dto.moderationState === "HIDDEN"
+              ? "Your playlist was hidden by moderation."
+              : "Your playlist was restored by moderation.",
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: moderationReportId,
+      adminId,
+      targetUserId: playlist.ownerId,
+      message: "Your report was reviewed. Action was taken on the reported playlist.",
     });
 
     return {

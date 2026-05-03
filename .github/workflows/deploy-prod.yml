@@ -29,7 +29,14 @@ jobs:
           ECR_REPOSITORY: swe-team-9/backend
           IMAGE_TAG: production # Different tag for prod
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          if [ -f "./Backend/Dockerfile" ]; then
+            BUILD_CONTEXT="./Backend"
+            DOCKERFILE="./Backend/Dockerfile"
+          else
+            BUILD_CONTEXT="."
+            DOCKERFILE="./Dockerfile"
+          fi
+          docker build -f $DOCKERFILE -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $BUILD_CONTEXT
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Deploy to PROD EC2

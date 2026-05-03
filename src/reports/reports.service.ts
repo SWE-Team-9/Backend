@@ -7,6 +7,7 @@ import {
 import { Prisma, ReportStatus, ReportTargetType, SystemRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { NotificationsService } from "../notifications/notifications.service";
 import { BulkUpdateReportsDto } from "./dto/bulk-update-reports.dto";
 import { CreateAppealDto } from "./dto/create-appeal.dto";
 import { CreateReportDto } from "./dto/create-report.dto";
@@ -18,7 +19,43 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  private buildReporterOutcomeMessage(status: ReportStatus): string | null {
+    switch (status) {
+      case ReportStatus.RESOLVED:
+        return "Your report was reviewed and resolved.";
+      case ReportStatus.REJECTED:
+        return "Your report was reviewed. No violation was found.";
+      default:
+        return null;
+    }
+  }
+
+  private async notifyReporterOutcome(
+    reporterId: string,
+    status: ReportStatus,
+    reportId: string,
+  ): Promise<void> {
+    const message = this.buildReporterOutcomeMessage(status);
+    if (!message) return;
+
+    await this.notificationsService.createNotification({
+      recipientId: reporterId,
+      entityType: "USER",
+      eventType: "REPORT_RESOLVED",
+      metadata: {
+        batchMessage: message,
+        reportId,
+        reportStatus: status,
+      },
+    });
+  }
+
+  private isTerminalStatus(status: ReportStatus): boolean {
+    return status === ReportStatus.RESOLVED || status === ReportStatus.REJECTED;
+  }
 
   async createReport(reporterId: string, dto: CreateReportDto) {
     await this.ensureTargetExists(dto.targetType, dto.targetId);
@@ -55,6 +92,7 @@ export class ReportsService {
       reporterId,
       category: dto.reason,
       targetType: dto.targetType,
+      targetId: dto.targetId,
     });
 
     return report;
@@ -336,7 +374,7 @@ export class ReportsService {
   async updateReport(reportId: string, adminId: string, dto: UpdateReportDto) {
     const currentReport = await this.prisma.report.findUnique({
       where: { id: reportId },
-      select: { status: true },
+      select: { status: true, reporterId: true },
     });
 
     if (!currentReport) {
@@ -346,33 +384,32 @@ export class ReportsService {
       });
     }
 
-    if (dto.status && currentReport.status === ReportStatus.RESOLVED) {
-      throw new BadRequestException({
-        code: "INVALID_TRANSITION",
-        message: "Cannot transition from RESOLVED status to another state.",
+    if (dto.status && this.isTerminalStatus(currentReport.status)) {
+      throw new ConflictException({
+        code: "REPORT_ALREADY_HANDLED",
+        message: "Report has already been resolved or rejected.",
       });
     }
 
     const now = new Date();
-    const shouldResolve =
-      dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
+    const shouldResolve = dto.status ? this.isTerminalStatus(dto.status) : false;
+    const shouldNotifyReporter = Boolean(dto.status && this.isTerminalStatus(dto.status));
 
-    const updatedReport = await this.prisma.report.update({
-      where: { id: reportId },
-      data: {
-        ...(dto.status ? { status: dto.status } : {}),
-        ...(shouldResolve ? { resolvedAt: now, resolvedBy: adminId } : {}),
-      },
-    });
-
-    let notesAppliedToAppeals = 0;
-
-    // Schema note: resolutionNotes is stored on Appeal, not Report.
-    if (dto.resolutionNotes) {
-      const appealResult = await this.prisma.appeal.updateMany({
-        where: {
-          reportId,
+    const { updatedReport, notesAppliedToAppeals } = await this.prisma.$transaction(async (tx) => {
+      const report = await tx.report.update({
+        where: { id: reportId },
+        data: {
+          ...(dto.status ? { status: dto.status } : {}),
+          ...(shouldResolve ? { resolvedAt: now, resolvedBy: adminId } : {}),
         },
+      });
+
+      if (!dto.resolutionNotes) {
+        return { updatedReport: report, notesAppliedToAppeals: 0 };
+      }
+
+      const appealResult = await tx.appeal.updateMany({
+        where: { reportId },
         data: {
           resolutionNotes: dto.resolutionNotes,
           ...(dto.status ? { status: dto.status } : {}),
@@ -380,7 +417,11 @@ export class ReportsService {
         },
       });
 
-      notesAppliedToAppeals = appealResult.count;
+      return { updatedReport: report, notesAppliedToAppeals: appealResult.count };
+    });
+
+    if (shouldNotifyReporter && dto.status) {
+      await this.notifyReporterOutcome(currentReport.reporterId, dto.status, reportId);
     }
 
     return {
@@ -390,25 +431,28 @@ export class ReportsService {
   }
 
   async bulkUpdateReports(adminId: string, dto: BulkUpdateReportsDto) {
-    // Check that none of the reports are already RESOLVED
-    const resolvedReports = await this.prisma.report.findMany({
+    const handledReports = await this.prisma.report.findMany({
       where: {
         id: { in: dto.reportIds },
-        status: ReportStatus.RESOLVED,
+        status: { in: [ReportStatus.RESOLVED, ReportStatus.REJECTED] },
       },
       select: { id: true },
     });
 
-    if ((resolvedReports ?? []).length > 0) {
-      throw new BadRequestException({
-        code: "INVALID_TRANSITION",
-        message: "Cannot transition from RESOLVED status to another state.",
+    if ((handledReports ?? []).length > 0) {
+      throw new ConflictException({
+        code: "REPORT_ALREADY_HANDLED",
+        message: "One or more reports have already been resolved or rejected.",
       });
     }
 
+    const reportsToUpdate = await this.prisma.report.findMany({
+      where: { id: { in: dto.reportIds } },
+      select: { id: true, reporterId: true, status: true },
+    });
+
     const now = new Date();
-    const shouldResolve =
-      dto.status === ReportStatus.RESOLVED || dto.status === ReportStatus.REJECTED;
+    const shouldResolve = this.isTerminalStatus(dto.status);
 
     const [reportResult, appealResult] = await this.prisma.$transaction([
       this.prisma.report.updateMany({
@@ -435,6 +479,14 @@ export class ReportsService {
             },
           }),
     ]);
+
+    if (this.isTerminalStatus(dto.status)) {
+      await Promise.all(
+        reportsToUpdate.map((report) =>
+          this.notifyReporterOutcome(report.reporterId, dto.status, report.id),
+        ),
+      );
+    }
 
     return {
       updatedReports: reportResult.count,

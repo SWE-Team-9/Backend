@@ -19,6 +19,7 @@ const mockPrisma = {
   track: { updateMany: jest.fn() },
   playlist: { updateMany: jest.fn() },
   moderationAction: { create: jest.fn() },
+  moderationReport: { findUnique: jest.fn(), update: jest.fn() },
   $transaction: jest.fn(),
 };
 
@@ -66,6 +67,8 @@ describe("UserEnforcementService", () => {
 
     service = module.get<UserEnforcementService>(UserEnforcementService);
     jest.clearAllMocks();
+    mockPrisma.moderationReport.findUnique.mockResolvedValue(null);
+    mockPrisma.moderationReport.update.mockResolvedValue({});
   });
 
   // ─── warnUser ────────────────────────────────────────────────────────────────
@@ -177,6 +180,44 @@ describe("UserEnforcementService", () => {
       );
     });
 
+    it("notifies reporter on linked moderation report and does not misroute reporter message to target", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin());
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "action-report-link",
+        actionType: "WARN_USER",
+        createdAt: new Date(),
+      });
+      mockPrisma.moderationReport.findUnique
+        .mockResolvedValueOnce({ id: "report-1", reporterId: "reporter-1", status: "PENDING" });
+      mockNotificationsService.createNotification.mockResolvedValue(undefined);
+
+      await service.warnUser(ADMIN_ID, TARGET_ID, {
+        reason: "Posting misleading content repeatedly.",
+        currentPassword: "correct-pw",
+        reportId: "report-1",
+      });
+
+      expect(mockPrisma.moderationReport.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "report-1" } }),
+      );
+      expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ recipientId: TARGET_ID }),
+      );
+      expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          recipientId: "reporter-1",
+          eventType: "REPORT_RESOLVED",
+          metadata: expect.objectContaining({ outcome: "ACTION_TAKEN" }),
+        }),
+      );
+    });
+
     it("re-queries the DB for admin systemRole — does not rely on JWT claim", async () => {
       mockPrisma.user.findUnique
         .mockResolvedValueOnce(makeTargetUser()) // ensureTargetUser
@@ -249,6 +290,12 @@ describe("UserEnforcementService", () => {
         durationDays: 7,
       });
       expect(result.action_type).toBe("SUSPEND_USER");
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "ACCOUNT_SUSPENDED" }),
+      );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "LIKE" }),
+      );
     });
 
     it("revokes sessions via updateMany with revokedAt (not deleteMany)", async () => {
@@ -314,6 +361,31 @@ describe("UserEnforcementService", () => {
           }),
         }),
       );
+    });
+
+    it("does not fail when notification dispatch errors after suspension", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin());
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.$transaction.mockResolvedValueOnce([{}, {}]);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a3b",
+        actionType: "SUSPEND_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockRejectedValueOnce(
+        new Error("Notification service unavailable"),
+      );
+
+      await expect(
+        service.suspendUser(ADMIN_ID, TARGET_ID, {
+          reason: "abuse",
+          currentPassword: "pw",
+          durationDays: 3,
+        }),
+      ).resolves.toMatchObject({ action_type: "SUSPEND_USER" });
     });
   });
 
@@ -461,6 +533,12 @@ describe("UserEnforcementService", () => {
 
       expect(result.tracks_restored).toBe(3);
       expect(result.playlists_restored).toBe(1);
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "ACCOUNT_RESTORED" }),
+      );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "LIKE" }),
+      );
     });
 
     it("throws ConflictException with code USER_ALREADY_ACTIVE for an ACTIVE user", async () => {
@@ -492,6 +570,28 @@ describe("UserEnforcementService", () => {
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.track.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("does not fail when notification dispatch errors after restore", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser({ accountStatus: "BANNED" }))
+        .mockResolvedValueOnce(makeAdmin());
+      mockPrisma.user.update.mockResolvedValueOnce({});
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "a6",
+        actionType: "RESTORE_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockRejectedValueOnce(
+        new Error("Notification service unavailable"),
+      );
+
+      await expect(
+        service.restoreUser(ADMIN_ID, TARGET_ID, {
+          reason: "appeal",
+          restoreContent: false,
+        }),
+      ).resolves.toMatchObject({ target_user: { account_status: "ACTIVE" } });
     });
   });
 });

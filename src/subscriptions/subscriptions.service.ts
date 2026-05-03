@@ -1,9 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -88,18 +90,8 @@ export const PLAN_CONFIG: Record<
     adsEnabled: false,
     canDownload: true,
     supportLevel: 'priority',
-    trialDays: 30, // 30-day free trial for GO+
+    trialDays: 0, // No free trial for GO+; only PRO gets a 7-day trial
   },
-};
-
-/**
- * Numeric rank for plan tiers — higher = more features/price.
- * Used to detect upgrades vs downgrades.
- */
-const PLAN_TIER_RANK: Record<string, number> = {
-  FREE: 0,
-  PRO: 1,
-  GO_PLUS: 2,
 };
 
 /** Returns a new Date exactly one calendar month after the given date. */
@@ -114,14 +106,6 @@ function addOneMonth(date: Date): Date {
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
-
-function addMinutes(date: Date, minutes: number): Date {
-  return new Date(date.getTime() + minutes * 60 * 1000);
-}
-
-// Temporary QA override for expiry-flow testing.
-// Revert this constant after testing is completed.
-const PRO_TEST_EXPIRY_MINUTES = 2;
 
 function mockId(prefix: string): string {
   return `${prefix}_mock_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
@@ -258,6 +242,8 @@ export class SubscriptionsService {
         trialStart: null,
         trialEnd: null,
         paymentMethodSummary: null,
+        providerSubscriptionId: null,
+        isRealStripeBilling: this.isRealStripeBilling(),
         latestInvoice: null,
       });
     }
@@ -291,6 +277,8 @@ export class SubscriptionsService {
       paymentMethodSummary: (sub as any).paymentMethodSummary ?? null,
       paymentMethod: paymentMethodData,
       pendingDowngrade,
+      providerSubscriptionId: sub.stripeSubscriptionId,
+      isRealStripeBilling: this.isRealStripeBilling(),
       latestInvoice,
     });
   }
@@ -329,6 +317,7 @@ export class SubscriptionsService {
     if (!plan) throw new BadRequestException(`No active plan for "${planCode}". Contact support.`);
 
     const now = new Date();
+    const isRealStripe = this.isRealStripeBilling();
     const existing = await this.findActiveSubscription(userId);
 
     // Re-activation (canceled but not yet expired, same plan)
@@ -361,21 +350,17 @@ export class SubscriptionsService {
       });
     }
 
-    // ── Downgrade detection ──────────────────────────────────────────────────
-    // If the user is on a higher-tier plan and requests a lower one, schedule
-    // the downgrade at the end of the current billing period instead of applying
-    // it immediately. The user keeps all higher-plan benefits until then.
+    // Schedule paid plan changes at current period end.
     if (existing) {
       const currentTierCode = planTierToCode(existing.plan.tier);
-      if (PLAN_TIER_RANK[currentTierCode] > PLAN_TIER_RANK[planCode]) {
+      if (currentTierCode !== planCode) {
         const effectiveAt = existing.currentPeriodEnd;
 
-        // Persist the scheduled downgrade intent in the subscription's
-        // paymentMethod JSON so getMySubscription can surface it.
         const currentPaymentMethod =
           typeof existing.paymentMethod === 'object' && existing.paymentMethod !== null
             ? (existing.paymentMethod as object)
             : {};
+
         await this.prisma.userSubscription.update({
           where: { id: existing.id },
           data: {
@@ -392,10 +377,11 @@ export class SubscriptionsService {
           },
         });
 
-        await this.logPaymentEvent(existing.id, 'customer.subscription.downgrade_scheduled', {
+        await this.logPaymentEvent(existing.id, 'customer.subscription.plan_change_scheduled', {
           fromPlanCode: currentTierCode,
           toPlanCode: planCode,
           effectiveAt: effectiveAt.toISOString(),
+          realStripe: isRealStripe,
         });
 
         this.sendDowngradeScheduledEmailAsync(userId, existing.plan.name, plan.name, effectiveAt);
@@ -406,28 +392,23 @@ export class SubscriptionsService {
           effectiveAt: effectiveAt.toISOString(),
           currentPlan: currentTierCode,
           newPlan: planCode,
-          message: `Your plan will downgrade from ${existing.plan.name} to ${plan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
+          message: `Your plan will change to ${plan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
         };
       }
     }
 
-    // Trial eligibility
     const trialRedemption = await this.prisma.trialRedemption.findUnique({
       where: { userId_planCode: { userId, planCode: plan.code } },
     });
-    const trialEligible = trialRedemption === null;
+    const trialEligible = trialRedemption === null && planCfg.trialDays > 0;
     const trialDays = trialEligible ? planCfg.trialDays : 0;
 
-    // Get or create provider customer
     const providerCustomerId = await this.billing.getOrCreateCustomer({
       userId,
       email: user.email,
       name: user.profile?.displayName ?? undefined,
     });
 
-    // Create checkout session via billing provider.
-    // stripePriceId is passed in metadata so RealStripeBillingProvider can use
-    // it for the Stripe Checkout Session line_item without requiring DB access.
     const session = await this.billing.createCheckoutSession({
       userId,
       planCode,
@@ -438,24 +419,21 @@ export class SubscriptionsService {
       metadata: {
         userId,
         planId: plan.id,
-        // Used by RealStripeBillingProvider to set the Stripe price ID.
-        // Null-safe: real Stripe provider will throw a clear error if missing.
         stripePriceId: plan.stripePriceId ?? '',
+        priceCents: String(plan.priceCents),
+        trialEligible: String(trialEligible),
+        trialDays: String(trialDays),
       },
     });
 
-    const periodEnd =
-      planCode === 'PRO'
-        ? addMinutes(now, PRO_TEST_EXPIRY_MINUTES)
-        : new Date(session.renewsAt);
-    const trialEnd =
-      planCode === 'PRO'
-        ? periodEnd
-        : session.trialEndsAt
-          ? new Date(session.trialEndsAt)
-          : undefined;
-    const status = trialEligible ? SubscriptionStatus.TRIALING : SubscriptionStatus.ACTIVE;
-    const amountPaid = trialEligible ? 0 : plan.priceCents;
+    const periodEnd = new Date(session.renewsAt);
+    const trialEnd = session.trialEndsAt ? new Date(session.trialEndsAt) : undefined;
+    const status = isRealStripe
+      ? SubscriptionStatus.INCOMPLETE
+      : trialEligible
+        ? SubscriptionStatus.TRIALING
+        : SubscriptionStatus.ACTIVE;
+    const amountPaid = isRealStripe ? 0 : session.amountDueNowCents;
 
     let subscriptionId: string;
     if (existing) {
@@ -467,8 +445,8 @@ export class SubscriptionsService {
           stripeSubscriptionId: session.checkoutSessionId,
           currentPeriodStart: now,
           currentPeriodEnd: periodEnd,
-          trialStart: trialEligible ? now : undefined,
-          trialEnd,
+          trialStart: !isRealStripe && trialEligible ? now : null,
+          trialEnd: !isRealStripe ? trialEnd : null,
           status,
           cancelAtPeriodEnd: false,
           canceledAt: null,
@@ -485,16 +463,16 @@ export class SubscriptionsService {
           stripeSubscriptionId: session.checkoutSessionId,
           currentPeriodStart: now,
           currentPeriodEnd: periodEnd,
-          trialStart: trialEligible ? now : undefined,
-          trialEnd,
+          trialStart: !isRealStripe && trialEligible ? now : undefined,
+          trialEnd: !isRealStripe ? trialEnd : undefined,
           status,
         },
       });
       subscriptionId = created.id;
     }
 
-    // Record trial redemption to prevent abuse
-    if (trialEligible) {
+    // Do not burn a trial redemption before real Stripe confirms checkout.
+    if (!isRealStripe && trialEligible) {
       await this.prisma.trialRedemption.create({
         data: {
           userId,
@@ -504,40 +482,51 @@ export class SubscriptionsService {
       });
     }
 
-    const invoice = await this.prisma.billingInvoice.create({
-      data: {
-        subscriptionId,
-        stripeInvoiceId: mockId('in'),
-        amountDueCents: plan.priceCents,
-        amountPaidCents: amountPaid,
-        currency: 'USD',
-        status: InvoiceStatus.PAID,
-        dueAt: now,
-        paidAt: trialEligible ? null : now,
-      },
-    });
+    if (!isRealStripe) {
+      await this.prisma.billingInvoice.create({
+        data: {
+          subscriptionId,
+          stripeInvoiceId: mockId('in'),
+          amountDueCents: plan.priceCents,
+          amountPaidCents: amountPaid,
+          currency: 'USD',
+          status: amountPaid > 0 ? InvoiceStatus.PAID : InvoiceStatus.OPEN,
+          dueAt: now,
+          paidAt: amountPaid > 0 ? now : null,
+        },
+      });
 
-    await this.logPaymentEvent(
-      subscriptionId,
-      trialEligible ? 'customer.subscription.trial_started' : 'invoice.payment_succeeded',
-      {
+      await this.logPaymentEvent(
+        subscriptionId,
+        trialEligible ? 'customer.subscription.trial_started' : 'invoice.payment_succeeded',
+        {
+          checkoutSessionId: session.checkoutSessionId,
+          amountPaid,
+          trialEligible,
+          trialDays,
+        },
+      );
+
+      if (trialEligible && trialEnd) {
+        this.sendTrialStartedEmailAsync(userId, plan.name, plan.priceCents, trialEnd);
+      } else {
+        this.sendSubscriptionConfirmationEmailAsync(userId, plan.name, plan.priceCents, periodEnd);
+      }
+    } else {
+      await this.logPaymentEvent(subscriptionId, 'checkout.session.created', {
         checkoutSessionId: session.checkoutSessionId,
-        amountPaid,
         trialEligible,
         trialDays,
-      },
-    );
-
-    if (trialEligible)
-      this.sendTrialStartedEmailAsync(userId, plan.name, plan.priceCents, trialEnd!);
-    else this.sendSubscriptionConfirmationEmailAsync(userId, plan.name, plan.priceCents, periodEnd);
+        amountDueNowCents: session.amountDueNowCents,
+      });
+    }
 
     return this.buildCheckoutResponse(
       subscriptionId,
       planCode,
       planCfg,
       trialEligible,
-      amountPaid,
+      session.amountDueNowCents,
       periodEnd,
       session,
       trialEnd,
@@ -598,27 +587,55 @@ export class SubscriptionsService {
         message: 'No active subscription to cancel.',
       });
     }
-    if (sub.cancelAtPeriodEnd) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_ALREADY_CANCELED',
-        message: 'Your subscription is already scheduled to cancel.',
-        details: { expiresAt: sub.currentPeriodEnd.toISOString() },
-      });
+
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+    const pendingDowngrade =
+      (currentPaymentMethod.pendingDowngrade as
+        | {
+            planCode: string;
+            planId: string;
+            planName: string;
+            effectiveAt: string;
+          }
+        | null) ?? null;
+
+    if (sub.cancelAtPeriodEnd && !pendingDowngrade) {
+      return {
+        message:
+          'Subscription is already scheduled to cancel at end of billing period. You keep full access until then.',
+        cancelledAt: sub.canceledAt?.toISOString() ?? null,
+        expiresAt: sub.currentPeriodEnd.toISOString(),
+        cancelAtPeriodEnd: true,
+      };
     }
+
     const now = new Date();
+
     await this.billing.cancelSubscription({
       providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
       cancelAtPeriodEnd: true,
     });
+    const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
+
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
-      data: { cancelAtPeriodEnd: true, canceledAt: now },
+      data: {
+        cancelAtPeriodEnd: true,
+        canceledAt: now,
+        paymentMethod: cleanPaymentMethod as any,
+      },
     });
+
     await this.logPaymentEvent(sub.id, 'customer.subscription.updated', {
       cancelAtPeriodEnd: true,
       currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
     });
+
     this.sendCancellationEmailAsync(userId, sub.plan.name, sub.currentPeriodEnd);
+
     return {
       message:
         'Subscription will cancel at end of billing period. You keep full access until then.',
@@ -628,24 +645,158 @@ export class SubscriptionsService {
     };
   }
 
-  // ── POST /subscriptions/resume ────────────────────────────────────────────
+  // ── POST /subscriptions/cancel-plan-change ───────────────────────────────
 
-  async resumeSubscription(userId: string) {
+  async cancelPendingPlanChange(userId: string) {
     const sub = await this.findActiveSubscription(userId);
-    if (!sub)
+    if (!sub) {
       throw new NotFoundException({
         code: 'SUBSCRIPTION_NOT_FOUND',
         message: 'No active subscription found.',
       });
-    if (!sub.cancelAtPeriodEnd) {
+    }
+
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+
+    const pendingDowngrade =
+      (currentPaymentMethod.pendingDowngrade as {
+        planCode: string;
+        planId: string;
+        planName: string;
+        effectiveAt: string;
+      } | null) ?? null;
+
+    if (!pendingDowngrade) {
       throw new ConflictException({
-        code: 'SUBSCRIPTION_NOT_CANCELED',
-        message: 'Your subscription is not set to cancel.',
+        code: 'NO_PENDING_PLAN_CHANGE',
+        message: 'There is no pending plan change to cancel.',
       });
     }
-    await this.billing.resumeSubscription({
-      providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
+
+    const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
+
+    await this.prisma.userSubscription.update({
+      where: { id: sub.id },
+      data: {
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        paymentMethod: cleanPaymentMethod as any,
+      },
     });
+
+    await this.logPaymentEvent(sub.id, 'customer.subscription.plan_change_canceled', {
+      planCode: pendingDowngrade.planCode,
+      planId: pendingDowngrade.planId,
+      planName: pendingDowngrade.planName,
+      effectiveAt: pendingDowngrade.effectiveAt,
+    });
+
+    return this.getMySubscription(userId);
+  }
+
+  // ── POST /subscriptions/resume ────────────────────────────────────────────
+
+  async resumeSubscription(userId: string) {
+    const sub = await this.findActiveSubscription(userId);
+    if (!sub) {
+      const latestSub = await this.prisma.userSubscription.findFirst({
+        where: { userId },
+        include: { plan: { select: { tier: true, uploadLimit: true, name: true, priceCents: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (
+        latestSub?.status === SubscriptionStatus.INCOMPLETE &&
+        !this.hasFinalizedProviderSubscription(latestSub.stripeSubscriptionId)
+      ) {
+        throw new ConflictException({
+          code: 'CHECKOUT_SESSION_PENDING',
+          message:
+            'This subscription is still linked to a checkout session and cannot be resumed yet. Please retry shortly.',
+        });
+      }
+
+      if (
+        latestSub?.cancelAtPeriodEnd &&
+        latestSub.currentPeriodEnd.getTime() < Date.now()
+      ) {
+        throw new ConflictException({
+          code: 'SUBSCRIPTION_PERIOD_ENDED',
+          message:
+            'This subscription period has already ended. Please start a new checkout to reactivate.',
+        });
+      }
+
+      throw new NotFoundException({
+        code: 'SUBSCRIPTION_NOT_FOUND',
+        message: 'No active subscription found.',
+      });
+    }
+
+    const resumeState = this.getResumeState({
+      cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+      providerSubscriptionId: sub.stripeSubscriptionId,
+      isRealStripeBilling: this.isRealStripeBilling(),
+    });
+
+    if (!sub.cancelAtPeriodEnd) {
+      return this.getMySubscription(userId);
+    }
+
+    if (sub.currentPeriodEnd.getTime() < Date.now()) {
+      throw new ConflictException({
+        code: 'SUBSCRIPTION_PERIOD_ENDED',
+        message:
+          'This subscription period has already ended. Please start a new checkout to reactivate.',
+      });
+    }
+
+    if (!resumeState.canResume) {
+      if (resumeState.resumeBlockedReason === 'INVALID_PROVIDER_SUBSCRIPTION_ID') {
+        throw new BadRequestException({
+          code: resumeState.resumeBlockedReason,
+          message: resumeState.resumeBlockedMessage,
+          details: { expectedPrefix: 'sub_' },
+        });
+      }
+
+      throw new ConflictException({
+        code: resumeState.resumeBlockedReason ?? 'SUBSCRIPTION_RESUME_BLOCKED',
+        message:
+          resumeState.resumeBlockedMessage ?? 'Subscription cannot be resumed right now.',
+      });
+    }
+
+    const providerSubscriptionId = (sub.stripeSubscriptionId ?? '').trim();
+    try {
+      await this.billing.resumeSubscription({ providerSubscriptionId });
+    } catch (err: unknown) {
+      if (err instanceof HttpException) throw err;
+
+      const rawMessage = err instanceof Error ? err.message : String(err);
+      const normalized = rawMessage.toLowerCase();
+
+      if (
+        normalized.includes('no such subscription') ||
+        normalized.includes('resource_missing') ||
+        normalized.includes('not found')
+      ) {
+        throw new ConflictException({
+          code: 'PROVIDER_SUBSCRIPTION_NOT_FOUND',
+          message: 'Billing provider subscription was not found; it cannot be resumed.',
+        });
+      }
+
+      throw new BadGatewayException({
+        code: 'BILLING_PROVIDER_RESUME_FAILED',
+        message:
+          'Failed to resume subscription with billing provider. Please try again shortly.',
+      });
+    }
+
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
       data: { cancelAtPeriodEnd: false, canceledAt: null },
@@ -654,6 +805,7 @@ export class SubscriptionsService {
       cancelAtPeriodEnd: false,
       resumed: true,
     });
+    this.sendSubscriptionResumedEmailAsync(userId, sub.plan.name, sub.currentPeriodEnd);
     return this.getMySubscription(userId);
   }
 
@@ -684,25 +836,48 @@ export class SubscriptionsService {
       where: { tier: newTier, isActive: true },
     });
     if (!newPlan) throw new BadRequestException(`Plan "${dto.planCode}" not found.`);
-    const now = new Date();
-    await this.billing.changePlan({
-      providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
-      newPlanCode: dto.planCode,
-      newProviderPriceId: newPlan.stripePriceId ?? undefined,
-    });
+
+    const currentPlanCode = planTierToCode(currentTier);
+    const newPlanCode = planTierToCode(newTier);
+    const effectiveAt = sub.currentPeriodEnd;
+
+    // Schedule the plan change at period end (never apply immediately)
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
     await this.prisma.userSubscription.update({
       where: { id: sub.id },
-      data: { planId: newPlan.id },
+      data: {
+        cancelAtPeriodEnd: true,
+        paymentMethod: {
+          ...currentPaymentMethod,
+          pendingDowngrade: {
+            planCode: newPlanCode,
+            planId: newPlan.id,
+            planName: newPlan.name,
+            effectiveAt: effectiveAt.toISOString(),
+          },
+        },
+      },
     });
-    await this.logPaymentEvent(sub.id, 'customer.subscription.updated', {
-      oldPlanCode: planTierToCode(currentTier),
-      newPlanCode: dto.planCode,
-      effectiveDate: now.toISOString(),
+
+    await this.logPaymentEvent(sub.id, 'customer.subscription.downgrade_scheduled', {
+      oldPlanCode: currentPlanCode,
+      newPlanCode,
+      effectiveAt: effectiveAt.toISOString(),
     });
-    const newPlanCode = planTierToCode(newTier);
-    await this.applyPlanLimitToTracks(userId, PLAN_CONFIG[newPlanCode].uploadLimit);
-    this.sendPlanChangedEmailAsync(userId, planTierToCode(currentTier), newPlanCode, now);
-    return this.getMySubscription(userId);
+
+    this.sendDowngradeScheduledEmailAsync(userId, sub.plan.name, newPlan.name, effectiveAt);
+
+    return {
+      subscriptionId: sub.id,
+      scheduled: true,
+      effectiveAt: effectiveAt.toISOString(),
+      currentPlan: currentPlanCode,
+      newPlan: newPlanCode,
+      message: `Your plan will change to ${newPlan.name} on ${effectiveAt.toISOString().slice(0, 10)}. You keep all current benefits until then.`,
+    };
   }
 
   // ── GET /subscriptions/invoices ───────────────────────────────────────────
@@ -761,7 +936,6 @@ export class SubscriptionsService {
 
     this.logger.log(`[WEBHOOK] type=${event.type} id=${event.id}`);
 
-    // Idempotency - skip duplicate events
     const existingEvent = await this.prisma.paymentEvent.findUnique({
       where: { stripeEventId: event.id },
     });
@@ -771,105 +945,215 @@ export class SubscriptionsService {
     }
 
     const obj = event.data?.object ?? {};
-    const stripeSubId =
-      (obj['id'] as string | undefined) ?? (obj['subscription'] as string | undefined);
+    const now = new Date();
+
+    const lookupIds: string[] = [];
+    if (event.type === 'checkout.session.completed') {
+      const sessionId = obj['id'] as string | undefined;
+      const subscriptionId = obj['subscription'] as string | undefined;
+      if (sessionId) lookupIds.push(sessionId);
+      if (subscriptionId) lookupIds.push(subscriptionId);
+    } else if (event.type.startsWith('checkout.session.')) {
+      const sessionId = obj['id'] as string | undefined;
+      const subscriptionId = obj['subscription'] as string | undefined;
+      if (sessionId) lookupIds.push(sessionId);
+      if (subscriptionId) lookupIds.push(subscriptionId);
+    } else if (event.type.startsWith('invoice.')) {
+      const subscriptionId = obj['subscription'] as string | undefined;
+      if (subscriptionId) lookupIds.push(subscriptionId);
+    } else if (event.type.startsWith('customer.subscription.')) {
+      const subscriptionId = obj['id'] as string | undefined;
+      if (subscriptionId) lookupIds.push(subscriptionId);
+    }
+
     let sub: {
       id: string;
       userId: string;
       stripeCustomerId: string | null;
       stripeSubscriptionId: string | null;
-      plan: { name: string; tier: SubscriptionTier };
+      currentPeriodEnd: Date;
+      plan: {
+        id?: string;
+        code?: string;
+        name: string;
+        tier: SubscriptionTier;
+        priceCents?: number;
+      };
     } | null = null;
 
-    if (stripeSubId) {
+    for (const lookupId of lookupIds) {
       sub = await this.prisma.userSubscription.findFirst({
-        where: { stripeSubscriptionId: stripeSubId },
+        where: { stripeSubscriptionId: lookupId },
         select: {
           id: true,
           userId: true,
           stripeCustomerId: true,
           stripeSubscriptionId: true,
-          plan: { select: { name: true, tier: true } },
+          currentPeriodEnd: true,
+          plan: { select: { id: true, code: true, name: true, tier: true, priceCents: true } },
         },
       });
+      if (sub) break;
     }
 
-    if (sub) {
-      await this.prisma.paymentEvent.create({
-        data: {
-          subscriptionId: sub.id,
-          stripeEventId: event.id,
-          eventType: event.type,
-          payload: event.data as unknown as Prisma.InputJsonValue,
-        },
-      });
+    // Payment method events do not carry a subscription id. Match by customer.
+    if (!sub && event.type === 'payment_method.updated') {
+      const customerId = obj['customer'] as string | undefined;
+      if (customerId) {
+        sub = await this.prisma.userSubscription.findFirst({
+          where: { stripeCustomerId: customerId },
+          select: {
+            id: true,
+            userId: true,
+            stripeCustomerId: true,
+            stripeSubscriptionId: true,
+            currentPeriodEnd: true,
+            plan: { select: { id: true, code: true, name: true, tier: true, priceCents: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
     }
 
-    const now = new Date();
+    if (!sub) {
+      this.logger.warn(
+        `[WEBHOOK] No local subscription matched event ${event.type} (${event.id}).`,
+      );
+      return { received: true };
+    }
+
+    await this.prisma.paymentEvent.create({
+      data: {
+        subscriptionId: sub.id,
+        stripeEventId: event.id,
+        eventType: event.type,
+        payload: event.data as unknown as Prisma.InputJsonValue,
+      },
+    });
 
     switch (event.type) {
-      case 'checkout.session.completed':
-      case 'invoice.paid':
-      case 'invoice.payment_succeeded': {
-        if (sub) {
-          // For checkout.session.completed: Stripe creates the real subscription
-          // (sub_xxx) after checkout completes. The DB record was created with
-          // the checkout session ID (cs_xxx) as the stripeSubscriptionId.
-          // Update it now to the real subscription ID so future webhook events
-          // (invoice.paid, subscription.deleted, etc.) can be matched correctly.
-          const realSubId = obj['subscription'] as string | undefined;
-          const updateData: Record<string, unknown> = {
-            status: SubscriptionStatus.ACTIVE,
-            cancelAtPeriodEnd: false,
-            // Clear any stale payment-failure markers set by invoice.payment_failed.
-            // The cron already guards by status=PAST_DUE, but keeping these null
-            // avoids confusing the data if the subscription is ever inspected directly.
-            paymentFailureAt: null,
-            paymentFailureGraceEndsAt: null,
-          };
-          if (
-            event.type === 'checkout.session.completed' &&
-            realSubId &&
-            realSubId !== sub.stripeSubscriptionId
-          ) {
-            updateData.stripeSubscriptionId = realSubId;
-            this.logger.log(
-              `[WEBHOOK] Updating stripeSubscriptionId: ${sub.stripeSubscriptionId} → ${realSubId}`,
-            );
-          }
+      case 'checkout.session.completed': {
+        const realSubId = obj['subscription'] as string | undefined;
+        const realCustomerId = obj['customer'] as string | undefined;
+        const metadata = (obj['metadata'] as Record<string, unknown> | undefined) ?? {};
+        const trialEligible = metadata['trialEligible'] === 'true';
+        const trialDays = Number(metadata['trialDays'] ?? 0);
+        const periodEnd =
+          trialEligible && trialDays > 0 ? addDays(now, trialDays) : addOneMonth(now);
+        const updateData: Record<string, unknown> = {
+          status: trialEligible ? SubscriptionStatus.TRIALING : SubscriptionStatus.ACTIVE,
+          cancelAtPeriodEnd: false,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          trialStart: trialEligible ? now : null,
+          trialEnd: trialEligible ? periodEnd : null,
+          paymentFailureAt: null,
+          paymentFailureGraceEndsAt: null,
+        };
+
+        if (realSubId && realSubId !== sub.stripeSubscriptionId) {
+          updateData.stripeSubscriptionId = realSubId;
+        }
+        if (realCustomerId && realCustomerId !== sub.stripeCustomerId) {
+          updateData.stripeCustomerId = realCustomerId;
+        }
+
+        await this.prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: updateData,
+        });
+
+        if (trialEligible) {
+          await this.prisma.trialRedemption.upsert({
+            where: {
+              userId_planCode: {
+                userId: sub.userId,
+                planCode: sub.plan.code ?? planTierToCode(sub.plan.tier),
+              },
+            },
+            update: {
+              providerSubscriptionId: realSubId ?? sub.stripeSubscriptionId,
+            },
+            create: {
+              userId: sub.userId,
+              planCode: sub.plan.code ?? planTierToCode(sub.plan.tier),
+              providerSubscriptionId: realSubId ?? sub.stripeSubscriptionId,
+            },
+          });
+          this.sendTrialStartedEmailAsync(
+            sub.userId,
+            sub.plan.name,
+            sub.plan.priceCents ?? 0,
+            periodEnd,
+          );
+        } else {
+          this.sendSubscriptionConfirmationEmailAsync(
+            sub.userId,
+            sub.plan.name,
+            sub.plan.priceCents ?? 0,
+            periodEnd,
+          );
+        }
+        break;
+      }
+
+      case 'checkout.session.expired': {
+        if (sub.stripeSubscriptionId?.startsWith('cs_')) {
           await this.prisma.userSubscription.update({
             where: { id: sub.id },
-            data: updateData,
+            data: {
+              status: SubscriptionStatus.INCOMPLETE_EXPIRED,
+              endedAt: now,
+            },
           });
-          const invoiceId = obj['invoice'] as string | undefined;
-          const amountPaid = (obj['amount_paid'] as number | undefined) ?? 0;
-          const currency = ((obj['currency'] as string | undefined) ?? 'usd')
-            .toUpperCase()
-            .slice(0, 3);
-          if (invoiceId) {
-            const inv = await this.prisma.billingInvoice.findUnique({
-              where: { stripeInvoiceId: invoiceId },
+        }
+        break;
+      }
+
+      case 'invoice.paid':
+      case 'invoice.payment_succeeded': {
+        await this.prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: {
+            status: SubscriptionStatus.ACTIVE,
+            cancelAtPeriodEnd: false,
+            paymentFailureAt: null,
+            paymentFailureGraceEndsAt: null,
+          },
+        });
+
+        const invoiceId = obj['id'] as string | undefined;
+        const amountPaid = (obj['amount_paid'] as number | undefined) ?? 0;
+        const amountDue = (obj['amount_due'] as number | undefined) ?? amountPaid;
+        const currency = ((obj['currency'] as string | undefined) ?? 'usd')
+          .toUpperCase()
+          .slice(0, 3);
+
+        if (invoiceId) {
+          const existingInvoice = await this.prisma.billingInvoice.findUnique({
+            where: { stripeInvoiceId: invoiceId },
+          });
+
+          if (!existingInvoice) {
+            const newInv = await this.prisma.billingInvoice.create({
+              data: {
+                subscriptionId: sub.id,
+                stripeInvoiceId: invoiceId,
+                amountDueCents: amountDue,
+                amountPaidCents: amountPaid,
+                currency,
+                status: InvoiceStatus.PAID,
+                dueAt: now,
+                paidAt: now,
+              },
             });
-            if (!inv) {
-              const newInv = await this.prisma.billingInvoice.create({
-                data: {
-                  subscriptionId: sub.id,
-                  stripeInvoiceId: invoiceId,
-                  amountDueCents: amountPaid,
-                  amountPaidCents: amountPaid,
-                  currency,
-                  status: InvoiceStatus.PAID,
-                  paidAt: now,
-                },
-              });
-              this.sendInvoiceReceiptEmailAsync(
-                sub.userId,
-                sub.plan.name,
-                amountPaid,
-                now,
-                newInv.id,
-              );
-            }
+            this.sendInvoiceReceiptEmailAsync(
+              sub.userId,
+              sub.plan.name,
+              amountPaid,
+              now,
+              newInv.id,
+            );
           }
         }
         break;
@@ -877,164 +1161,155 @@ export class SubscriptionsService {
 
       case 'invoice.payment_failed':
       case 'invoice.payment_action_required': {
-        if (sub) {
-          const graceEndsAt = addDays(now, GRACE_PERIOD_DAYS);
+        const graceEndsAt = addDays(now, GRACE_PERIOD_DAYS);
+        await this.prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: {
+            status: SubscriptionStatus.PAST_DUE,
+            paymentFailureAt: now,
+            paymentFailureGraceEndsAt: graceEndsAt,
+          },
+        });
+
+        const user = await this.prisma.user.findUnique({
+          where: { id: sub.userId },
+          select: { email: true, profile: { select: { displayName: true } } },
+        });
+        if (user) {
+          this.mailService
+            .sendPaymentGracePeriodEmail({
+              to: user.email,
+              displayName: user.profile?.displayName ?? undefined,
+              planName: sub.plan.name,
+              gracePeriodDays: GRACE_PERIOD_DAYS,
+            })
+            .catch((err) => this.logger.error(`[PAYMENT FAILED EMAIL] ${err}`));
+        }
+        break;
+      }
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const newStatus = obj['status'] as string | undefined;
+        const cancelAtEnd = obj['cancel_at_period_end'] as boolean | undefined;
+        const currentPeriodStart = obj['current_period_start'] as number | undefined;
+        const currentPeriodEnd = obj['current_period_end'] as number | undefined;
+        const canceledAt = obj['canceled_at'] as number | null | undefined;
+        const updateData: Record<string, unknown> = {};
+        const stripePriceId = (
+          (obj['items'] as { data?: Array<{ price?: { id?: string } }> } | undefined)
+            ?.data?.[0]?.price?.id
+        );
+
+        if (newStatus) updateData.status = this.mapStripeStatus(newStatus);
+        if (cancelAtEnd !== undefined) updateData.cancelAtPeriodEnd = cancelAtEnd;
+        if (currentPeriodStart) updateData.currentPeriodStart = new Date(currentPeriodStart * 1000);
+        if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd * 1000);
+        if (canceledAt !== undefined) {
+          updateData.canceledAt = canceledAt ? new Date(canceledAt * 1000) : null;
+        }
+        if (stripePriceId) {
+          const webhookPlan = await this.prisma.subscriptionPlan.findFirst({
+            where: { stripePriceId, isActive: true },
+            select: { id: true, tier: true },
+          });
+          if (webhookPlan) {
+            updateData.planId = webhookPlan.id;
+            if (webhookPlan.tier === SubscriptionTier.GO_PLUS) {
+              updateData.trialStart = null;
+              updateData.trialEnd = null;
+            }
+          }
+        }
+
+        if (Object.keys(updateData).length) {
           await this.prisma.userSubscription.update({
             where: { id: sub.id },
-            data: {
-              status: SubscriptionStatus.PAST_DUE,
-              paymentFailureAt: now,
-              paymentFailureGraceEndsAt: graceEndsAt,
-            } as any,
+            data: updateData,
           });
+        }
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        await this.prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: {
+            status: SubscriptionStatus.CANCELED,
+            canceledAt: now,
+            endedAt: now,
+          },
+        });
+        await this.revokeOfflineDownloads(sub.userId);
+        await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
+        break;
+      }
+
+      case 'customer.subscription.trial_will_end': {
+        const dbSub = await this.prisma.userSubscription.findUnique({
+          where: { id: sub.id },
+          select: {
+            currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
+            plan: { select: { priceCents: true, name: true } },
+          },
+        });
+
+        if (dbSub && !dbSub.cancelAtPeriodEnd) {
           const user = await this.prisma.user.findUnique({
             where: { id: sub.userId },
             select: { email: true, profile: { select: { displayName: true } } },
           });
           if (user) {
             this.mailService
-              .sendPaymentGracePeriodEmail({
+              .sendTrialEndingEmail({
                 to: user.email,
                 displayName: user.profile?.displayName ?? undefined,
-                planName: sub.plan.name,
-                gracePeriodDays: GRACE_PERIOD_DAYS,
+                planName: dbSub.plan.name,
+                priceCents: dbSub.plan.priceCents,
+                trialEndsAt: dbSub.currentPeriodEnd,
               })
-              .catch((err) => this.logger.error(`[PAYMENT FAILED EMAIL] ${err}`));
+              .catch((err) => this.logger.error(`[TRIAL ENDING EMAIL] ${err}`));
           }
         }
         break;
       }
 
-      case 'customer.subscription.updated': {
-        if (sub) {
-          const newStatus = obj['status'] as string | undefined;
-          const cancelAtEnd = obj['cancel_at_period_end'] as boolean | undefined;
-          const updateData: Record<string, unknown> = {};
-          if (newStatus) updateData['status'] = this.mapStripeStatus(newStatus);
-          if (cancelAtEnd !== undefined) updateData['cancelAtPeriodEnd'] = cancelAtEnd;
-          if (Object.keys(updateData).length) {
-            await this.prisma.userSubscription.update({
-              where: { id: sub.id },
-              data: updateData,
-            });
-          }
-        }
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        if (sub) {
-          await this.prisma.userSubscription.update({
-            where: { id: sub.id },
-            data: {
-              status: SubscriptionStatus.CANCELED,
-              canceledAt: now,
-              endedAt: now,
-            },
-          });
-          await this.revokeOfflineDownloads(sub.userId);
-          await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
-        }
-        break;
-      }
-
-      case 'customer.subscription.trial_will_end': {
-        if (sub) {
-          const dbSub = await this.prisma.userSubscription.findUnique({
-            where: { id: sub.id },
-            select: {
-              currentPeriodEnd: true,
-              cancelAtPeriodEnd: true,
-              plan: { select: { priceCents: true, name: true } },
-            },
-          });
-          if (dbSub && !dbSub.cancelAtPeriodEnd) {
-            const user = await this.prisma.user.findUnique({
-              where: { id: sub.userId },
-              select: {
-                email: true,
-                profile: { select: { displayName: true } },
-              },
-            });
-            if (user) {
-              this.mailService
-                .sendTrialEndingEmail({
-                  to: user.email,
-                  displayName: user.profile?.displayName ?? undefined,
-                  planName: dbSub.plan.name,
-                  priceCents: dbSub.plan.priceCents,
-                  trialEndsAt: dbSub.currentPeriodEnd,
-                })
-                .catch((err) => this.logger.error(`[TRIAL ENDING EMAIL] ${err}`));
-            }
-          }
-        }
-        break;
-      }
-
-      // ── payment_method.updated ──────────────────────────────────────────────
-      // Fired (in mock: manually; in real Stripe: after the customer adds/replaces
-      // a card in the billing portal).  The event object carries the card-safe
-      // summary fields that we persist on the subscription row.
       case 'payment_method.updated': {
-        // payment_method events carry a 'customer' field, not 'subscription'.
-        const customerId = obj['customer'] as string | undefined;
-        if (customerId) {
-          const subByCustomer = await this.prisma.userSubscription.findFirst({
-            where: { stripeCustomerId: customerId },
-            select: { id: true, userId: true },
-          });
-          if (subByCustomer) {
-            const card = (obj['card'] as Record<string, unknown> | undefined) ?? {};
-            const brand =
-              (card['brand'] as string | undefined) ??
-              (obj['brand'] as string | undefined) ??
-              'unknown';
-            const last4 =
-              (card['last4'] as string | undefined) ??
-              (obj['last4'] as string | undefined) ??
-              '0000';
-            const expiryMonth =
-              (card['exp_month'] as number | undefined) ??
-              (obj['exp_month'] as number | undefined) ??
-              1;
-            const expiryYear =
-              (card['exp_year'] as number | undefined) ??
-              (obj['exp_year'] as number | undefined) ??
-              2030;
-            const newPaymentMethod: PaymentMethodSummary = {
-              brand,
-              last4,
-              expiryMonth,
-              expiryYear,
-              isDefault: true,
-            };
-            const summaryStr = `${brand.charAt(0).toUpperCase() + brand.slice(1)} ending in ${last4}`;
-            await this.prisma.userSubscription.update({
-              where: { id: subByCustomer.id },
-              data: {
-                paymentMethod: newPaymentMethod as any,
-                paymentMethodSummary: summaryStr,
-              },
-            });
-            // Idempotent event log (idempotency checked at top of handler)
-            await this.prisma.paymentEvent.create({
-              data: {
-                subscriptionId: subByCustomer.id,
-                stripeEventId: event.id,
-                eventType: 'payment_method.updated',
-                payload: { brand, last4, expiryMonth, expiryYear },
-              },
-            });
-            this.sendPaymentMethodUpdatedEmailAsync(
-              subByCustomer.userId,
-              brand,
-              last4,
-              expiryMonth,
-              expiryYear,
-            );
-          }
-        }
+        const card = (obj['card'] as Record<string, unknown> | undefined) ?? {};
+        const brand =
+          (card['brand'] as string | undefined) ??
+          (obj['brand'] as string | undefined) ??
+          'unknown';
+        const last4 =
+          (card['last4'] as string | undefined) ?? (obj['last4'] as string | undefined) ?? '0000';
+        const expiryMonth =
+          (card['exp_month'] as number | undefined) ??
+          (obj['exp_month'] as number | undefined) ??
+          1;
+        const expiryYear =
+          (card['exp_year'] as number | undefined) ??
+          (obj['exp_year'] as number | undefined) ??
+          2030;
+
+        const newPaymentMethod: PaymentMethodSummary = {
+          brand,
+          last4,
+          expiryMonth,
+          expiryYear,
+          isDefault: true,
+        };
+        const summaryStr = `${brand.charAt(0).toUpperCase() + brand.slice(1)} ending in ${last4}`;
+
+        await this.prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: {
+            paymentMethod: newPaymentMethod as any,
+            paymentMethodSummary: summaryStr,
+          },
+        });
+
+        this.sendPaymentMethodUpdatedEmailAsync(sub.userId, brand, last4, expiryMonth, expiryYear);
         break;
       }
 
@@ -1348,9 +1623,7 @@ export class SubscriptionsService {
     });
   }
 
-  private async finalizeExpiredCancelAtPeriodEndSubscriptions(
-    userId: string,
-  ): Promise<void> {
+  private async finalizeExpiredCancelAtPeriodEndSubscriptions(userId: string): Promise<void> {
     const now = new Date();
     const expiredCancelingSubs = await this.prisma.userSubscription.findMany({
       where: {
@@ -1358,41 +1631,129 @@ export class SubscriptionsService {
         cancelAtPeriodEnd: true,
         currentPeriodEnd: { lt: now },
         status: {
-          in: [
-            SubscriptionStatus.ACTIVE,
-            SubscriptionStatus.TRIALING,
-            SubscriptionStatus.PAST_DUE,
-          ],
+          in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE],
         },
       },
       select: {
         id: true,
         userId: true,
-        plan: { select: { name: true } },
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        paymentMethod: true,
+        plan: { select: { name: true, tier: true } },
       },
     });
 
     for (const sub of expiredCancelingSubs) {
-      await this.prisma.userSubscription.update({
-        where: { id: sub.id },
-        data: {
-          status: SubscriptionStatus.CANCELED,
-          cancelAtPeriodEnd: false,
-          endedAt: now,
-        },
-      });
+      const rawPaymentMethod = (sub as any).paymentMethod as Record<string, unknown> | null;
+      const pendingChange =
+        (rawPaymentMethod?.pendingDowngrade as {
+          planCode: string;
+          planId: string;
+          planName: string;
+          effectiveAt: string;
+        } | null) ?? null;
 
-      await this.revokeOfflineDownloads(sub.userId);
-      await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
+      if (pendingChange) {
+        const newPlan = await this.prisma.subscriptionPlan.findUnique({
+          where: { id: pendingChange.planId },
+          select: { id: true, name: true, tier: true, stripePriceId: true },
+        });
 
-      await this.logPaymentEvent(sub.id, 'subscription.cancel_period_end_finalized', {
-        finalizedAt: now.toISOString(),
-      });
+        if (!newPlan) {
+          this.logger.error(
+            `[SUBSCRIPTION FINALIZE] Pending plan ${pendingChange.planId} not found for subscription ${sub.id}.`,
+          );
+          continue;
+        }
 
-      this.logger.warn(
-        `[SUBSCRIPTION FINALIZE] Auto-finalized expired cancel-at-period-end subscription ${sub.id}`,
-      );
+        if (this.isRealStripeBilling() && sub.stripeSubscriptionId?.startsWith('sub_')) {
+          await this.billing.changePlan({
+            providerSubscriptionId: sub.stripeSubscriptionId,
+            newPlanCode: pendingChange.planCode,
+            newProviderPriceId: newPlan.stripePriceId ?? undefined,
+          });
+
+          await this.prisma.userSubscription.update({
+            where: { id: sub.id },
+            data: {
+              planId: newPlan.id,
+              status: SubscriptionStatus.ACTIVE,
+              cancelAtPeriodEnd: false,
+              canceledAt: null,
+              currentPeriodStart: now,
+              currentPeriodEnd: addOneMonth(now),
+              paymentMethod: {},
+            },
+          });
+
+          await this.logPaymentEvent(sub.id, 'subscription.plan_change_activated', {
+            fromPlan: sub.plan.name,
+            toPlan: pendingChange.planName,
+            activatedAt: now.toISOString(),
+            realStripe: true,
+          });
+        } else {
+          await this.prisma.userSubscription.update({
+            where: { id: sub.id },
+            data: {
+              planId: newPlan.id,
+              status: SubscriptionStatus.ACTIVE,
+              cancelAtPeriodEnd: false,
+              canceledAt: null,
+              currentPeriodStart: now,
+              currentPeriodEnd: addOneMonth(now),
+              paymentMethod: {},
+            },
+          });
+
+          await this.logPaymentEvent(sub.id, 'subscription.plan_change_activated', {
+            fromPlan: sub.plan.name,
+            toPlan: pendingChange.planName,
+            activatedAt: now.toISOString(),
+            realStripe: false,
+          });
+        }
+
+        this.logger.log(
+          `[SUBSCRIPTION FINALIZE] Activated pending plan change from ${sub.plan.name} to ${pendingChange.planName} for user ${sub.userId}`,
+        );
+      } else {
+        await this.prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: {
+            status: SubscriptionStatus.CANCELED,
+            cancelAtPeriodEnd: false,
+            endedAt: now,
+          },
+        });
+
+        await this.logPaymentEvent(sub.id, 'subscription.cancel_period_end_finalized', {
+          finalizedAt: now.toISOString(),
+        });
+
+        await this.revokeOfflineDownloads(sub.userId);
+        await this.applyPlanLimitToTracks(sub.userId, FREE_UPLOAD_LIMIT);
+
+        this.logger.warn(
+          `[SUBSCRIPTION FINALIZE] Auto-finalized expired cancel-at-period-end subscription ${sub.id}`,
+        );
+      }
     }
+  }
+
+  private isRealStripeBilling(): boolean {
+    const provider =
+      this.config.get<string>('billing.provider') ??
+      this.config.get<string>('BILLING_PROVIDER') ??
+      process.env.BILLING_PROVIDER ??
+      'mock_stripe';
+    return provider === 'stripe';
+  }
+
+  private hasFinalizedProviderSubscription(providerSubscriptionId?: string | null): boolean {
+    const id = (providerSubscriptionId ?? '').trim();
+    return Boolean(id && !id.startsWith('cs_'));
   }
 
   private buildSubscriptionResponse(opts: {
@@ -1414,6 +1775,8 @@ export class SubscriptionsService {
       planName: string;
       effectiveAt: string;
     } | null;
+    providerSubscriptionId?: string | null;
+    isRealStripeBilling?: boolean;
     latestInvoice: {
       id: string;
       amountPaidCents: number;
@@ -1424,10 +1787,21 @@ export class SubscriptionsService {
   }) {
     const planCode = planTierToCode(opts.tier);
     const cfg = PLAN_CONFIG[planCode];
+    const isActualTrial =
+      planCode === 'PRO' &&
+      opts.subscriptionStatus === SubscriptionStatus.TRIALING &&
+      opts.trialEnd !== null &&
+      opts.trialEnd.getTime() > Date.now();
     const isUnlimited = !isFinite(opts.uploadLimit);
     const remainingUploads = isUnlimited
       ? null
       : Math.max(0, opts.uploadLimit - opts.uploadedTracks);
+    const resumeState = this.getResumeState({
+      cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
+      providerSubscriptionId: opts.providerSubscriptionId,
+      isRealStripeBilling: opts.isRealStripeBilling ?? this.isRealStripeBilling(),
+    });
+
     return {
       userId: opts.userId,
       planCode,
@@ -1452,8 +1826,11 @@ export class SubscriptionsService {
           ? opts.currentPeriodEnd.toISOString()
           : null,
       cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
-      trialStart: opts.trialStart?.toISOString() ?? null,
-      trialEnd: opts.trialEnd?.toISOString() ?? null,
+      canResume: resumeState.canResume,
+      resumeBlockedReason: resumeState.resumeBlockedReason ?? null,
+      resumeBlockedMessage: resumeState.resumeBlockedMessage ?? null,
+      trialStart: isActualTrial ? (opts.trialStart?.toISOString() ?? null) : null,
+      trialEnd: isActualTrial ? opts.trialEnd!.toISOString() : null,
       paymentMethodSummary: opts.paymentMethod
         ? `${opts.paymentMethod.brand.charAt(0).toUpperCase() + opts.paymentMethod.brand.slice(1)} ending in ${opts.paymentMethod.last4}`
         : opts.paymentMethodSummary,
@@ -1469,6 +1846,43 @@ export class SubscriptionsService {
           }
         : null,
     };
+  }
+
+  private getResumeState(params: {
+    cancelAtPeriodEnd: boolean;
+    providerSubscriptionId?: string | null;
+    isRealStripeBilling: boolean;
+  }): {
+    canResume: boolean;
+    resumeBlockedReason?:
+      | 'CHECKOUT_SESSION_PENDING'
+      | 'SUBSCRIPTION_PROVIDER_ID_MISSING'
+      | 'INVALID_PROVIDER_SUBSCRIPTION_ID';
+    resumeBlockedMessage?: string;
+  } {
+    if (!params.cancelAtPeriodEnd) {
+      return { canResume: false };
+    }
+
+    const providerSubscriptionId = (params.providerSubscriptionId ?? '').trim();
+    if (!providerSubscriptionId) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'SUBSCRIPTION_PROVIDER_ID_MISSING',
+        resumeBlockedMessage:
+          'This subscription cannot be resumed because the billing provider subscription ID is missing.',
+      };
+    }
+
+    if (params.isRealStripeBilling && !providerSubscriptionId.startsWith('sub_')) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'INVALID_PROVIDER_SUBSCRIPTION_ID',
+        resumeBlockedMessage: 'Invalid Stripe subscription ID format for resume operation.',
+      };
+    }
+
+    return { canResume: true };
   }
 
   private buildCheckoutResponse(
@@ -1581,6 +1995,31 @@ export class SubscriptionsService {
               expiresAt,
             })
             .catch((err: unknown) => this.logger.error(`[CANCELLATION EMAIL] ${err}`));
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private sendSubscriptionResumedEmailAsync(
+    userId: string,
+    planName: string,
+    renewalDate: Date,
+  ): void {
+    this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, profile: { select: { displayName: true } } },
+      })
+      .then((user) => {
+        if (user && (this.mailService as any).sendSubscriptionResumedEmail) {
+          (this.mailService as any)
+            .sendSubscriptionResumedEmail({
+              to: user.email,
+              displayName: user.profile?.displayName ?? undefined,
+              planName,
+              renewalDate,
+            })
+            .catch((err: unknown) => this.logger.error(`[SUBSCRIPTION RESUMED EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);

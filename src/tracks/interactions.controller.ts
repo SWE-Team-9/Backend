@@ -368,6 +368,7 @@ export class InteractionsController {
         id: 'uuid',
         content: 'Great drop!',
         timestampAt: 42,
+        createdAt: '2026-05-01T00:00:00.000Z',
         user: {
           userId: 'uuid',
           displayName: 'Demo User',
@@ -397,6 +398,7 @@ export class InteractionsController {
           id: 'uuid',
           content: 'Great drop!',
           timestampAt: 42,
+          createdAt: '2026-05-01T00:00:00.000Z',
           user: {
             userId: 'uuid',
             displayName: 'Demo User',

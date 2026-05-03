@@ -11,8 +11,8 @@ export class GetPlaylistEditResponseDto {
   @ApiPropertyOptional({ example: 'My favorite chill tracks', nullable: true })
   description!: string | null;
 
-  @ApiProperty({ example: 'PUBLIC' })
-  visibility!: string;
+  @ApiProperty({ enum: ['PUBLIC', 'SECRET'], example: 'PUBLIC' })
+  visibility!: 'PUBLIC' | 'SECRET';
 
   @ApiProperty({ example: 'late-night-drive' })
   slug!: string;
@@ -29,8 +29,8 @@ export class GetPlaylistEditResponseDto {
   @ApiPropertyOptional({ example: '2026-03-01', nullable: true })
   releaseDate!: string | null;
 
-  @ApiPropertyOptional({ example: 12, nullable: true })
-  genreId!: number | null;
+  @ApiPropertyOptional({ example: 'electronic', nullable: true })
+  genre!: string | null;
 
   @ApiProperty({ type: [String], example: ['chill', 'night-drive'] })
   tags!: string[];

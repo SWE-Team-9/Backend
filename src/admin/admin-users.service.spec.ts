@@ -22,10 +22,11 @@ const mockPrisma = {
   },
   report: {
     count: jest.fn(),
+    findMany: jest.fn(),
   },
-  track: { count: jest.fn() },
-  playlist: { count: jest.fn() },
-  comment: { count: jest.fn() },
+  track: { count: jest.fn(), findMany: jest.fn() },
+  playlist: { count: jest.fn(), findMany: jest.fn() },
+  comment: { count: jest.fn(), findMany: jest.fn() },
   like: { count: jest.fn() },
   repost: { count: jest.fn() },
   playEvent: { count: jest.fn() },
@@ -47,6 +48,11 @@ describe("AdminUsersService", () => {
     jest.clearAllMocks();
     // Clear TTL cache between tests
     (service as unknown as { cache: Map<string, unknown> }).cache.clear();
+
+    mockPrisma.track.findMany.mockResolvedValue([]);
+    mockPrisma.playlist.findMany.mockResolvedValue([]);
+    mockPrisma.comment.findMany.mockResolvedValue([]);
+    mockPrisma.report.findMany.mockResolvedValue([]);
   });
 
   // ─── getUserDetail ────────────────────────────────────────────────────────────
@@ -100,6 +106,45 @@ describe("AdminUsersService", () => {
       expect(result.reports_against.total).toBe(3);
       expect(result.subscription).toBeNull();
     });
+
+    it("counts only non-deleted tracks in tracks_uploaded (deletedAt: null filter)", async () => {
+      const user = {
+        id: "u2",
+        email: "b@example.com",
+        systemRole: "USER",
+        accountStatus: "ACTIVE",
+        isVerified: false,
+        suspendedUntil: null,
+        lastLoginAt: null,
+        createdAt: new Date(),
+        profile: { displayName: "Bob", handle: "bob", avatarUrl: null, accountType: "FREE" },
+        subscriptions: [],
+        // 3 live tracks (deletedAt: null), 2 soft-deleted — mock returns 3
+        _count: { tracks: 3, playlists: 0, followers: 0, following: 0 },
+      };
+      mockPrisma.user.findUnique.mockResolvedValueOnce(user);
+      mockPrisma.moderationAction.findMany.mockResolvedValueOnce([]);
+      mockPrisma.moderationReport.aggregate
+        .mockResolvedValueOnce({ _count: { id: 0 } })
+        .mockResolvedValueOnce({ _count: { id: 0 } });
+      mockPrisma.moderationReport.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+
+      const result = await service.getUserDetail("u2");
+
+      // Verify the query includes a where filter on the tracks _count
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            _count: expect.objectContaining({
+              select: expect.objectContaining({
+                tracks: expect.objectContaining({ where: { deletedAt: null } }),
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(result.stats.tracks_uploaded).toBe(3);
+    });
   });
 
   // ─── getUsers ────────────────────────────────────────────────────────────────
@@ -122,7 +167,7 @@ describe("AdminUsersService", () => {
             avatarUrl: null,
             accountType: "FREE",
           },
-          _count: { tracks: 2, submittedReports: 0 },
+          _count: { tracks: 2, reportedIn: 0 },
         },
       ]);
 
@@ -131,6 +176,84 @@ describe("AdminUsersService", () => {
       expect(result.total).toBe(1);
       expect(result.users).toHaveLength(1);
       expect(result.users[0].handle).toBe("alice");
+    });
+
+    it("queries track_count with deletedAt: null filter (excludes soft-deleted tracks)", async () => {
+      mockPrisma.user.count.mockResolvedValueOnce(1);
+      mockPrisma.user.findMany.mockResolvedValueOnce([
+        {
+          id: "u1",
+          email: "a@b.com",
+          systemRole: "USER",
+          accountStatus: "ACTIVE",
+          isVerified: true,
+          lastLoginAt: null,
+          createdAt: new Date(),
+          profile: { displayName: "Alice", handle: "alice", avatarUrl: null, accountType: "FREE" },
+          // 4 live tracks (mock already excludes deleted via the query filter)
+          _count: { tracks: 4, reportedIn: 0 },
+        },
+      ]);
+
+      const result = await service.getUsers({ page: 1, limit: 20 });
+
+      // Verify findMany is called with the filtered _count on tracks
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            _count: expect.objectContaining({
+              select: expect.objectContaining({
+                tracks: expect.objectContaining({ where: { deletedAt: null } }),
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(result.users[0].track_count).toBe(4);
+    });
+  });
+
+  // ─── getAuditLog ───────────────────────────────────────────────────────────
+
+  describe("getAuditLog", () => {
+    it("returns paginated and mapped moderation actions", async () => {
+      const createdAt = new Date("2026-05-02T10:00:00.000Z");
+      mockPrisma.moderationAction.count.mockResolvedValueOnce(1);
+      mockPrisma.moderationAction.findMany.mockResolvedValueOnce([
+        {
+          id: "act-1",
+          actionType: "HIDE_TRACK",
+          notes: "policy violation",
+          createdAt,
+          reportId: "rep-1",
+          admin: {
+            id: "admin-1",
+            profile: { displayName: "Admin", handle: "admin" },
+          },
+          targetUser: {
+            id: "user-1",
+            profile: { displayName: "User", handle: "user" },
+          },
+          track: { id: "track-1", title: "Track A" },
+          comment: null,
+          playlist: null,
+        },
+      ]);
+
+      const result = await service.getAuditLog({ page: 1, limit: 20 });
+
+      expect(result.total).toBe(1);
+      expect(result.actions).toHaveLength(1);
+      expect(result.actions[0]).toEqual(
+        expect.objectContaining({
+          id: "act-1",
+          action_type: "HIDE_TRACK",
+          linked_report_id: "rep-1",
+          target_track: { id: "track-1", title: "Track A" },
+          admin: expect.objectContaining({ handle: "admin" }),
+          target_user: expect.objectContaining({ handle: "user" }),
+        }),
+      );
     });
   });
 
@@ -153,7 +276,7 @@ describe("AdminUsersService", () => {
       mockPrisma.trackFile.aggregate.mockResolvedValue({
         _sum: { fileSizeBytes: BigInt(0) },
       });
-      mockPrisma.moderationReport.count.mockResolvedValue(0);
+      mockPrisma.report.count.mockResolvedValue(0);
       mockPrisma.moderationAction.count.mockResolvedValue(0);
     }
 
@@ -211,7 +334,7 @@ describe("AdminUsersService", () => {
       mockPrisma.repost.count.mockResolvedValue(0);
       mockPrisma.playEvent.count.mockResolvedValue(0).mockResolvedValueOnce(0);
       mockPrisma.userSubscription.count.mockResolvedValue(0);
-      mockPrisma.moderationReport.count.mockResolvedValue(0);
+      mockPrisma.report.count.mockResolvedValue(0);
       mockPrisma.moderationAction.count.mockResolvedValue(0);
       // 500 MB in bytes
       mockPrisma.trackFile.aggregate.mockResolvedValue({
@@ -220,6 +343,24 @@ describe("AdminUsersService", () => {
       (service as unknown as { cache: Map<string, unknown> }).cache.clear();
       const result = await service.getOverviewStats();
       expect(result.billing.total_storage_bytes).toBe(500 * 1024 * 1024);
+    });
+
+    it("getTotalStorage returns bytes and human-readable units from track_files", async () => {
+      mockPrisma.trackFile.aggregate.mockResolvedValueOnce({
+        _sum: { fileSizeBytes: BigInt(1536 * 1024 * 1024) },
+      });
+
+      const result = await service.getTotalStorage();
+
+      expect(mockPrisma.trackFile.aggregate).toHaveBeenCalledWith({
+        _sum: { fileSizeBytes: true },
+      });
+      expect(result).toEqual({
+        totalBytes: 1536 * 1024 * 1024,
+        totalMB: 1536,
+        totalGB: 1.5,
+        source: "track_files.file_size_bytes",
+      });
     });
 
     it("returns artist_to_listener_ratio as 0 when no artists or listeners", async () => {
@@ -235,7 +376,7 @@ describe("AdminUsersService", () => {
       mockPrisma.trackFile.aggregate.mockResolvedValue({
         _sum: { fileSizeBytes: null },
       });
-      mockPrisma.moderationReport.count.mockResolvedValue(0);
+      mockPrisma.report.count.mockResolvedValue(0);
       mockPrisma.moderationAction.count.mockResolvedValue(0);
       (service as unknown as { cache: Map<string, unknown> }).cache.clear();
       const result = await service.getOverviewStats();
@@ -276,6 +417,112 @@ describe("AdminUsersService", () => {
       expect(first.users).toHaveProperty("artist_to_listener_ratio");
       expect(first.engagement).toHaveProperty("play_through_rate_pct");
       expect(first.engagement).toHaveProperty("completed_play_events");
+    });
+  });
+
+  // ─── getDailyStats ─────────────────────────────────────────────────────────
+
+  describe("getDailyStats", () => {
+    it("returns fallback daily buckets with zeros when metrics table is empty", async () => {
+      mockPrisma.dailyPlatformMetric.findMany.mockResolvedValueOnce([]);
+
+      const result = await service.getDailyStats({
+        dateFrom: "2026-05-01",
+        dateTo: "2026-05-03",
+        granularity: "daily",
+      });
+
+      expect(result.metrics).toHaveLength(3);
+      expect(result.metrics[0]).toEqual(
+        expect.objectContaining({
+          date: "2026-05-03",
+          new_users: 0,
+          tracks_uploaded: 0,
+          total_storage_bytes: 0,
+          active_subscribers: 0,
+        }),
+      );
+      expect(result.metrics[2]).toEqual(
+        expect.objectContaining({
+          date: "2026-05-01",
+          new_users: 0,
+          tracks_uploaded: 0,
+          total_storage_bytes: 0,
+          active_subscribers: 0,
+        }),
+      );
+    });
+
+    it("aggregates multiple metric rows into weekly buckets", async () => {
+      mockPrisma.dailyPlatformMetric.findMany.mockResolvedValueOnce([
+        {
+          metricDate: new Date("2026-05-01T00:00:00.000Z"),
+          newUsers: 2,
+          tracksUploaded: 4,
+          totalStorageBytes: BigInt(100),
+          activeSubscribers: 8,
+        },
+        {
+          metricDate: new Date("2026-05-03T00:00:00.000Z"),
+          newUsers: 3,
+          tracksUploaded: 1,
+          totalStorageBytes: BigInt(40),
+          activeSubscribers: 10,
+        },
+      ]);
+
+      const result = await service.getDailyStats({
+        dateFrom: "2026-05-01",
+        dateTo: "2026-05-14",
+        granularity: "weekly",
+      });
+
+      expect(result.metrics).toHaveLength(2);
+      const metrics = result.metrics as Array<{
+        date: string;
+        new_users: number;
+        tracks_uploaded: number;
+        total_storage_bytes: number;
+        active_subscribers: number;
+      }>;
+      const weekBucket = metrics.find((m) => m.date === "2026-05-01");
+      expect(weekBucket).toEqual(
+        expect.objectContaining({
+          new_users: 5,
+          tracks_uploaded: 5,
+          total_storage_bytes: 140,
+          active_subscribers: 10,
+        }),
+      );
+    });
+  });
+
+  // ─── getMostReported ───────────────────────────────────────────────────────
+
+  describe("getMostReported", () => {
+    it("returns enriched most-reported entities for users/tracks/playlists", async () => {
+      mockPrisma.moderationReport.groupBy
+        .mockResolvedValueOnce([{ reportedUserId: "u1", _count: { id: 7 } }])
+        .mockResolvedValueOnce([{ trackId: "t1", _count: { id: 5 } }])
+        .mockResolvedValueOnce([{ playlistId: "p1", _count: { id: 3 } }]);
+
+      mockPrisma.user.findMany.mockResolvedValueOnce([
+        { id: "u1", profile: { handle: "user1", displayName: "User One" } },
+      ]);
+      mockPrisma.track.findMany.mockResolvedValueOnce([{ id: "t1", title: "Track One" }]);
+      mockPrisma.playlist.findMany.mockResolvedValueOnce([{ id: "p1", title: "Playlist One" }]);
+
+      const result = await service.getMostReported({ period: "last_30_days", limit: 10 });
+
+      expect(result.most_reported_users[0]).toEqual(
+        expect.objectContaining({ user_id: "u1", handle: "user1", report_count: 7 }),
+      );
+      expect(result.most_reported_tracks[0]).toEqual(
+        expect.objectContaining({ track_id: "t1", title: "Track One", report_count: 5 }),
+      );
+      expect(result.most_reported_playlists[0]).toEqual(
+        expect.objectContaining({ playlist_id: "p1", title: "Playlist One", report_count: 3 }),
+      );
     });
   });
 });

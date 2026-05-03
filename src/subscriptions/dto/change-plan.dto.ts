@@ -10,6 +10,7 @@ export class ChangePlanDto {
   @ApiProperty({
     enum: ChangePlanCodeEnum,
     description: 'Target plan to switch to',
+    example: 'GO_PLUS',
   })
   @IsEnum(ChangePlanCodeEnum)
   planCode!: ChangePlanCodeEnum;

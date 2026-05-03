@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   ModerationState,
   PlaylistVisibility,
@@ -12,7 +13,43 @@ import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class DiscoveryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  buildRedirectHtml(targetUrl: string, title: string, bodyText = "Opening in app...") {
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <meta http-equiv="refresh" content="0; url=${targetUrl}">
+  <script>
+    window.location.href = "${targetUrl}";
+  </script>
+</head>
+<body>
+  <p>${bodyText}</p>
+</body>
+</html>`;
+  }
+
+  buildTrackShareRedirectHtml(
+    trackId: string,
+    artistHandle: string | null | undefined,
+    isMobile: boolean,
+  ) {
+    const frontendBase = (this.configService.get<string>("app.clientUrl") ?? "http://localhost:5173").replace(/\/+$/, "");
+    const targetUrl = isMobile
+      ? `trackmaster://track/${trackId}`
+      : `${frontendBase}/track/${trackId}${artistHandle ? `?artist=${encodeURIComponent(artistHandle)}` : ""}`;
+
+    return this.buildRedirectHtml(
+      targetUrl,
+      isMobile ? "Opening track..." : "Opening track in browser...",
+    );
+  }
 
   async search(
     q: string,
@@ -35,6 +72,7 @@ export class DiscoveryService {
     const shouldFetchPlaylists = type === "all" || type === "playlists";
 
     const ilikePattern = `%${normalized}%`;
+    const isShortQuery = normalized.length <= 3;
 
     const tracksPromise = shouldFetchTracks
       ? this.prisma.$queryRaw<
@@ -45,7 +83,13 @@ export class DiscoveryService {
             description: string | null;
             cover_art_url: string | null;
             uploader_id: string;
+            artist_handle: string;
+            duration_ms: number | null;
+            views: number;
+            exact_prefix_match: boolean;
+            fuzzy_score: number;
             total_count: bigint;
+            comments_count: number;
           }>
         >`
           SELECT
@@ -55,8 +99,20 @@ export class DiscoveryService {
             t.description,
             t.cover_art_url,
             t.uploader_id,
-            COUNT(*) OVER()::bigint AS total_count
+            up.handle AS artist_handle,
+            t.duration_ms,
+            COALESCE(SUM(tds.play_count), 0)::int AS views,
+            (t.title ILIKE (${normalized} || '%')) AS exact_prefix_match,
+            CASE
+              WHEN t.title ILIKE ${ilikePattern} THEN 1
+              WHEN to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, '')) @@ plainto_tsquery('english', ${normalized}) THEN 0.5
+              ELSE 0
+            END AS fuzzy_score,
+            COUNT(*) OVER()::bigint AS total_count,
+            (SELECT COUNT(*)::int FROM track_comments WHERE track_id = t.id) AS comments_count
           FROM tracks t
+          LEFT JOIN user_profiles up ON up.user_id = t.uploader_id
+          LEFT JOIN track_daily_stats tds ON tds.track_id = t.id
           WHERE
             t.deleted_at IS NULL
             AND t.visibility = 'PUBLIC'
@@ -65,9 +121,11 @@ export class DiscoveryService {
             AND (
               to_tsvector('english', COALESCE(t.title, '') || ' ' || COALESCE(t.description, '')) @@ plainto_tsquery('english', ${normalized})
               OR t.title ILIKE ${ilikePattern}
-              OR t.description ILIKE ${ilikePattern}
-              OR similarity(t.title, ${normalized}) > 0.3
+                OR t.description ILIKE ${ilikePattern}
             )
+          GROUP BY t.id, up.handle
+            ORDER BY
+              ${isShortQuery ? "views DESC, fuzzy_score DESC" : "exact_prefix_match DESC, fuzzy_score DESC"}
           LIMIT ${limit}
           OFFSET ${offset}
         `
@@ -99,8 +157,6 @@ export class DiscoveryService {
             AND (
               u.handle ILIKE ${ilikePattern}
               OR u.display_name ILIKE ${ilikePattern}
-              OR similarity(u.handle, ${normalized}) > 0.3
-              OR similarity(u.display_name, ${normalized}) > 0.3
             )
           LIMIT ${limit}
           OFFSET ${offset}
@@ -136,7 +192,6 @@ export class DiscoveryService {
               to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p.description, '')) @@ plainto_tsquery('english', ${normalized})
               OR p.title ILIKE ${ilikePattern}
               OR p.description ILIKE ${ilikePattern}
-              OR similarity(p.title, ${normalized}) > 0.3
             )
           LIMIT ${limit}
           OFFSET ${offset}
@@ -167,13 +222,17 @@ export class DiscoveryService {
     const playlistsTotalCount = playlists.length > 0 ? Number(playlists[0].total_count) : 0;
 
     // Transform raw query results to match expected API response shape
-    const transformedTracks = tracks.map((t) => ({
+    const transformedTracks = (tracks || []).map((t) => ({
       id: t.id,
       title: t.title,
       slug: t.slug,
       description: t.description,
       coverArtUrl: t.cover_art_url,
       uploaderId: t.uploader_id,
+      artistHandle: t.artist_handle ?? null,
+      duration: typeof t.duration_ms === 'number' ? Math.floor(t.duration_ms / 1000) : null,
+      views: t.views != null ? Number(t.views) : 0,
+      commentsCount: t.comments_count,
     }));
 
     const transformedPlaylists = playlists.map((p) => ({
@@ -213,6 +272,7 @@ export class DiscoveryService {
         recent_plays: bigint;
         recent_likes: bigint;
         velocity_score: number;
+        comments_count: number;
       }>
     >`
       SELECT
@@ -223,7 +283,8 @@ export class DiscoveryService {
         t.uploader_id,
         COUNT(pe.id)::bigint AS recent_plays,
         COUNT(l.id)::bigint AS recent_likes,
-        (COUNT(pe.id) + (COUNT(l.id) * 2))::float AS velocity_score
+        (COUNT(pe.id) + (COUNT(l.id) * 2))::float AS velocity_score,
+        (SELECT COUNT(*)::int FROM track_comments WHERE track_id = t.id) AS comments_count
       FROM tracks t
       LEFT JOIN play_events pe
         ON pe.track_id = t.id
@@ -263,6 +324,7 @@ export class DiscoveryService {
         where: {
           userId,
           trackId: { in: trackIds },
+          track: { deletedAt: null },
         },
         select: { trackId: true },
       });
@@ -284,6 +346,7 @@ export class DiscoveryService {
         recentPlays: Number(row.recent_plays),
         recentLikes: Number(row.recent_likes),
         velocityScore: row.velocity_score,
+        commentsCount: row.comments_count,
         liked: userLikeMap.get(row.id) ?? false,
       })),
     };
@@ -466,7 +529,7 @@ export class DiscoveryService {
             select: { slug: true, name: true },
           },
           _count: {
-            select: { likes: true, reposts: true },
+            select: { likes: true, reposts: true, comments: true },
           },
         },
       }),
@@ -496,6 +559,7 @@ export class DiscoveryService {
         waveformData: track.waveformData,
         likesCount: track._count.likes,
         repostsCount: track._count.reposts,
+        commentsCount: track._count.comments,
         createdAt: track.createdAt,
         publishedAt: track.publishedAt,
       })),

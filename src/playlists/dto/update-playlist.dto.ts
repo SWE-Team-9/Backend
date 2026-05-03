@@ -1,19 +1,36 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
   IsIn,
-  IsInt,
   IsOptional,
   IsString,
   MaxLength,
-  Min,
   MinLength,
+  Validate,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PlaylistType } from '@prisma/client';
+
+@ValidatorConstraint({ name: 'isValidVisibility', async: false })
+class IsValidVisibilityConstraint implements ValidatorConstraintInterface {
+  validate(value: any, args: ValidationArguments) {
+    if (value === undefined) return true; // optional field
+    if (typeof value !== 'string') return false;
+    const normalized = value.toLowerCase().trim();
+    if (normalized === 'private') return false; // explicitly reject 'private'
+    return normalized === 'public' || normalized === 'secret';
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'visibility must be one of the following values: PUBLIC, SECRET. "PRIVATE" is not allowed.';
+  }
+}
 
 export class UpdatePlaylistDto {
   @ApiPropertyOptional({
@@ -46,13 +63,13 @@ export class UpdatePlaylistDto {
 
   @ApiPropertyOptional({
     description: 'Playlist visibility',
-    enum: ['PUBLIC', 'SECRET', 'PRIVATE'],
-    example: 'PRIVATE',
+    enum: ['PUBLIC', 'SECRET'],
+    example: 'SECRET',
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase().trim() : value))
-  @IsIn(['PUBLIC', 'SECRET', 'PRIVATE'])
-  visibility?: 'PUBLIC' | 'SECRET' | 'PRIVATE';
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @Validate(IsValidVisibilityConstraint)
+  visibility?: 'public' | 'secret';
 
   @ApiPropertyOptional({
     description: 'Playlist type',
@@ -78,14 +95,12 @@ export class UpdatePlaylistDto {
   releaseDate?: string;
 
   @ApiPropertyOptional({
-    description: 'Existing genre identifier from the genres table',
-    example: 12,
+    description: 'Genre slug (must exist in predefined genres)',
+    example: 'electronic',
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  genreId?: number;
+  @IsString()
+  genre?: string;
 
   @ApiPropertyOptional({
     description: 'Simple string tags',

@@ -10,6 +10,7 @@ import {
 import { NotFoundException } from "@nestjs/common";
 import { DiscoveryService } from "./discovery.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { ConfigService } from "@nestjs/config";
 
 describe("DiscoveryService", () => {
   let service: DiscoveryService;
@@ -45,6 +46,18 @@ describe("DiscoveryService", () => {
             $queryRaw: jest.fn(),
           },
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === "app.clientUrl") {
+                return "http://localhost:5173";
+              }
+
+              return undefined;
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -57,7 +70,20 @@ describe("DiscoveryService", () => {
   });
 
   describe("search", () => {
-    it("should search tracks, users, and playlists", async () => {
+    it("keeps deleted tracks out of search queries", async () => {
+      jest.spyOn(prisma, "$queryRaw" as any).mockResolvedValueOnce([]);
+
+      await service.search("test", "tracks");
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+
+      const [sqlParts] = (prisma.$queryRaw as jest.Mock).mock.calls[0];
+      const sql = Array.isArray(sqlParts) ? sqlParts.join("") : String(sqlParts);
+
+      expect(sql).toContain("t.deleted_at IS NULL");
+    });
+
+    it("should search tracks, users, and playlists with enriched data", async () => {
       const query = "test";
 
       const mockTracks = [
@@ -68,6 +94,11 @@ describe("DiscoveryService", () => {
           description: "A test track",
           cover_art_url: "https://example.com/cover.jpg",
           uploader_id: "user-1",
+          artist_handle: "testartist",
+          duration_ms: 180000,
+          views: 250,
+          exact_prefix_match: true,
+          fuzzy_score: 0.95,
           total_count: BigInt(1),
         },
       ];
@@ -123,6 +154,9 @@ describe("DiscoveryService", () => {
               description: "A test track",
               coverArtUrl: "https://example.com/cover.jpg",
               uploaderId: "user-1",
+              artistHandle: "testartist",
+              duration: 180,
+              views: 250,
             },
           ],
           users: mockUsers,
@@ -213,6 +247,133 @@ describe("DiscoveryService", () => {
           bio: null,
         },
       ]);
+    });
+
+    it("should include artistHandle, duration, and views in track results", async () => {
+      const mockTracks = [
+        {
+          id: "track-1",
+          title: "Extended Track",
+          slug: "extended-track",
+          description: "A long track",
+          cover_art_url: "https://example.com/cover.jpg",
+          uploader_id: "user-1",
+          artist_handle: "extended_artist",
+          duration_ms: 360000,
+          views: 1500,
+          exact_prefix_match: true,
+          fuzzy_score: 0.9,
+          total_count: BigInt(1),
+        },
+      ];
+
+      jest
+        .spyOn(prisma, "$queryRaw" as any)
+        .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.search("extended");
+
+      expect(result.data.tracks[0]).toMatchObject({
+        id: "track-1",
+        artistHandle: "extended_artist",
+        duration: 360,
+        views: 1500,
+      });
+    });
+
+    it("should handle tracks with null duration", async () => {
+      const mockTracks = [
+        {
+          id: "track-1",
+          title: "No Duration Track",
+          slug: "no-duration-track",
+          description: null,
+          cover_art_url: null,
+          uploader_id: "user-1",
+          artist_handle: "artist1",
+          duration_ms: null,
+          views: 100,
+          exact_prefix_match: false,
+          fuzzy_score: 0.5,
+          total_count: BigInt(1),
+        },
+      ];
+
+      jest
+        .spyOn(prisma, "$queryRaw" as any)
+        .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.search("duration");
+
+      expect(result.data.tracks[0]).toMatchObject({
+        id: "track-1",
+        duration: null,
+      });
+    });
+
+    it("should sort by views when query is very short (2-3 chars)", async () => {
+      const mockTracks = [
+        {
+          id: "track-popular",
+          title: "Very Popular Track",
+          slug: "very-popular-track",
+          description: null,
+          cover_art_url: null,
+          uploader_id: "user-1",
+          artist_handle: "popular_artist",
+          duration_ms: 240000,
+          views: 5000,
+          exact_prefix_match: false,
+          fuzzy_score: 0.6,
+          total_count: BigInt(1),
+        },
+      ];
+
+      jest
+        .spyOn(prisma, "$queryRaw" as any)
+        .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.search("ver");
+
+      expect(result.data.tracks[0]).toMatchObject({
+        id: "track-popular",
+        views: 5000,
+      });
+    });
+
+    it("should convert milliseconds to seconds for duration", async () => {
+      const mockTracks = [
+        {
+          id: "track-1",
+          title: "Test Track",
+          slug: "test-track",
+          description: "Test",
+          cover_art_url: null,
+          uploader_id: "user-1",
+          artist_handle: "testartist",
+          duration_ms: 123456,
+          views: 50,
+          exact_prefix_match: true,
+          fuzzy_score: 0.85,
+          total_count: BigInt(1),
+        },
+      ];
+
+      jest
+        .spyOn(prisma, "$queryRaw" as any)
+        .mockResolvedValueOnce(mockTracks)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.search("test");
+
+      expect(result.data.tracks[0].duration).toBe(123);
     });
   });
 

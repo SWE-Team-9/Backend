@@ -57,6 +57,7 @@ export class FeedController {
             waveformData: null,
             likesCount: 24,
             repostsCount: 6,
+            commentsCount: 3,
             liked: false,
             reposted: false,
           },

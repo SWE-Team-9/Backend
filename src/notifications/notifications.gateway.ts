@@ -10,7 +10,7 @@ import { ConfigService } from "@nestjs/config";
 import { INotificationsGateway, NotificationsService } from "./notifications.service";
 
 @WebSocketGateway({
-  namespace: "notifications",
+  namespace: "api/v1/notifications",
 })
 export class NotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect, INotificationsGateway
@@ -31,15 +31,25 @@ export class NotificationsGateway
 
   // ─── Connection ──────────────────────────────────────────────────────────────
 
+  private extractToken(socket: Socket): string | null {
+    // Cookie-based auth (browser / first-party frontend)
+    const cookieHeader = socket.handshake.headers.cookie ?? '';
+    const cookiePair = cookieHeader.split(';').find((c) => c.trim().startsWith('access_token='));
+    if (cookiePair) {
+      return decodeURIComponent(cookiePair.trim().slice('access_token='.length));
+    }
+    // Bearer token auth (cross-team / mobile — accepts both "Bearer <token>" and raw token)
+    const authToken = socket.handshake.auth?.token as string | undefined;
+    if (authToken) {
+      return authToken.replace(/^Bearer\s+/i, '');
+    }
+    return null;
+  }
+
   async handleConnection(socket: Socket): Promise<void> {
     try {
-      const token =
-        socket.handshake.headers.cookie
-          ?.split(";")
-          .find((c) => c.trim().startsWith("access_token="))
-          ?.split("=")[1] ?? (socket.handshake.auth?.token as string | undefined);
-
-      if (!token) throw new Error("No token");
+      const token = this.extractToken(socket);
+      if (!token) throw new Error('No token');
 
       const payload = this.jwtService.verify(token, {
         secret: this.config.get<string>("security.jwtSecret"),
@@ -55,7 +65,7 @@ export class NotificationsGateway
       this.userSocketMap.get(userId)!.add(socket.id);
       this.socketUserMap.set(socket.id, userId);
     } catch {
-      socket.disconnect(true);
+      socket.disconnect();
     }
   }
 

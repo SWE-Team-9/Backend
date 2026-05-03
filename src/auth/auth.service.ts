@@ -349,6 +349,7 @@ export class AuthService {
         avatar_url: user.profile?.avatarUrl ?? null,
         account_type: user.profile?.accountType ?? "LISTENER",
         system_role: user.systemRole,
+        account_status: user.accountStatus,
         is_verified: user.isVerified,
       },
     };
@@ -887,6 +888,7 @@ export class AuthService {
       avatar_url: user.profile?.avatarUrl ?? null,
       account_type: user.profile?.accountType ?? "LISTENER",
       system_role: user.systemRole,
+      account_status: user.accountStatus,
       is_verified: user.isVerified,
       subscription_tier: activeSub?.plan?.code ?? "FREE",
       created_at: user.createdAt,

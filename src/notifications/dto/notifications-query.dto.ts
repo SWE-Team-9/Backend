@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationEventType } from '@prisma/client';
@@ -15,6 +15,7 @@ export class NotificationsQueryDto {
 
   @ApiPropertyOptional({ example: false, description: 'Filter by read status' })
   @IsOptional()
+  @Type(() => String)
   @Transform(({ value }) => {
     if (value === 'true' || value === true) return true;
     if (value === 'false' || value === false) return false;

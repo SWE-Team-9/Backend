@@ -4,6 +4,7 @@ import { ReportStatus, ReportTargetType } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ReportsService } from "./reports.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 const mockPrisma = {
   report: {
@@ -30,6 +31,10 @@ const mockEventEmitter = {
   emit: jest.fn(),
 };
 
+const mockNotificationsService = {
+  createNotification: jest.fn(),
+};
+
 const REPORTER_ID = "reporter-uuid";
 
 describe("ReportsService", () => {
@@ -41,11 +46,18 @@ describe("ReportsService", () => {
         ReportsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 
     service = module.get<ReportsService>(ReportsService);
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (arg: any) => {
+      if (typeof arg === "function") {
+        return arg(mockPrisma);
+      }
+      return Promise.all(arg);
+    });
   });
 
   // ─── createReport ─────────────────────────────────────────────────────────────
@@ -123,8 +135,12 @@ describe("ReportsService", () => {
       expect(result.targetType).toBe(ReportTargetType.COMMENT);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         "report.created",
-        expect.objectContaining({ targetType: ReportTargetType.COMMENT }),
+        expect.objectContaining({
+          targetType: ReportTargetType.COMMENT,
+          targetId: "comment-1",
+        }),
       );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
     });
 
     it("throws BadRequestException for truly invalid target type", async () => {
@@ -175,7 +191,39 @@ describe("ReportsService", () => {
       expect(result).toEqual(mockReport);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         "report.created",
-        expect.objectContaining({ reportId: "report-1" }),
+        expect.objectContaining({ reportId: "report-1", targetId: "track-1" }),
+      );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
+    });
+
+    it("creates a USER report without notifying the reported user or emitting LIKE", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "reported-user" });
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null);
+      mockPrisma.report.create.mockResolvedValueOnce({
+        id: "report-user-1",
+        reporterId: REPORTER_ID,
+        targetType: ReportTargetType.USER,
+        targetId: "reported-user",
+        reason: "HARASSMENT",
+        status: ReportStatus.PENDING,
+        createdAt: new Date(),
+      });
+
+      await service.createReport(REPORTER_ID, {
+        targetType: ReportTargetType.USER,
+        targetId: "reported-user",
+        reason: "HARASSMENT",
+        description: "abusive profile",
+      });
+
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        "report.created",
+        expect.objectContaining({
+          reportId: "report-user-1",
+          targetType: ReportTargetType.USER,
+          targetId: "reported-user",
+        }),
       );
     });
 
@@ -277,6 +325,62 @@ describe("ReportsService", () => {
     });
   });
 
+  // ─── getReports ───────────────────────────────────────────────────────────────
+
+  describe("getReports", () => {
+    it("returns paginated report list with resolved target/offender info", async () => {
+      const createdAt = new Date("2026-05-01T12:00:00.000Z");
+      mockPrisma.report.count.mockResolvedValueOnce(1);
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        {
+          id: "r1",
+          targetType: ReportTargetType.TRACK,
+          targetId: "track-1",
+          reason: "SPAM",
+          status: ReportStatus.PENDING,
+          description: "spam",
+          createdAt,
+          resolvedAt: null,
+          resolvedBy: null,
+          reporter: {
+            id: "u1",
+            email: "user@example.com",
+            profile: { displayName: "User", handle: "user" },
+          },
+          adminResolution: null,
+          _count: { appeals: 2 },
+        },
+      ]);
+
+      mockPrisma.track.findUnique.mockResolvedValueOnce({
+        title: "Track A",
+        uploader: {
+          id: "artist-1",
+          accountStatus: "ACTIVE",
+          profile: { handle: "artist1" },
+        },
+      });
+
+      const result = await service.getReports({ page: 1, limit: 20 });
+
+      expect(result.pagination.total).toBe(1);
+      expect(result.items[0]).toEqual(
+        expect.objectContaining({
+          id: "r1",
+          category: "SPAM",
+          appeals_count: 2,
+          target: expect.objectContaining({
+            type: ReportTargetType.TRACK,
+            id: "track-1",
+            title: "Track A",
+            owner_handle: "artist1",
+          }),
+          offender: { id: "artist-1", account_status: "ACTIVE" },
+        }),
+      );
+    });
+  });
+
   // ─── updateReport ─────────────────────────────────────────────────────────────
 
   describe("updateReport", () => {
@@ -289,7 +393,7 @@ describe("ReportsService", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it("throws INVALID_TRANSITION when attempting to move a RESOLVED report to another state", async () => {
+    it("throws REPORT_ALREADY_HANDLED when attempting to move a RESOLVED report to another state", async () => {
       mockPrisma.report.findUnique.mockResolvedValueOnce({
         id: "r1",
         status: ReportStatus.RESOLVED,
@@ -301,14 +405,36 @@ describe("ReportsService", () => {
         }),
       ).rejects.toMatchObject({
         response: {
-          code: "INVALID_TRANSITION",
+          code: "REPORT_ALREADY_HANDLED",
+        },
+      });
+      expect(mockPrisma.report.update).not.toHaveBeenCalled();
+    });
+
+    it("throws REPORT_ALREADY_HANDLED when attempting to move a REJECTED report", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.REJECTED,
+      });
+
+      await expect(
+        service.updateReport("r1", "admin-1", {
+          status: ReportStatus.RESOLVED,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: "REPORT_ALREADY_HANDLED",
         },
       });
       expect(mockPrisma.report.update).not.toHaveBeenCalled();
     });
 
     it("sets resolvedAt and resolvedBy when status is RESOLVED", async () => {
-      mockPrisma.report.findUnique.mockResolvedValueOnce({ id: "r1" });
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.PENDING,
+        reporterId: "reporter-uuid",
+      });
       const updatedReport = {
         id: "r1",
         status: "RESOLVED",
@@ -328,6 +454,59 @@ describe("ReportsService", () => {
         }),
       );
       expect(result.report.status).toBe("RESOLVED");
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: "reporter-uuid",
+          eventType: "REPORT_RESOLVED",
+        }),
+      );
+    });
+
+    it("sends reporter-only outcome notification for REJECTED status", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.PENDING,
+        reporterId: "reporter-uuid",
+      });
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: "r1",
+        status: "REJECTED",
+      });
+      mockPrisma.appeal.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await service.updateReport("r1", "admin-1", {
+        status: ReportStatus.REJECTED,
+      });
+
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: "reporter-uuid",
+          eventType: "REPORT_RESOLVED",
+          metadata: expect.objectContaining({
+            reportStatus: ReportStatus.REJECTED,
+          }),
+        }),
+      );
+    });
+
+    it("does not update appeals when resolutionNotes is omitted", async () => {
+      mockPrisma.report.findUnique.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.PENDING,
+        reporterId: "reporter-uuid",
+      });
+      mockPrisma.report.update.mockResolvedValueOnce({
+        id: "r1",
+        status: ReportStatus.UNDER_REVIEW,
+      });
+
+      const result = await service.updateReport("r1", "admin-1", {
+        status: ReportStatus.UNDER_REVIEW,
+      });
+
+      expect(result.notesAppliedToAppeals).toBe(0);
+      expect(mockPrisma.appeal.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -362,13 +541,22 @@ describe("ReportsService", () => {
 
       const result = await service.assignReport("r1", "admin-1");
       expect(result.resolvedBy).toBe("admin-1");
+      expect(mockPrisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "r1" },
+          data: expect.objectContaining({
+            status: ReportStatus.UNDER_REVIEW,
+            resolvedBy: "admin-1",
+          }),
+        }),
+      );
     });
   });
 
   // ─── bulkUpdateReports ────────────────────────────────────────────────────────
 
   describe("bulkUpdateReports", () => {
-    it("throws INVALID_TRANSITION when any selected report is already RESOLVED", async () => {
+    it("throws REPORT_ALREADY_HANDLED when any selected report is already RESOLVED", async () => {
       mockPrisma.report.findMany.mockResolvedValueOnce([{ id: "r2" }]);
 
       await expect(
@@ -378,13 +566,20 @@ describe("ReportsService", () => {
         }),
       ).rejects.toMatchObject({
         response: {
-          code: "INVALID_TRANSITION",
+          code: "REPORT_ALREADY_HANDLED",
         },
       });
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
     });
 
     it("updates multiple reports in a transaction", async () => {
+      mockPrisma.report.findMany.mockResolvedValueOnce([]);
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        { id: "r1", reporterId: "reporter-1", status: ReportStatus.PENDING },
+        { id: "r2", reporterId: "reporter-2", status: ReportStatus.PENDING },
+        { id: "r3", reporterId: "reporter-3", status: ReportStatus.PENDING },
+      ]);
       mockPrisma.$transaction.mockResolvedValueOnce([{ count: 3 }, { count: 2 }]);
 
       const result = await service.bulkUpdateReports("admin-1", {
@@ -395,6 +590,29 @@ describe("ReportsService", () => {
 
       expect(result.updatedReports).toBe(3);
       expect(result.updatedAppeals).toBe(2);
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledTimes(3);
+      expect(mockNotificationsService.createNotification).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ recipientId: "reporter-1", eventType: "REPORT_RESOLVED" }),
+      );
+    });
+
+    it("updates reports without resolution notes using appeals status branch", async () => {
+      mockPrisma.report.findMany.mockResolvedValueOnce([]);
+      mockPrisma.report.findMany.mockResolvedValueOnce([
+        { id: "r1", reporterId: "reporter-1", status: ReportStatus.PENDING },
+        { id: "r2", reporterId: "reporter-2", status: ReportStatus.PENDING },
+      ]);
+      mockPrisma.$transaction.mockResolvedValueOnce([{ count: 2 }, { count: 2 }]);
+
+      const result = await service.bulkUpdateReports("admin-1", {
+        reportIds: ["r1", "r2"],
+        status: ReportStatus.UNDER_REVIEW,
+      });
+
+      expect(result).toEqual({ updatedReports: 2, updatedAppeals: 2 });
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
     });
   });
 });

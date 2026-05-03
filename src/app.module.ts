@@ -31,6 +31,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { AdminModule } from "./admin/admin.module";
 import { EntitlementsModule } from "./entitlements/entitlements.module";
 import { BffModule } from "./bff/bff.module";
+import { AiModule } from "./ai/ai.module";
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { BffModule } from "./bff/bff.module";
     PaymentMethodsModule,
     EntitlementsModule, // GET /entitlements/me
     BffModule, // BFF aggregate endpoints: /app/bootstrap, /pages/profile/:handle, /pages/settings
+    AiModule, // AI assistant: POST /ai/chat
   ],
   controllers: [AppController],
   providers: [

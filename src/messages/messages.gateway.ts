@@ -11,7 +11,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { IMessagesGateway, MessagesService } from "./messages.service";
 
 @WebSocketGateway({
-  namespace: "messages",
+  namespace: "api/v1/messages",
 })
 export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect, IMessagesGateway {
   @WebSocketServer()
@@ -31,15 +31,25 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   // ─── Connection ──────────────────────────────────────────────────────────────
 
+  private extractToken(socket: Socket): string | null {
+    // Cookie-based auth (browser / first-party frontend)
+    const cookieHeader = socket.handshake.headers.cookie ?? '';
+    const cookiePair = cookieHeader.split(';').find((c) => c.trim().startsWith('access_token='));
+    if (cookiePair) {
+      return decodeURIComponent(cookiePair.trim().slice('access_token='.length));
+    }
+    // Bearer token auth (cross-team / mobile — accepts both "Bearer <token>" and raw token)
+    const authToken = socket.handshake.auth?.token as string | undefined;
+    if (authToken) {
+      return authToken.replace(/^Bearer\s+/i, '');
+    }
+    return null;
+  }
+
   async handleConnection(socket: Socket): Promise<void> {
     try {
-      const token =
-        socket.handshake.headers.cookie
-          ?.split(";")
-          .find((c) => c.trim().startsWith("access_token="))
-          ?.split("=")[1] ?? (socket.handshake.auth?.token as string | undefined);
-
-      if (!token) throw new Error("No token");
+      const token = this.extractToken(socket);
+      if (!token) throw new Error('No token');
 
       const payload = this.jwtService.verify(token, {
         secret: this.config.get<string>("security.jwtSecret"),
@@ -65,7 +75,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
         await socket.join(`conversation_${p.conversationId}`);
       }
     } catch {
-      socket.disconnect(true);
+      socket.disconnect();
     }
   }
 
