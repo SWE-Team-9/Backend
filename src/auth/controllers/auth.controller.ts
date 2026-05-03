@@ -677,6 +677,30 @@ export class AuthController {
     return this.authService.setupPassword(userId, dto);
   }
 
+  @ApiOperation({
+    summary: 'Get local password status',
+    description:
+      'Returns whether the authenticated account has a local password set. Does not return password hash.',
+  })
+  @ApiCookieAuth('access_token')
+  @ApiResponse({
+    status: 200,
+    description: 'Password status returned.',
+    schema: {
+      example: {
+        hasPassword: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Not authenticated.',
+  })
+  @Get('password/status')
+  async getPasswordStatus(@CurrentUser('userId') userId: string) {
+    return this.authService.getPasswordStatus(userId);
+  }
+
   // ─── Endpoint 13: POST /auth/email/change ─────────────────────────────
   @ApiOperation({
     summary: 'Request email address change',

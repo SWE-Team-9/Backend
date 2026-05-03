@@ -748,6 +748,23 @@ export class AuthService {
     };
   }
 
+  async getPasswordStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "NOT_AUTHENTICATED",
+        message: "User not found.",
+      });
+    }
+
+    return { hasPassword: Boolean(user.passwordHash) };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Endpoint 13: Request Email Change
   // ═══════════════════════════════════════════════════════════════════════════
