@@ -64,12 +64,14 @@ export class AiActionService {
     }
 
     if (intent === 'clarification_needed' || needsConfirmation) {
+      const pendingContext = this.pendingContextFromIntent(intentResult);
       return {
         reply: clarifyingQuestion ?? 'Could you clarify what you would like me to do?',
         provider,
         intent,
         actionsTaken: [],
         needsConfirmation: true,
+        pendingContext,
       };
     }
 
@@ -110,6 +112,15 @@ export class AiActionService {
 
         case 'profile_or_subscription_help':
           return await this.execProfileHelp(userId, provider);
+
+        case 'cancel_pending_action':
+          return {
+            reply: 'Okay, I cleared that pending action.',
+            provider,
+            intent,
+            actionsTaken: [],
+            pendingContext: null,
+          };
 
         default:
           return this.unknownResponse(provider);
@@ -1250,6 +1261,16 @@ export class AiActionService {
       قران: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
     };
 
+    for (const key of ['sha3by', 'shaabi', 'shaaby', 'sh3by']) {
+      aliases[key] = [
+        ...(aliases[key] ?? []),
+        'mahraganat',
+        'mahragan',
+        'Ù…Ù‡Ø±Ø¬Ø§Ù†Ø§Øª',
+      ];
+    }
+    aliases.rap = [...(aliases.rap ?? []), 'hip-hop', 'hip hop', 'hiphop'];
+
     const aliasTerms = [
       ...(aliases[normalized] ?? []),
       ...(normalized === 'شعبي' ? ['sha3by', 'shaabi', 'shaaby', 'sh3by'] : []),
@@ -1280,6 +1301,19 @@ export class AiActionService {
     return Array.from(
       new Set([...localTerms, ...dbGenres.flatMap((genre) => [genre.slug, genre.name])]),
     ).filter(Boolean);
+  }
+
+  private pendingContextFromIntent(intentResult: AiIntentResult): Record<string, unknown> | undefined {
+    if (intentResult.intent !== 'create_playlist_from_genre') return undefined;
+
+    const genre = this.cleanString(intentResult.parameters.genre);
+    if (!genre || genre === 'mixed') return undefined;
+
+    return {
+      pendingIntent: 'create_playlist_from_genre',
+      pendingGenre: genre,
+      pendingLimit: this.safeLimit(intentResult.parameters.limit, 10),
+    };
   }
 
   private genreTermVariants(term: string): string[] {

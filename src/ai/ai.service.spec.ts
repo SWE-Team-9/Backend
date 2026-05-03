@@ -116,11 +116,44 @@ describe('detectMockIntent', () => {
     expect(result.needsConfirmation).toBe(true);
   });
 
+  it('asks for a name with pending context when creating a genre playlist without one', () => {
+    const result = detectMockIntent('Create a Sha3by playlist');
+    expect(result.intent).toBe('create_playlist_from_genre');
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.parameters).toEqual(expect.objectContaining({ genre: 'sha3by', limit: 10 }));
+  });
+
+  it('uses pending genre playlist context with a one-word playlist name', () => {
+    const result = detectMockIntent('testt', {
+      pendingIntent: 'create_playlist_from_genre',
+      pendingGenre: 'sha3by',
+      pendingLimit: 10,
+    });
+
+    expect(result.intent).toBe('create_playlist_from_genre');
+    expect(result.needsConfirmation).toBe(false);
+    expect(result.parameters).toEqual(
+      expect.objectContaining({ genre: 'sha3by', limit: 10, playlistName: 'testt' }),
+    );
+  });
+
+  it('clears pending context when the user cancels', () => {
+    const result = detectMockIntent('cancel', {
+      pendingIntent: 'create_playlist_from_genre',
+      pendingGenre: 'sha3by',
+      pendingLimit: 10,
+    });
+
+    expect(result.intent).toBe('cancel_pending_action');
+    expect(result.needsConfirmation).toBe(false);
+  });
+
   it('detects create playlist from genre with limit', () => {
     const result = detectMockIntent('create sha3by playlist with 10 songs');
     expect(result.intent).toBe('create_playlist_from_genre');
     expect(result.parameters.genre).toBe('sha3by');
     expect(result.parameters.limit).toBe(10);
+    expect(result.needsConfirmation).toBe(false);
   });
 
   it('detects create playlist from hip hop phrase with limit', () => {
@@ -401,6 +434,30 @@ describe('n8n provider helpers', () => {
     expect(result.intent).toBe('create_playlist_from_genre');
     expect(result.parameters).toEqual(expect.objectContaining({ genre: 'hip hop', limit: 7 }));
     expect(result.needsConfirmation).toBe(false);
+  });
+
+  it('n8n validation uses pending context for short follow-up replies', async () => {
+    const { validateN8nResponse } = await import('./providers/n8n-ai.provider');
+
+    const result = validateN8nResponse(
+      {
+        intent: 'faq_help',
+        parameters: {},
+        confidence: 0.99,
+        needsConfirmation: false,
+      },
+      'testt',
+      {
+        pendingIntent: 'create_playlist_from_genre',
+        pendingGenre: 'sha3by',
+        pendingLimit: 10,
+      },
+    );
+
+    expect(result.intent).toBe('create_playlist_from_genre');
+    expect(result.parameters).toEqual(
+      expect.objectContaining({ genre: 'sha3by', limit: 10, playlistName: 'testt' }),
+    );
   });
 
   it('low confidence n8n response becomes clarification_needed', async () => {

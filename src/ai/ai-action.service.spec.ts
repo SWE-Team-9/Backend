@@ -342,6 +342,43 @@ describe('AiActionService', () => {
     expect((result.data as any).tracks).toHaveLength(1);
   });
 
+  it('broadens sha3by search to shaabi and mahraganat tags', async () => {
+    prisma.genre.findMany.mockResolvedValue([]);
+    prisma.track.findMany.mockResolvedValue([
+      {
+        id: TRACK_ID,
+        title: 'Tagged Mahragan Track',
+        slug: 'tagged-mahragan-track',
+        coverArtUrl: null,
+        durationMs: 180000,
+        primaryGenre: { slug: 'electronic', name: 'Electronic' },
+        uploader: {
+          id: RECEIVER_ID,
+          profile: { displayName: 'Artist', handle: 'artist', avatarUrl: null },
+        },
+        _count: { likes: 5, reposts: 1, playEvents: 20 },
+      },
+    ]);
+
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { genre: 'sha3by', limit: 5, playlistName: 'testt' },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    const terms = prisma.genre.findMany.mock.calls[0][0].where.OR.map(
+      (filter: any) => filter.slug?.contains ?? filter.name?.contains,
+    );
+    expect(terms).toEqual(expect.arrayContaining(['sha3by', 'shaabi', 'mahraganat']));
+    expect(prisma.playlist.create).toHaveBeenCalled();
+    expect(result.actionsTaken).toContain('created playlist');
+  });
+
   it('does not merge distinct genre aliases in DB lookup terms', async () => {
     prisma.genre.findMany.mockResolvedValue([]);
     prisma.track.findMany.mockResolvedValue([]);
@@ -547,5 +584,44 @@ describe('AiActionService', () => {
 
     expect(result.needsConfirmation).toBe(true);
     expect(result.actionsTaken).toEqual([]);
+  });
+
+  it('returns pending context when a genre playlist needs a name', async () => {
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { genre: 'sha3by', limit: 10 },
+        confidence: 0.9,
+        needsConfirmation: true,
+        clarifyingQuestion: 'What would you like to name the playlist?',
+      },
+      'mock',
+    );
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingContext).toEqual({
+      pendingIntent: 'create_playlist_from_genre',
+      pendingGenre: 'sha3by',
+      pendingLimit: 10,
+    });
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending action without changing data', async () => {
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'cancel_pending_action',
+        parameters: {},
+        confidence: 1,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    expect(result.pendingContext).toBeNull();
+    expect(result.actionsTaken).toEqual([]);
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
   });
 });
