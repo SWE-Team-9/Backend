@@ -25,6 +25,7 @@ import {
   RegisterDto,
   RequestEmailChangeDto,
   ResetPasswordDto,
+  SetupPasswordDto,
 } from "./dto/auth.dto";
 
 // Token expiry durations
@@ -707,6 +708,43 @@ export class AuthService {
 
     return {
       message: "Password changed successfully. All other sessions have been revoked.",
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Endpoint 12.1: Setup Local Password for OAuth Accounts
+  // ═══════════════════════════════════════════════════════════════════════════
+  async setupPassword(userId: string, dto: SetupPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: "NOT_AUTHENTICATED",
+        message: "User not found.",
+      });
+    }
+
+    if (user.passwordHash) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: "PASSWORD_ALREADY_SET",
+        message: "Password already exists. Please use change-password.",
+      });
+    }
+
+    const passwordHash = await argon2.hash(dto.newPassword);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    return {
+      message: "Local password set successfully.",
+      hasPassword: true,
     };
   }
 

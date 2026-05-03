@@ -272,6 +272,27 @@ export class ChangePasswordDto {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Endpoint 12.1: Setup Local Password (OAuth users)
+// ══════════════════════════════════════════════════════════════════════════════
+export class SetupPasswordDto {
+  @ApiProperty({
+    example: 'NewPassw0rd!',
+    description: 'New local password - min 8 chars, uppercase, lowercase, digit, special char',
+  })
+  @IsString()
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
+  newPassword!: string;
+
+  @ApiProperty({
+    example: 'NewPassw0rd!',
+    description: 'Must match newPassword',
+  })
+  @IsString()
+  @Validate(MatchesFieldConstraint, ['newPassword'])
+  confirmPassword!: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Endpoint 13: Request Email Change
 // ══════════════════════════════════════════════════════════════════════════════
 export class RequestEmailChangeDto {

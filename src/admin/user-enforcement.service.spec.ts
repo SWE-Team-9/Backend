@@ -127,6 +127,25 @@ describe("UserEnforcementService", () => {
       ).rejects.toThrow(UnauthorizedException);
     });
 
+    it("returns PASSWORD_SETUP_REQUIRED for Google/OAuth admin without passwordHash", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser()) // ensureTargetUser
+        .mockResolvedValueOnce(makeAdmin()) // reVerifyAdminRole
+        .mockResolvedValueOnce(makeAdmin({ passwordHash: null })); // verifyAdminPassword
+
+      await expect(
+        service.warnUser(ADMIN_ID, TARGET_ID, {
+          reason: "test",
+          currentPassword: "pw",
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PASSWORD_SETUP_REQUIRED",
+        }),
+      });
+      expect(mockPrisma.moderationAction.create).not.toHaveBeenCalled();
+    });
+
     it("creates ModerationAction on successful warn", async () => {
       mockPrisma.user.findUnique
         .mockResolvedValueOnce(makeTargetUser()) // ensureTargetUser
@@ -155,6 +174,28 @@ describe("UserEnforcementService", () => {
         }),
       );
       expect(result.action_type).toBe("WARN_USER");
+    });
+
+    it("allows admin confirmation after password is set", async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(makeTargetUser())
+        .mockResolvedValueOnce(makeAdmin())
+        .mockResolvedValueOnce(makeAdmin({ passwordHash: "new-hash" }));
+      (argon2.verify as jest.Mock).mockResolvedValueOnce(true);
+      mockPrisma.moderationAction.create.mockResolvedValueOnce({
+        id: "action-setup-then-confirm",
+        actionType: "WARN_USER",
+        createdAt: new Date(),
+      });
+      mockNotificationsService.createNotification.mockResolvedValueOnce(undefined);
+
+      const result = await service.warnUser(ADMIN_ID, TARGET_ID, {
+        reason: "test",
+        currentPassword: "new-password",
+      });
+
+      expect(result.action_type).toBe("WARN_USER");
+      expect(argon2.verify).toHaveBeenCalledTimes(1);
     });
 
     it("sends notification to target user after warn", async () => {

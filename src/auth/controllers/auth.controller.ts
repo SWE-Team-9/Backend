@@ -46,6 +46,7 @@ import {
   ResendVerificationDto,
   ResetPasswordDto,
   RevokeSessionParamsDto,
+  SetupPasswordDto,
   VerifyEmailDto,
 } from '../dto/auth.dto';
 
@@ -640,6 +641,40 @@ export class AuthController {
       if (session) currentSessionId = session.id;
     }
     return this.authService.changePassword(userId, currentSessionId, dto);
+  }
+
+  // ─── Endpoint 12.1: POST /auth/password/setup ─────────────────────────
+  @ApiOperation({
+    summary: 'Set local password for OAuth account',
+    description:
+      'Allows an authenticated user with no existing passwordHash (e.g. Google OAuth account) ' +
+      'to set a local password once. If a password already exists, use /auth/change-password.',
+  })
+  @ApiCookieAuth('access_token')
+  @ApiBody({ type: SetupPasswordDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Local password set successfully.',
+    schema: {
+      example: {
+        message: 'Local password set successfully.',
+        hasPassword: true,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Not authenticated.',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Password already exists. Use /auth/change-password.',
+  })
+  @ThrottlePolicy(5, 60_000)
+  @Post('password/setup')
+  @HttpCode(HttpStatus.OK)
+  async setupPassword(@CurrentUser('userId') userId: string, @Body() dto: SetupPasswordDto) {
+    return this.authService.setupPassword(userId, dto);
   }
 
   // ─── Endpoint 13: POST /auth/email/change ─────────────────────────────
