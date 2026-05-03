@@ -668,32 +668,11 @@ export class AuthService {
   // ═══════════════════════════════════════════════════════════════════════════
   async changePassword(userId: string, currentSessionId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
+    if (!user?.passwordHash) {
       throw new UnauthorizedException({
         statusCode: 401,
         error: "NOT_AUTHENTICATED",
         message: "User not found.",
-      });
-    }
-
-    if (!user.passwordHash) {
-      const passwordHash = await argon2.hash(dto.new_password);
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { passwordHash },
-      });
-
-      return {
-        message: "Password set successfully.",
-        hasPassword: true,
-      };
-    }
-
-    if (!dto.current_password) {
-      throw new BadRequestException({
-        statusCode: 400,
-        error: "CURRENT_PASSWORD_REQUIRED",
-        message: "Current password is required.",
       });
     }
 
@@ -728,7 +707,6 @@ export class AuthService {
 
     return {
       message: "Password changed successfully. All other sessions have been revoked.",
-      hasPassword: true,
     };
   }
 
@@ -912,8 +890,6 @@ export class AuthService {
       system_role: user.systemRole,
       account_status: user.accountStatus,
       is_verified: user.isVerified,
-      hasPassword: Boolean(user.passwordHash),
-      has_password: Boolean(user.passwordHash),
       subscription_tier: activeSub?.plan?.code ?? "FREE",
       created_at: user.createdAt,
     };

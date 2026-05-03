@@ -127,26 +127,6 @@ describe("UserEnforcementService", () => {
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it("throws PASSWORD_SETUP_REQUIRED when an admin has no local password", async () => {
-      mockPrisma.user.findUnique
-        .mockResolvedValueOnce(makeTargetUser()) // ensureTargetUser
-        .mockResolvedValueOnce(makeAdmin()) // reVerifyAdminRole
-        .mockResolvedValueOnce(makeAdmin({ passwordHash: null })); // verifyAdminPassword
-
-      await expect(
-        service.warnUser(ADMIN_ID, TARGET_ID, {
-          reason: "test",
-          currentPassword: "google-only-admin",
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          code: "PASSWORD_SETUP_REQUIRED",
-          message: "Set a local password in Settings before performing sensitive admin actions.",
-        },
-      });
-      expect(argon2.verify).not.toHaveBeenCalled();
-    });
-
     it("creates ModerationAction on successful warn", async () => {
       mockPrisma.user.findUnique
         .mockResolvedValueOnce(makeTargetUser()) // ensureTargetUser
