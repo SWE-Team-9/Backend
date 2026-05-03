@@ -120,8 +120,8 @@ export class UserEnforcementService {
     });
     if (!admin?.passwordHash) {
       throw new UnauthorizedException({
-        code: "INCORRECT_PASSWORD",
-        message: "Cannot verify password.",
+        code: "PASSWORD_SETUP_REQUIRED",
+        message: "Set a local password in Settings before performing sensitive admin actions.",
       });
     }
     const valid = await argon2.verify(admin.passwordHash, password);

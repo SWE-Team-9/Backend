@@ -246,13 +246,13 @@ export class ResetPasswordDto {
 // Endpoint 12: Change Password
 // ══════════════════════════════════════════════════════════════════════════════
 export class ChangePasswordDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'OldPassw0rd!',
-    description: 'Current account password for verification',
+    description: 'Current account password for verification. Omit only when setting the first local password for an OAuth account.',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Current password is required.' })
-  current_password!: string;
+  current_password?: string;
 
   @ApiProperty({
     example: 'NewPassw0rd!',
