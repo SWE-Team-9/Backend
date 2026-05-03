@@ -104,6 +104,31 @@ describe('detectMockIntent', () => {
     expect(result.parameters.limit).toBe(5);
   });
 
+  it('parses profile playlist requests without treating profile as a genre', () => {
+    const explicit = detectMockIntent('create a playlist with profile mohan tracks');
+    expect(explicit.intent).toBe('create_playlist_from_profile');
+    expect(explicit.parameters).toEqual(
+      expect.objectContaining({ profileName: 'mohan', limit: 10, playlistName: 'Mohan Mix' }),
+    );
+
+    const implicit = detectMockIntent('create a playlist with mohan tracks');
+    expect(implicit.intent).toBe('create_playlist_from_profile');
+    expect(implicit.parameters.profileName).toBe('mohan');
+    expect(implicit.parameters.genre).toBeUndefined();
+  });
+
+  it('parses profile track searches and artist best requests', () => {
+    const search = detectMockIntent('find me mohan tracks');
+    expect(search.intent).toBe('search_tracks');
+    expect(search.parameters).toEqual(expect.objectContaining({ profileName: 'mohan', limit: 10 }));
+
+    const best = detectMockIntent('best track by user maryam');
+    expect(best.intent).toBe('search_tracks');
+    expect(best.parameters).toEqual(
+      expect.objectContaining({ profileName: 'maryam', mode: 'artist_best', limit: 1 }),
+    );
+  });
+
   it('detects plain playlist creation', () => {
     const result = detectMockIntent('create playlist called Gym Beats');
     expect(result.intent).toBe('create_playlist');
@@ -434,6 +459,65 @@ describe('n8n provider helpers', () => {
     expect(result.intent).toBe('create_playlist_from_genre');
     expect(result.parameters).toEqual(expect.objectContaining({ genre: 'hip hop', limit: 7 }));
     expect(result.needsConfirmation).toBe(false);
+  });
+
+  it('validates Gemini-style structured output for profile playlist intent', async () => {
+    const { validateStructuredAiResponse } = await import('./providers/n8n-ai.provider');
+
+    const result = validateStructuredAiResponse(
+      {
+        responseType: 'action',
+        intent: 'create_playlist_from_profile',
+        parameters: { profileName: 'mohan', limit: 10, playlistName: 'Mohan Mix' },
+        confidence: 0.94,
+        needsConfirmation: false,
+      },
+      'create a playlist with profile mohan tracks',
+      {},
+    );
+
+    expect(result.responseType).toBe('action');
+    expect(result.intent).toBe('create_playlist_from_profile');
+    expect(result.parameters.profileName).toBe('mohan');
+  });
+
+  it('Gemini provider posts strict JSON parsing prompt and validates response', async () => {
+    const { callGeminiStructuredParser } = await import('./providers/gemini-ai.provider');
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    responseType: 'action',
+                    intent: 'search_tracks',
+                    parameters: { profileName: 'mohan', limit: 10 },
+                    confidence: 0.95,
+                    needsConfirmation: false,
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    (global as any).fetch = mockFetch;
+
+    const result = await callGeminiStructuredParser('test-key', {
+      message: 'find me mohan tracks',
+      context: {},
+      user: { id: 'user-1' },
+      allowedActions: ['search_tracks'],
+      schemaVersion: 1,
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('generateContent'), expect.any(Object));
+    expect(result.intent).toBe('search_tracks');
+    expect(result.parameters.profileName).toBe('mohan');
   });
 
   it('n8n validation uses pending context for short follow-up replies', async () => {

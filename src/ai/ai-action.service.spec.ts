@@ -188,7 +188,23 @@ describe('AiActionService', () => {
     expect(result.actionsTaken).toContain('answered FAQ');
   });
 
-  it('searches tracks through DiscoveryService', async () => {
+  it('searches tracks through public indexed fields', async () => {
+    prisma.track.findMany.mockResolvedValue([
+      {
+        id: TRACK_ID,
+        title: 'Sha3by Track',
+        slug: 'sha3by-track',
+        coverArtUrl: null,
+        durationMs: 180000,
+        primaryGenre: { slug: 'sha3by', name: 'Sha3by' },
+        uploader: {
+          id: RECEIVER_ID,
+          profile: { displayName: 'Artist', handle: 'artist', avatarUrl: null },
+        },
+        _count: { likes: 2, reposts: 1, playEvents: 5 },
+      },
+    ]);
+
     const result = await service.execute(
       USER_ID,
       {
@@ -200,8 +216,42 @@ describe('AiActionService', () => {
       'mock',
     );
 
-    expect(discovery.search).toHaveBeenCalledWith('sha3by', 'tracks', 1, 8);
+    expect(discovery.search).not.toHaveBeenCalled();
+    expect(prisma.track.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              deletedAt: null,
+              visibility: 'PUBLIC',
+              status: 'FINISHED',
+              moderationState: 'VISIBLE',
+              hiddenByPlanLimit: false,
+            }),
+          ]),
+        }),
+      }),
+    );
     expect(result.actionsTaken[0]).toContain('searched');
+  });
+
+  it('does not execute n8n refusal responses', async () => {
+    const result = await service.execute(
+      USER_ID,
+      {
+        responseType: 'refusal',
+        intent: 'create_playlist',
+        parameters: { playlistName: 'Bad Idea' },
+        replyDraft: 'I cannot help with that.',
+        confidence: 1,
+        needsConfirmation: false,
+      },
+      'n8n',
+    );
+
+    expect(result.intent).toBe('unknown');
+    expect(result.actionsTaken).toEqual([]);
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
   });
 
   it('creates an empty playlist for create_playlist', async () => {
@@ -379,6 +429,78 @@ describe('AiActionService', () => {
     expect(result.actionsTaken).toContain('created playlist');
   });
 
+  it('creates playlist from profile using uploader handle/displayName', async () => {
+    prisma.track.findMany.mockResolvedValue([
+      {
+        id: TRACK_ID,
+        title: 'Mohan Track',
+        slug: 'mohan-track',
+        coverArtUrl: null,
+        durationMs: 180000,
+        primaryGenre: { slug: 'pop', name: 'Pop' },
+        uploader: {
+          id: RECEIVER_ID,
+          profile: { displayName: 'Mohan', handle: 'mohan', avatarUrl: null },
+        },
+        _count: { likes: 7, reposts: 2, playEvents: 40 },
+      },
+    ]);
+
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_profile',
+        parameters: { profileName: 'mohan', limit: 10, playlistName: 'Mohan Mix' },
+        confidence: 0.95,
+        needsConfirmation: false,
+      },
+      'gemini',
+    );
+
+    expect(prisma.track.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              uploader: expect.objectContaining({
+                is: expect.objectContaining({
+                  profile: expect.objectContaining({
+                    is: expect.objectContaining({ OR: expect.any(Array) }),
+                  }),
+                }),
+              }),
+            }),
+          ]),
+        }),
+      }),
+    );
+    expect(prisma.playlist.create).toHaveBeenCalled();
+    expect(result.intent).toBe('create_playlist_from_profile');
+    expect(prisma.playlist.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ title: 'Mohan Mix' }),
+      }),
+    );
+  });
+
+  it('does not create empty profile playlist when no matching public tracks exist', async () => {
+    prisma.track.findMany.mockResolvedValue([]);
+
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_profile',
+        parameters: { profileName: 'mohan', limit: 10, playlistName: 'Mohan Mix' },
+        confidence: 0.95,
+        needsConfirmation: false,
+      },
+      'gemini',
+    );
+
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
+    expect(result.reply).toContain('did not create');
+  });
+
   it('does not merge distinct genre aliases in DB lookup terms', async () => {
     prisma.genre.findMany.mockResolvedValue([]);
     prisma.track.findMany.mockResolvedValue([]);
@@ -552,7 +674,7 @@ describe('AiActionService', () => {
   });
 
   it('does not claim success when a service fails', async () => {
-    discovery.search.mockRejectedValueOnce(new Error('Search failed'));
+    prisma.track.findMany.mockRejectedValueOnce(new Error('Search failed'));
 
     const result = await service.execute(
       USER_ID,

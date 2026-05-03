@@ -7,6 +7,7 @@ export const ALLOWED_INTENTS = [
   'list_my_playlists',
   'add_track_to_playlist',
   'create_playlist_from_genre',
+  'create_playlist_from_profile',
   'create_playlist_from_artist_genre',
   'share_track_message',
   'queue_track_or_play_next',
@@ -19,6 +20,7 @@ export const ALLOWED_INTENTS = [
 export type AllowedIntent = (typeof ALLOWED_INTENTS)[number];
 
 export interface AiIntentResult {
+  responseType?: 'answer' | 'action' | 'clarification' | 'refusal';
   intent: AllowedIntent;
   parameters: Record<string, unknown>;
   replyDraft?: string;
@@ -29,7 +31,7 @@ export interface AiIntentResult {
 
 export interface AiResponse {
   reply: string;
-  provider: 'mock' | 'n8n' | 'openai' | 'ollama';
+  provider: 'mock' | 'n8n' | 'gemini' | 'openai' | 'ollama';
   intent: string;
   actionsTaken: string[];
   data?: unknown;
