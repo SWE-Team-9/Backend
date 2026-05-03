@@ -70,6 +70,9 @@ export class PlaylistsController {
   constructor(private readonly playlistsService: PlaylistsService) {}
 
   // Playlist lifecycle endpoints are grouped by create, public read, owner edit, and track actions.
+  /**
+   * Creates a new playlist for the authenticated user. Initial tracks are added and validated before creation.
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   // Validate the create payload before ownership and track existence checks run in the service.
@@ -116,6 +119,10 @@ export class PlaylistsController {
     return this.playlistsService.create(userId, dto);
   }
 
+  /**
+   * Returns top 10 global public playlists and groups them by genre (for authenticated or public access).
+   * Public endpoint.
+   */
   @Get("top")
   @Public()
   @ApiOperation({
@@ -173,6 +180,9 @@ export class PlaylistsController {
     return this.playlistsService.getTopPlaylists(userId);
   }
 
+  /**
+   * Returns paginated playlists created by the authenticated user.
+   */
   @Get("me")
   @ApiOperation({
     summary: 'Get my playlists',
@@ -212,6 +222,9 @@ export class PlaylistsController {
     return this.playlistsService.getMyPlaylists(userId, query);
   }
 
+  /**
+   * Returns paginated playlists liked by the authenticated user.
+   */
   @Get('me/liked')
   @ApiOperation({
     summary: 'Get liked playlists',
@@ -232,6 +245,10 @@ export class PlaylistsController {
     return this.playlistsService.getMeLikedPlaylists(userId, query);
   }
 
+  /**
+   * Grants access to a private/secret playlist via an unguessable tokenized link.
+   * No authentication required for secret token resolution.
+   */
   @Get('secret/:secretToken')
   @UsePipes(
     new ValidationPipe({
@@ -292,6 +309,9 @@ export class PlaylistsController {
     return this.playlistsService.resolveSecret(params.secretToken);
   }
 
+  /**
+   * Returns the most recently played playlists for the authenticated user, ordered by last play time.
+   */
   @Get('recent')
   @ApiOperation({
     summary: 'Get recently played playlists',
@@ -328,6 +348,9 @@ export class PlaylistsController {
     return this.playlistsService.getRecentPlaylists(userId, query.limit);
   }
 
+  /**
+   * Adds a playlist to the authenticated user's liked playlists. Returns 409 Conflict if already liked.
+   */
   @Post(':playlistId/like')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -355,6 +378,9 @@ export class PlaylistsController {
     return this.playlistsService.likePlaylist(userId, playlistId);
   }
 
+  /**
+   * Removes a playlist from the authenticated user's liked playlists.
+   */
   @Delete(':playlistId/like')
   @ApiOperation({
     summary: 'Unlike playlist',
@@ -380,6 +406,9 @@ export class PlaylistsController {
     return this.playlistsService.unlikePlaylist(userId, playlistId);
   }
 
+  /**
+   * Records a playback event for the playlist. The playlist will appear in the user's recent playlists.
+   */
   @Post(':playlistId/play')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -410,6 +439,9 @@ export class PlaylistsController {
     return this.playlistsService.play(userId, playlistId);
   }
 
+  /**
+   * Returns an iframe embed code for externally sharing a playlist. Owner only.
+   */
   @Get(':playlistId/embed')
   @UsePipes(
     new ValidationPipe({
@@ -453,6 +485,9 @@ export class PlaylistsController {
     return this.playlistsService.getEmbedCode(userId, playlistId, query);
   }
 
+  /**
+   * Returns owner-only editable playlist metadata for the edit screen.
+   */
   @Get(':playlistId/edit')
   @UsePipes(
     new ValidationPipe({
@@ -503,6 +538,9 @@ export class PlaylistsController {
     return this.playlistsService.getEditDetails(userId, playlistId);
   }
 
+  /**
+   * Uploads a new playlist cover image to shared storage and saves the public URL. Owner only.
+   */
   @Post(':playlistId/cover')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
@@ -572,6 +610,9 @@ export class PlaylistsController {
     return this.playlistsService.uploadCover(userId, playlistId, file);
   }
 
+  /**
+   * Adds a track to an existing playlist. Returns 409 Conflict if track already exists. Owner only.
+   */
   @Post(':playlistId/tracks')
   @UsePipes(
     new ValidationPipe({
@@ -629,6 +670,9 @@ export class PlaylistsController {
     return this.playlistsService.addTrack(userId, playlistId, dto);
   }
 
+  /**
+   * Removes a track from a playlist and reindexes remaining track positions. Owner only.
+   */
   @Delete(':playlistId/tracks/:trackId')
   @UsePipes(
     new ValidationPipe({
@@ -674,6 +718,9 @@ export class PlaylistsController {
     return this.playlistsService.removeTrack(userId, playlistId, trackId);
   }
 
+  /**
+   * Reorders tracks inside a playlist atomically. All provided track IDs must match existing tracks. Owner only.
+   */
   @Patch(':playlistId/reorder')
   @UsePipes(
     new ValidationPipe({
@@ -730,6 +777,10 @@ export class PlaylistsController {
     return this.playlistsService.reorderTracks(userId, playlistId, dto);
   }
 
+  /**
+   * Returns playlist details and its tracks. Visibility enforced: SECRET/private playlists only visible to owner.
+   * secretToken only returned to owner.
+   */
   @Get(':playlistId')
   @UsePipes(
     new ValidationPipe({
@@ -796,6 +847,9 @@ export class PlaylistsController {
     return this.playlistsService.getDetails(playlistId, userId, query);
   }
 
+  /**
+   * Updates playlist title, description, visibility, genre, or release date. Owner only.
+   */
   @Patch(':playlistId')
   @UsePipes(
     new ValidationPipe({
@@ -869,6 +923,9 @@ export class PlaylistsController {
     return this.playlistsService.update(userId, playlistId, dto);
   }
 
+  /**
+   * Permanently deletes a playlist (soft delete). Owner only.
+   */
   @Delete(':playlistId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UsePipes(

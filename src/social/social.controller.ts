@@ -12,6 +12,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 export class SocialController {
   constructor(private readonly socialService: SocialService) {}
 
+  /**
+   * Allows the authenticated user to follow another user. Prevents self-follows and enforces block rules.
+   */
   @ApiOperation({
     summary: 'Follow user',
     description: 'Allows the authenticated user to follow another user.',
@@ -51,6 +54,9 @@ export class SocialController {
     return this.socialService.followUser(followerId, params.userId);
   }
 
+  /**
+   * Removes a follow relationship between the authenticated user and the target user.
+   */
   @ApiOperation({
     summary: 'Unfollow user',
     description:
@@ -88,6 +94,9 @@ export class SocialController {
     return this.socialService.unfollowUser(followerId, params.userId);
   }
 
+  /**
+   * Returns paginated list of users who follow a specific user.
+   */
   @ApiOperation({
     summary: 'Get followers list',
     description: 'Returns the list of users who follow a specific user.',
@@ -120,6 +129,9 @@ export class SocialController {
     return this.socialService.getFollowers(params.userId, query);
   }
 
+  /**
+   * Returns paginated list of users followed by a specific user.
+   */
   @ApiOperation({
     summary: 'Get following list',
     description: 'Returns the list of users followed by a specific user.',
@@ -152,6 +164,9 @@ export class SocialController {
     return this.socialService.getFollowing(params.userId, query);
   }
 
+  /**
+   * Returns suggested users that the authenticated user may want to follow, excluding already-followed and blocked users.
+   */
   @ApiOperation({
     summary: 'Suggested users',
     description: 'Returns suggested users that the authenticated user may want to follow.',
@@ -188,6 +203,9 @@ export class SocialController {
     return this.socialService.getSuggestions(userId, query);
   }
 
+  /**
+   * Blocks a user and prevents direct social interaction. Prevents self-blocks and auto-unfollows if currently following.
+   */
   @ApiOperation({
     summary: 'Block user',
     description: 'Blocks a specific user and prevents direct social interaction.',
@@ -223,6 +241,9 @@ export class SocialController {
     return this.socialService.blockUser(blockerId, params.userId);
   }
 
+  /**
+   * Removes a user from the authenticated user's blocked list.
+   */
   @ApiOperation({
     summary: 'Unblock user',
     description: "Removes a user from the authenticated user's blocked list.",
@@ -258,6 +279,9 @@ export class SocialController {
     return this.socialService.unblockUser(blockerId, params.userId);
   }
 
+  /**
+   * Returns paginated list of users blocked by the authenticated user.
+   */
   @ApiOperation({
     summary: 'Get blocked users',
     description: "Returns the authenticated user's blocked users list.",

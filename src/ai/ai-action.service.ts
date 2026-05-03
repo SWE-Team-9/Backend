@@ -15,7 +15,7 @@ import { PlayerService } from '../player/player.service';
 import { PlaylistsService } from '../playlists/playlists.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-type AiProvider = 'mock' | 'n8n' | 'openai' | 'ollama';
+type AiProvider = 'mock' | 'n8n' | 'gemini' | 'openai' | 'ollama';
 
 interface TrackCard {
   trackId: string;
@@ -63,13 +63,39 @@ export class AiActionService {
       };
     }
 
+    if (intentResult.responseType === 'refusal') {
+      return {
+        reply:
+          intentResult.replyDraft ||
+          'I cannot help with unsafe account, admin, payment, password, or security actions.',
+        provider,
+        intent: 'unknown',
+        actionsTaken: [],
+      };
+    }
+
+    if (intentResult.responseType === 'clarification') {
+      return {
+        reply:
+          clarifyingQuestion ||
+          intentResult.replyDraft ||
+          'Could you clarify what you would like me to do?',
+        provider,
+        intent: 'clarification_needed',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
     if (intent === 'clarification_needed' || needsConfirmation) {
+      const pendingContext = this.pendingContextFromIntent(intentResult);
       return {
         reply: clarifyingQuestion ?? 'Could you clarify what you would like me to do?',
         provider,
         intent,
         actionsTaken: [],
         needsConfirmation: true,
+        pendingContext,
       };
     }
 
@@ -99,6 +125,9 @@ export class AiActionService {
         case 'create_playlist_from_genre':
           return await this.execCreatePlaylistFromGenre(userId, intentResult.parameters, provider);
 
+        case 'create_playlist_from_profile':
+          return await this.execCreatePlaylistFromProfile(userId, intentResult.parameters, provider);
+
         case 'create_playlist_from_artist_genre':
           return await this.execCreatePlaylistFromArtistGenre(userId, intentResult.parameters, provider);
 
@@ -110,6 +139,15 @@ export class AiActionService {
 
         case 'profile_or_subscription_help':
           return await this.execProfileHelp(userId, provider);
+
+        case 'cancel_pending_action':
+          return {
+            reply: 'Okay, I cleared that pending action.',
+            provider,
+            intent,
+            actionsTaken: [],
+            pendingContext: null,
+          };
 
         default:
           return this.unknownResponse(provider);
@@ -208,31 +246,59 @@ export class AiActionService {
     provider: AiProvider,
   ): Promise<AiResponse> {
     const artist = this.cleanString(params.artist);
+    const profileName = this.cleanString(params.profileName);
+    const uploaderName = this.cleanString(params.uploaderName);
+    const genre = this.cleanString(params.genre);
     const mode = this.cleanString(params.mode);
     const rawQuery = this.cleanString(params.query);
-    const limit = this.safeLimit(params.limit, artist && mode === 'artist_best' ? 1 : 8);
+    const targetProfile = profileName || artist || uploaderName;
+    const limit = this.safeLimit(params.limit, targetProfile ? 10 : 8);
 
-    if (artist && mode === 'artist_best') {
-      const tracks = await this.findPublicTracks({ artist, limit });
+    if (targetProfile) {
+      const tracks = await this.findPublicTracks({ artist: targetProfile, limit });
 
       if (tracks.length === 0) {
         return {
-          reply: `No public finished tracks were found for artist/user "${artist}".`,
+          reply: `No public finished tracks were found for "${targetProfile}".`,
           provider,
           intent: 'search_tracks',
-          actionsTaken: [`searched top tracks by artist/user "${artist}"`],
-          data: { artist, tracks: [] },
+          actionsTaken: [`searched public tracks by profile "${targetProfile}"`],
+          data: { profileName: targetProfile, tracks: [] },
           suggestions: ['Show trending tracks', 'Try another artist name'],
         };
       }
 
       return {
-        reply: `Found ${tracks.length === 1 ? 'the top track' : `${tracks.length} tracks`} by "${artist}".`,
+        reply: `Found ${tracks.length === 1 && mode === 'artist_best' ? 'the top track' : `${tracks.length} tracks`} by "${targetProfile}".`,
         provider,
         intent: 'search_tracks',
-        actionsTaken: [`searched top tracks by artist/user "${artist}"`],
-        data: { artist, tracks },
+        actionsTaken: [`searched public tracks by profile "${targetProfile}"`],
+        data: { profileName: targetProfile, tracks },
         suggestions: ['Show trending tracks', 'Search for rap tracks'],
+      };
+    }
+
+    if (genre) {
+      const tracks = await this.findPublicTracksByGenre({ genre, limit });
+
+      if (tracks.length === 0) {
+        return {
+          reply: `I could not find public finished tracks for "${genre}".`,
+          provider,
+          intent: 'search_tracks',
+          actionsTaken: [`searched genre "${genre}"`],
+          data: { genre, tracks: [] },
+          suggestions: ['Show trending tracks', 'Try another genre'],
+        };
+      }
+
+      return {
+        reply: `Found ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}.`,
+        provider,
+        intent: 'search_tracks',
+        actionsTaken: [`searched genre "${genre}"`],
+        data: { genre, tracks },
+        suggestions: [`Create a ${genre} playlist`, 'Show trending tracks'],
       };
     }
 
@@ -248,9 +314,7 @@ export class AiActionService {
       };
     }
 
-    const searchResult = await this.discovery.search(query, 'tracks', 1, limit);
-    const rawTracks: any[] = (searchResult as any)?.data?.tracks ?? [];
-    const tracks = this.normalizeDiscoveryTracks(rawTracks);
+    const tracks = await this.findPublicTracks({ query, limit });
 
     if (tracks.length === 0) {
       return {
@@ -322,8 +386,19 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = this.cleanString(params.genre) || 'mixed';
+    const genre = this.cleanString(params.genre);
     const limit = this.safeLimit(params.limit, 5);
+
+    if (!genre) {
+      return {
+        reply: 'Which genre should I search for?',
+        provider,
+        intent: 'recommend_by_genre',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
     const tracks = await this.findPublicTracksByGenre({ genre, limit });
 
     if (tracks.length === 0) {
@@ -462,26 +537,23 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = this.cleanString(params.genre) || 'mixed';
+    const genre = this.cleanString(params.genre);
     const limit = this.safeLimit(params.limit, 10);
     const allRequested = Boolean(params.allRequested);
     const playlistName =
-      this.cleanString(params.playlistName) || `${this.titleCase(genre)} Mix`;
+      this.cleanString(params.playlistName) || `${this.titleCase(genre ?? 'Genre')} Mix`;
 
-    const genreResult = await this.discovery.getTrendingTracksByGenre(genre, limit);
-    const rawTracks: any[] = (genreResult as any)?.tracks ?? [];
-    const tracks: TrackCard[] = rawTracks.map((t: any) => ({
-      trackId: t.trackId ?? t.id,
-      title: t.title,
-      slug: t.slug ?? null,
-      coverArtUrl: t.coverArtUrl ?? null,
-      likesCount: t.likesCount ?? 0,
-      artist: {
-        id: t.artist?.id ?? t.uploaderId,
-        displayName: t.artist?.displayName ?? null,
-        handle: t.artist?.handle ?? null,
-      },
-    }));
+    if (!genre) {
+      return {
+        reply: 'Which genre should I use for the playlist?',
+        provider,
+        intent: 'create_playlist_from_genre',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
+    const tracks = await this.findPublicTracksByGenre({ genre, limit });
 
     if (tracks.length === 0) {
       return {
@@ -501,7 +573,10 @@ export class AiActionService {
     });
 
     return {
-      reply: `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}${allRequested ? `, capped at ${tracks.length}.` : '.'}`,
+      reply:
+        tracks.length < limit
+          ? `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}. I found fewer public finished tracks than the ${limit} requested.`
+          : `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}${allRequested ? `, capped at ${tracks.length}.` : '.'}`,
       provider,
       intent: 'create_playlist_from_genre',
       actionsTaken: [
@@ -523,12 +598,25 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = this.cleanString(params.genre) || 'mixed';
-    const artist = this.cleanString(params.artist);
+    const genre = this.cleanString(params.genre);
+    const artist =
+      this.cleanString(params.artist) ||
+      this.cleanString(params.profileName) ||
+      this.cleanString(params.uploaderName);
     const limit = this.safeLimit(params.limit, 10);
     const playlistName =
       this.cleanString(params.playlistName) ||
-      `${this.titleCase(genre)} by ${artist ?? 'Artist'}`;
+      `${this.titleCase(genre ?? 'Genre')} by ${artist ?? 'Artist'}`;
+
+    if (!genre) {
+      return {
+        reply: 'Which genre should I use?',
+        provider,
+        intent: 'create_playlist_from_artist_genre',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
 
     if (!artist) {
       return {
@@ -755,7 +843,7 @@ export class AiActionService {
     ];
 
     const searchTerms = options.genre
-      ? this.genreSearchTerms(options.genre)
+      ? await this.genreSearchTerms(options.genre)
       : options.query
         ? [this.normalizeSearchTerm(options.query)]
         : [];
@@ -817,6 +905,30 @@ export class AiActionService {
                       },
                     },
                   ],
+                },
+              },
+            },
+          } as Prisma.TrackWhereInput,
+          {
+            uploader: {
+              is: {
+                profile: {
+                  is: {
+                    OR: [
+                      {
+                        handle: {
+                          contains: term,
+                          mode: 'insensitive',
+                        },
+                      },
+                      {
+                        displayName: {
+                          contains: term,
+                          mode: 'insensitive',
+                        },
+                      },
+                    ],
+                  },
                 },
               },
             },
@@ -901,7 +1013,7 @@ export class AiActionService {
       },
     });
 
-    return rows.map((track) => ({
+    return (rows ?? []).map((track) => ({
       trackId: track.id,
       title: track.title,
       slug: track.slug,
@@ -1118,7 +1230,7 @@ export class AiActionService {
   }
 
   private async resolveGenreId(slug: string): Promise<number | null> {
-    const terms = this.genreSearchTerms(slug);
+    const terms = await this.genreSearchTerms(slug);
 
     const genre = await this.prisma.genre.findFirst({
       where: {
@@ -1233,7 +1345,7 @@ export class AiActionService {
       .trim();
   }
 
-  private genreSearchTerms(value: string): string[] {
+  private async genreSearchTerms(value: string): Promise<string[]> {
     const normalized = this.normalizeSearchTerm(value);
 
     const aliases: Record<string, string[]> = {
@@ -1246,9 +1358,12 @@ export class AiActionService {
       مهرجانات: ['mahraganat', 'mahragan', 'مهرجانات'],
       mahragan: ['mahraganat', 'mahragan', 'مهرجانات'],
       rap: ['rap', 'rab ', 'راب'],
-      'hip-hop': ['rap', 'hip-hop', 'hip hop', 'hiphop'],
-      'hip hop': ['rap', 'hip-hop', 'hip hop', 'hiphop'],
-      hiphop: ['rap', 'hip-hop', 'hip hop', 'hiphop'],
+      'hip-hop': ['hip-hop', 'hip hop', 'hiphop'],
+      'hip hop': ['hip-hop', 'hip hop', 'hiphop'],
+      hiphop: ['hip-hop', 'hip hop', 'hiphop'],
+      rnb: ['r-b-soul', 'r&b', 'rnb', 'soul'],
+      'r&b': ['r-b-soul', 'r&b', 'rnb', 'soul'],
+      'r b': ['r-b-soul', 'r&b', 'rnb', 'soul'],
 
       quran: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
       koran: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
@@ -1257,7 +1372,130 @@ export class AiActionService {
       قران: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
     };
 
-    return Array.from(new Set([normalized, ...(aliases[normalized] ?? [])])).filter(Boolean);
+    for (const key of ['sha3by', 'shaabi', 'shaaby', 'sh3by']) {
+      aliases[key] = [
+        ...(aliases[key] ?? []),
+        'mahraganat',
+        'mahragan',
+        'Ù…Ù‡Ø±Ø¬Ø§Ù†Ø§Øª',
+      ];
+    }
+    aliases.rap = [...(aliases.rap ?? []), 'hip-hop', 'hip hop', 'hiphop'];
+
+    const aliasTerms = [
+      ...(aliases[normalized] ?? []),
+      ...(normalized === 'شعبي' ? ['sha3by', 'shaabi', 'shaaby', 'sh3by'] : []),
+      ...(normalized === 'مهرجانات' ? ['mahraganat', 'mahragan'] : []),
+      ...(normalized === 'راب' ? ['rap'] : []),
+      ...(normalized === 'قرآن' || normalized === 'قران'
+        ? ['quran', 'koran', 'quranic', 'tilawa', 'recitation']
+        : []),
+      ...(normalized === 'tilawa' || normalized === 'recitation'
+        ? ['quran', 'koran', 'quranic', 'قرآن', 'قران']
+        : []),
+    ];
+
+    const localTerms = Array.from(
+      new Set([normalized, ...this.genreTermVariants(normalized), ...aliasTerms]),
+    ).filter(Boolean);
+    const dbGenres = await this.prisma.genre.findMany({
+      where: {
+        OR: localTerms.flatMap((term) => [
+          { slug: { contains: term, mode: 'insensitive' as const } },
+          { name: { contains: term, mode: 'insensitive' as const } },
+        ]),
+      },
+      select: { slug: true, name: true },
+      take: 10,
+    });
+
+    return Array.from(
+      new Set([...localTerms, ...dbGenres.flatMap((genre) => [genre.slug, genre.name])]),
+    ).filter(Boolean);
+  }
+
+  private async execCreatePlaylistFromProfile(
+    userId: string,
+    params: Record<string, unknown>,
+    provider: AiProvider,
+  ): Promise<AiResponse> {
+    const profileName =
+      this.cleanString(params.profileName) ||
+      this.cleanString(params.artist) ||
+      this.cleanString(params.uploaderName);
+    const limit = this.safeLimit(params.limit, 10);
+    const playlistName =
+      this.cleanString(params.playlistName) || `${this.titleCase(profileName ?? 'Profile')} Mix`;
+
+    if (!profileName) {
+      return {
+        reply: 'Which profile should I use for the playlist?',
+        provider,
+        intent: 'create_playlist_from_profile',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
+    const tracks = await this.findPublicTracks({ artist: profileName, limit });
+    if (tracks.length === 0) {
+      return {
+        reply: `I could not find public finished tracks from "${profileName}", so I did not create the playlist.`,
+        provider,
+        intent: 'create_playlist_from_profile',
+        actionsTaken: [`searched profile "${profileName}"`],
+        data: { profileName, tracks: [] },
+        suggestions: ['Try another profile', 'Show trending tracks'],
+      };
+    }
+
+    const playlist = await this.createPlaylistRecord(userId, {
+      title: playlistName,
+      trackIds: tracks.map((track) => track.trackId),
+      genre: null,
+    });
+
+    return {
+      reply:
+        tracks.length < limit
+          ? `Created "${playlist.title}" with ${tracks.length} track${tracks.length === 1 ? '' : 's'} from "${profileName}". I found fewer public finished tracks than the ${limit} requested.`
+          : `Created "${playlist.title}" with ${tracks.length} track${tracks.length === 1 ? '' : 's'} from "${profileName}".`,
+      provider,
+      intent: 'create_playlist_from_profile',
+      actionsTaken: ['searched tracks by profile', 'created playlist', `added ${tracks.length} tracks`],
+      data: { playlist, profileName, tracks },
+      suggestions: ['Open the playlist', `Find more tracks from ${profileName}`],
+    };
+  }
+
+  private pendingContextFromIntent(intentResult: AiIntentResult): Record<string, unknown> | undefined {
+    if (intentResult.intent !== 'create_playlist_from_genre') return undefined;
+
+    const genre = this.cleanString(intentResult.parameters.genre);
+    if (!genre || genre === 'mixed') return undefined;
+
+    return {
+      pendingIntent: 'create_playlist_from_genre',
+      pendingGenre: genre,
+      pendingLimit: this.safeLimit(intentResult.parameters.limit, 10),
+    };
+  }
+
+  private genreTermVariants(term: string): string[] {
+    const normalized = term.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!normalized) return [];
+
+    const variants = [
+      normalized,
+      normalized.replace(/\s+and\s+/g, ' & '),
+      normalized.replace(/\s*&\s*/g, ' and '),
+      normalized.replace(/\s+/g, '-'),
+      normalized.replace(/\s*\/\s*/g, '-'),
+      normalized.replace(/[&/]/g, ' '),
+      normalized.replace(/[&/]/g, '-').replace(/\s+/g, '-'),
+    ];
+
+    return Array.from(new Set(variants.map((value) => value.replace(/\s+/g, ' ').trim())));
   }
 
   private titleCase(value: string): string {

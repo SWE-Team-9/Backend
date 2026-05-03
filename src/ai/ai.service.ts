@@ -5,6 +5,7 @@ import { AiResponse, N8nWebhookPayload, ALLOWED_INTENTS } from './types';
 import { AiActionService } from './ai-action.service';
 import { detectMockIntent } from './providers/mock-ai.provider';
 import { callN8nWebhook, validateN8nResponse } from './providers/n8n-ai.provider';
+import { callGeminiStructuredParser } from './providers/gemini-ai.provider';
 
 @Injectable()
 export class AiService {
@@ -16,12 +17,13 @@ export class AiService {
   ) {}
 
   private get provider(): string {
-    return this.config.get<string>('AI_PROVIDER') ?? process.env.AI_PROVIDER ?? 'mock';
+    return this.config.get<string>('AI_PROVIDER') ?? process.env.AI_PROVIDER ?? (process.env.GEMINI_API_KEY ? 'gemini' : 'mock');
   }
 
   async chat(userId: string, dto: AiChatDto): Promise<AiResponse> {
     const p = this.provider;
     switch (p) {
+      case 'gemini': return this.chatGemini(userId, dto);
       case 'n8n': return this.chatN8n(userId, dto);
       case 'openai': return this.chatOpenAI(userId, dto);
       case 'ollama': return this.chatOllama(userId, dto);
@@ -52,6 +54,26 @@ export class AiService {
     };
     const intentResult = await callN8nWebhook(webhookUrl, secret, payload);
     return this.actionService.execute(userId, intentResult, 'n8n');
+  }
+
+  private async chatGemini(userId: string, dto: AiChatDto): Promise<AiResponse> {
+    const apiKey =
+      this.config.get<string>('GEMINI_API_KEY') ?? process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      this.logger.warn('[AI] GEMINI_API_KEY not set â€” falling back to mock');
+      return this.chatMock(userId, dto);
+    }
+
+    const payload: N8nWebhookPayload = {
+      message: dto.message,
+      context: (dto.context as Record<string, unknown>) ?? {},
+      user: { id: userId },
+      allowedActions: ALLOWED_INTENTS,
+      schemaVersion: 1,
+    };
+    const model = this.config.get<string>('GEMINI_MODEL') ?? process.env.GEMINI_MODEL;
+    const intentResult = await callGeminiStructuredParser(apiKey, payload, model);
+    return this.actionService.execute(userId, intentResult, 'gemini');
   }
 
   private async chatOpenAI(userId: string, dto: AiChatDto): Promise<AiResponse> {

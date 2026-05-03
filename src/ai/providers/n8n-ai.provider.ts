@@ -40,17 +40,32 @@ export async function callN8nWebhook(
 }
 
 export function validateN8nResponse(raw: unknown, message: string, context: Record<string, unknown>): AiIntentResult {
-  if (!raw || typeof raw !== 'object') return fallback(message, context);
+  return validateStructuredAiResponse(raw, message, context);
+}
+
+export function validateStructuredAiResponse(raw: unknown, message: string, context: Record<string, unknown>): AiIntentResult {
+  if (context?.pendingIntent) return fallback(message, context);
+
+  if (!raw || typeof raw !== 'object') return safeClarification();
   const obj = raw as Record<string, unknown>;
 
+  const responseType = obj['responseType'] as string | undefined;
   const intent = obj['intent'] as string | undefined;
   const confidence = typeof obj['confidence'] === 'number' ? obj['confidence'] : 0.5;
   const parameters = (obj['parameters'] && typeof obj['parameters'] === 'object') ? obj['parameters'] as Record<string, unknown> : {};
+  const allowedResponseTypes = ['answer', 'action', 'clarification', 'refusal'];
 
   // Reject unknown or non-whitelisted intents
   if (!intent || !(ALLOWED_INTENTS as readonly string[]).includes(intent)) {
     logger.warn(`[N8N] Unknown intent "${intent}" — falling back to mock`);
-    return fallback(message, context);
+    return {
+      intent: 'unknown',
+      responseType: 'refusal',
+      parameters: {},
+      replyDraft: 'I could not safely understand that request.',
+      confidence: 1,
+      needsConfirmation: false,
+    };
   }
 
   // Low confidence → ask clarification
@@ -58,6 +73,7 @@ export function validateN8nResponse(raw: unknown, message: string, context: Reco
     const question = typeof obj['clarifyingQuestion'] === 'string' ? obj['clarifyingQuestion'] : 'Could you clarify what you\'d like to do?';
     return {
       intent: 'clarification_needed',
+      responseType: 'clarification',
       parameters: {},
       replyDraft: question,
       confidence,
@@ -68,6 +84,9 @@ export function validateN8nResponse(raw: unknown, message: string, context: Reco
 
   return {
     intent: intent as AllowedIntent,
+    responseType: allowedResponseTypes.includes(responseType ?? '')
+      ? responseType as AiIntentResult['responseType']
+      : undefined,
     parameters,
     replyDraft: typeof obj['replyDraft'] === 'string' ? obj['replyDraft'] : undefined,
     confidence,
@@ -78,4 +97,16 @@ export function validateN8nResponse(raw: unknown, message: string, context: Reco
 
 function fallback(message: string, context: Record<string, unknown>): AiIntentResult {
   return detectMockIntent(message, context);
+}
+
+function safeClarification(): AiIntentResult {
+  return {
+    intent: 'clarification_needed',
+    responseType: 'clarification',
+    parameters: {},
+    replyDraft: 'Could you clarify what you would like me to do?',
+    confidence: 0.4,
+    needsConfirmation: true,
+    clarifyingQuestion: 'Could you clarify what you would like me to do?',
+  };
 }
