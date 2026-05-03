@@ -145,5 +145,53 @@ describe("FeedService", () => {
         hasPreviousPage: true,
       });
     });
+
+    it("returns a fallback slug when stored slug is empty", async () => {
+      prisma.userFollow.findMany.mockResolvedValueOnce([{ followingId: "artist-1" }]);
+
+      prisma.$transaction.mockResolvedValueOnce([
+        1,
+        [
+          {
+            id: "track-ar-1",
+            title: "سورة الأخلاص",
+            slug: "",
+            description: "Arabic title",
+            coverArtUrl: null,
+            createdAt: new Date("2026-04-01T00:00:00.000Z"),
+            publishedAt: new Date("2026-04-02T00:00:00.000Z"),
+            uploaderId: "artist-1",
+            status: "FINISHED",
+            visibility: "PUBLIC",
+            durationMs: 180000,
+            waveformData: [],
+            primaryGenreId: 1,
+            primaryGenre: { id: 1, name: "Islamic" },
+            tags: [],
+            uploader: {
+              profile: {
+                handle: "artist",
+                displayName: "Artist",
+                avatarUrl: null,
+              },
+            },
+            _count: {
+              likes: 0,
+              reposts: 0,
+              comments: 0,
+            },
+          },
+        ],
+      ]);
+
+      prisma.like.findMany.mockResolvedValueOnce([]);
+      prisma.repost.findMany.mockResolvedValueOnce([]);
+
+      const result = await service.getFeed("user-1");
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].slug).toBe("سورة-الأخلاص");
+      expect(result.data[0].slug).not.toBe("");
+    });
   });
 });
