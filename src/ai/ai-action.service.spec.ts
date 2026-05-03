@@ -432,6 +432,24 @@ describe('AiActionService', () => {
     expect((result.data as any).tracks).toHaveLength(1);
   });
 
+  it('asks for a genre when recommend_by_genre is called without one', async () => {
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'recommend_by_genre',
+        parameters: {},
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'n8n',
+    );
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.reply).toContain('genre');
+    expect(prisma.track.findMany).not.toHaveBeenCalled();
+    expect(prisma.genre.findMany).not.toHaveBeenCalled();
+  });
+
   it('broadens sha3by search to shaabi and mahraganat tags', async () => {
     prisma.genre.findMany.mockResolvedValue([]);
     prisma.track.findMany.mockResolvedValue([
