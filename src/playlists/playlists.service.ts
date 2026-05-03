@@ -47,6 +47,11 @@ export class PlaylistsService {
     private readonly storageService: StorageService,
   ) {}
 
+
+  /**
+   * Creates a new playlist with optional initial tracks and genre.
+   * For SECRET playlists, auto-generates a unique secret token.
+   */
   async create(userId: string, dto: CreatePlaylistDto): Promise<CreatePlaylistResponseDto> {
     const { visibility } = dto;
     const secretToken =
@@ -203,6 +208,8 @@ export class PlaylistsService {
       return baseSlug;
     }
 
+    // Collision handling: try random 3-byte hex suffix up to 10 times, then fall back to timestamp.
+    // Ensures slug uniqueness even under concurrent playlist creation with same title.
     for (let i = 0; i < 10; i += 1) {
       const suffix = randomBytes(3).toString('hex');
       const candidate = `${baseSlug}-${suffix}`;
@@ -430,6 +437,8 @@ export class PlaylistsService {
       throw this.notFound('PLAYLIST_NOT_FOUND', 'Playlist not found.');
     }
 
+    // Enforce visibility: SECRET and private playlists are only accessible to their owner.
+    // Non-owners can only view PUBLIC playlists. Returns 403 to prevent disclosure of playlist existence.
     if(playlist.visibility !== PlaylistVisibility.PUBLIC && playlist.ownerId !== requesterUserId) {
       throw this.forbidden('PLAYLIST_ACCESS_DENIED', 'You do not have permission to access this playlist.');
     }
@@ -462,6 +471,10 @@ export class PlaylistsService {
     return this.findOne(playlistId, requesterUserId, tracksQuery);
   }
 
+  /**
+   * Returns owner-only editable metadata for a playlist (title, description, slug, genre, etc).
+   * Enforces ownership; non-owners receive 403.
+   */
   async getEditDetails(userId: string, playlistId: string): Promise<GetPlaylistEditResponseDto> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
@@ -810,6 +823,11 @@ export class PlaylistsService {
     };
   }
 
+  /**
+   * Returns top 10 public playlists globally, ranked by likes, and grouped by genre.
+   * Optionally computes isLiked flag if user is authenticated.
+   * Gracefully falls back to empty arrays on non-critical errors to avoid 500s.
+   */
   async getTopPlaylists(userId?: string): Promise<GetTopPlaylistsResponseDto> {
     const noGenreLabel = 'No Genre';
     const formatGenreDisplayName = (genreSlug: string) => {
@@ -950,6 +968,9 @@ export class PlaylistsService {
     }
   }
 
+  /**
+   * Adds a playlist to the user's liked list. Prevents duplicate likes and returns 409 Conflict if already liked.
+   */
   async likePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlistIdResult = await this.prisma.$transaction(async (tx) => {
       const playlist = await tx.playlist.findFirst({
@@ -1042,6 +1063,9 @@ export class PlaylistsService {
     }
   }
 
+  /**
+   * Returns paginated playlists liked by the authenticated user, ordered by most recent like.
+   */
   async getMeLikedPlaylists(
     userId: string,
     query: PlaylistPaginationQueryDto,
@@ -1165,6 +1189,9 @@ export class PlaylistsService {
     };
   }
 
+  /**
+   * Removes a playlist from the user's liked list. Returns 404 if not previously liked.
+   */
   async unlikePlaylist(userId: string, playlistId: string): Promise<{ message: string }> {
     const playlist = await this.prisma.playlist.findFirst({
       where: {
@@ -1411,6 +1438,11 @@ export class PlaylistsService {
     };
   }
 
+  /**
+   * Atomically reorders tracks within a playlist using a database transaction.
+   * All position updates succeed or all fail together; no partial reorders.
+   * Enforces ownership; non-owners receive 403.
+   */
   async reorderTracks(userId: string, playlistId: string, dto: ReorderPlaylistTracksDto) {
     const orderedTrackIds = this.validateTrackIdArray(dto.orderedTrackIds, 'orderedTrackIds', true);
 
@@ -1579,6 +1611,11 @@ export class PlaylistsService {
     };
   }
 
+  /**
+   * Returns paginated playlists for a user with owner-aware visibility.
+   * Owners see their own PUBLIC and SECRET playlists; others see only PUBLIC.
+   * Optionally computes isLiked for authenticated requester.
+   */
   async getUserPlaylists(
     userId: string,
     query: PlaylistPaginationQueryDto,

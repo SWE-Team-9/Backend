@@ -20,6 +20,11 @@ export class SocialService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
+  /**
+   * Follows another user. Prevents self-follows and enforces block rules:
+   * if the target has blocked the requester, follow is rejected with 403.
+   * Duplicate follows return 409 Conflict.
+   */
   async followUser(followerId: string, followingId: string) {
     if (followerId === followingId) {
       throw new BadRequestException({
@@ -42,6 +47,8 @@ export class SocialService {
       });
     }
 
+    // Block enforcement: prevent follower if target has blocked requester.
+    // This ensures blocked users cannot silently monitor another user's activity.
     const targetBlockedRequester = await this.prisma.userBlock.findUnique({
       where: {
         blockerId_blockedId: {
@@ -95,6 +102,9 @@ export class SocialService {
     };
   }
 
+  /**
+   * Unfollows another user. Returns 404 if the follow relationship does not exist.
+   */
   async unfollowUser(followerId: string, followingId: string) {
     if (followerId === followingId) {
       throw new BadRequestException({
@@ -151,6 +161,9 @@ export class SocialService {
     };
   }
 
+  /**
+   * Returns paginated list of users who follow the specified user.
+   */
   async getFollowers(userId: string, query: PaginationQueryDto) {
     const targetUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -206,6 +219,9 @@ export class SocialService {
     };
   }
 
+  /**
+   * Returns paginated list of users that the specified user follows.
+   */
   async getFollowing(userId: string, query: PaginationQueryDto) {
     const targetUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -261,6 +277,9 @@ export class SocialService {
     };
   }
 
+  /**
+   * Returns paginated follow suggestions: users not yet followed, not blocked, optionally filtered by genre.
+   */
   async getSuggestions(userId: string, query: SuggestionsQueryDto) {
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -564,6 +583,10 @@ export class SocialService {
     return intersection / union;
   }
 
+  /**
+   * Blocks another user. Prevents self-blocks and returns 409 if already blocked.
+   * Blocking also automatically unfollows the target user if currently following.
+   */
   async blockUser(blockerId: string, blockedId: string) {
     if (blockerId === blockedId) {
       throw new BadRequestException({
@@ -616,6 +639,9 @@ export class SocialService {
     };
   }
 
+  /**
+   * Unblocks another user. Returns 404 if the block relationship does not exist.
+   */
   async unblockUser(blockerId: string, blockedId: string) {
     if (blockerId === blockedId) {
       throw new BadRequestException({
@@ -671,6 +697,9 @@ export class SocialService {
     };
   }
 
+  /**
+   * Returns paginated list of users blocked by the specified user.
+   */
   async getBlockedUsers(userId: string, query: PaginationQueryDto) {
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
