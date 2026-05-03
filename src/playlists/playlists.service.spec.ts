@@ -338,6 +338,33 @@ describe("PlaylistsService", () => {
       prisma.playlist.findFirst.mockResolvedValue(null);
       await expect(service.getDetails("missing")).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it("ensures slug and owner handle are independent", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_999",
+        ownerId: "usr_9",
+        title: "Indie Mix",
+        description: "mix",
+        visibility: "PUBLIC",
+        secretToken: null,
+        coverImageUrl: null,
+        coverArtUrl: null,
+        likesCount: 3,
+        createdAt: new Date(),
+        releaseDate: null,
+        slug: "late-night-drive",
+        genre: { slug: "indie" },
+        owner: { id: "usr_9", profile: { displayName: "Farah", handle: "farah" } },
+      });
+      prisma.playlistTrack.findMany.mockResolvedValue([]);
+      prisma.playlistLike.findUnique.mockResolvedValue(null);
+
+      const result = await service.getDetails("pl_999", "usr_other");
+
+      expect(result.slug).toEqual("late-night-drive");
+      expect(result.handle).toEqual("farah");
+      expect(result.slug).not.toEqual(result.handle);
+    });
   });
 
   describe("update", () => {
