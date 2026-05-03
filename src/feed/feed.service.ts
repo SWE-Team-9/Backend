@@ -7,6 +7,29 @@ import { PrismaService } from "../prisma/prisma.service";
 export class FeedService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private buildSlugFromTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .trim()
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+  }
+
+  private resolveTrackSlug(track: { id: string; title: string; slug: string | null }): string {
+    const storedSlug = (track.slug ?? "").trim();
+    if (storedSlug.length > 0) {
+      return storedSlug;
+    }
+
+    const titleSlug = this.buildSlugFromTitle(track.title ?? "");
+    if (titleSlug.length > 0) {
+      return titleSlug;
+    }
+
+    return `track-${track.id}`;
+  }
+
   async getFeed(userId: string, limit = 20, offset?: number, page = 1) {
     const followRows = await this.prisma.userFollow.findMany({
       where: { followerId: userId },
@@ -136,7 +159,7 @@ export class FeedService {
     const transformedTracks = tracks.map((track) => ({
       id: track.id,
       title: track.title,
-      slug: track.slug,
+      slug: this.resolveTrackSlug(track),
       description: track.description,
       coverArtUrl: track.coverArtUrl,
       createdAt: track.createdAt,

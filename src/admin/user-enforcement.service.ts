@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -18,11 +19,84 @@ import {
 
 @Injectable()
 export class UserEnforcementService {
+  private readonly logger = new Logger(UserEnforcementService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
   ) {}
+
+  private async createNotificationSafely(params: {
+    recipientId: string;
+    actorId: string;
+    entityType: "USER" | "TRACK" | "COMMENT" | "PLAYLIST";
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      await this.notificationsService.createNotification(params as any);
+    } catch (error) {
+      this.logger.error(
+        `Non-fatal notification failure for enforcement event ${params.eventType}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async resolveLinkedModerationReport(reportId?: string): Promise<{
+    id: string;
+    reporterId: string;
+    status: string;
+  } | null> {
+    if (!reportId) return null;
+
+    const report = await this.prisma.moderationReport.findUnique({
+      where: { id: reportId },
+      select: { id: true, reporterId: true, status: true },
+    });
+
+    return report ?? null;
+  }
+
+  private async notifyReporterForLinkedReport(params: {
+    reportId?: string;
+    adminId: string;
+    targetUserId: string;
+    message: string;
+  }): Promise<void> {
+    const linkedReport = await this.resolveLinkedModerationReport(params.reportId);
+    if (!linkedReport) return;
+
+    if (linkedReport.status === "RESOLVED" || linkedReport.status === "REJECTED") {
+      return;
+    }
+
+    await this.prisma.moderationReport.update({
+      where: { id: linkedReport.id },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (linkedReport.reporterId === params.targetUserId) {
+      return;
+    }
+
+    await this.createNotificationSafely({
+      recipientId: linkedReport.reporterId,
+      actorId: params.adminId,
+      entityType: "USER",
+      eventType: "REPORT_RESOLVED",
+      metadata: {
+        batchMessage: params.message,
+        reportId: linkedReport.id,
+        outcome: "ACTION_TAKEN",
+      },
+    });
+  }
 
   // ─── Re-auth helpers ─────────────────────────────────────────────────────────
 
@@ -118,12 +192,23 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
       eventType: "REPORT_RESOLVED",
-      metadata: { actionType: "WARN_USER", reason: dto.reason },
+      metadata: {
+        actionType: "WARN_USER",
+        reason: dto.reason,
+        batchMessage: "Your account received an official warning from moderation.",
+      },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: dto.reportId,
+      adminId,
+      targetUserId,
+      message: "Your report was reviewed. Action was taken by the moderation team.",
     });
 
     void this.mailService.sendAccountWarnedEmail({
@@ -199,12 +284,19 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
       eventType: "ACCOUNT_SUSPENDED" as any,
       metadata: { reason: dto.reason, suspendedUntil: suspendedUntil.toISOString() },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: dto.reportId,
+      adminId,
+      targetUserId,
+      message: "Your report was reviewed. The reported account was suspended.",
     });
 
     void this.mailService.sendAccountSuspendedEmail({
@@ -292,12 +384,19 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",
       eventType: "ACCOUNT_BANNED" as any,
       metadata: { reason: dto.reason },
+    });
+
+    await this.notifyReporterForLinkedReport({
+      reportId: dto.reportId,
+      adminId,
+      targetUserId,
+      message: "Your report was reviewed. The reported account was banned.",
     });
 
     void this.mailService.sendAccountBannedEmail({
@@ -375,7 +474,7 @@ export class UserEnforcementService {
       },
     });
 
-    await this.notificationsService.createNotification({
+    await this.createNotificationSafely({
       recipientId: targetUserId,
       actorId: adminId,
       entityType: "USER",

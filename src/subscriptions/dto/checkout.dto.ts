@@ -17,6 +17,8 @@ export class CheckoutDto {
 
   @ApiPropertyOptional({
     description: 'URL to redirect to after successful checkout',
+    example: 'https://app.iqa3.tech/settings/subscription/success',
+    format: 'uri',
   })
   @IsOptional()
   @IsString()
@@ -25,6 +27,8 @@ export class CheckoutDto {
 
   @ApiPropertyOptional({
     description: 'URL to redirect to if checkout is cancelled',
+    example: 'https://app.iqa3.tech/settings/subscription/cancel',
+    format: 'uri',
   })
   @IsOptional()
   @IsString()

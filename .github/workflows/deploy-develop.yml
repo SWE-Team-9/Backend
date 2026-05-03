@@ -22,13 +22,25 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f "./Backend/package.json" ]; then
+            cd Backend
+          fi
+          npm ci
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: |
+          if [ -f "./Backend/package.json" ]; then
+            cd Backend
+          fi
+          npx prisma generate
 
       - name: Run tests
-        run: npm test
+        run: |
+          if [ -f "./Backend/package.json" ]; then
+            cd Backend
+          fi
+          npm test
         env:
           CI: true
 
@@ -58,7 +70,14 @@ jobs:
           ECR_REPOSITORY: swe-team-9/backend
           IMAGE_TAG: develop
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          if [ -f "./Backend/Dockerfile" ]; then
+            BUILD_CONTEXT="./Backend"
+            DOCKERFILE="./Backend/Dockerfile"
+          else
+            BUILD_CONTEXT="."
+            DOCKERFILE="./Dockerfile"
+          fi
+          docker build -f $DOCKERFILE -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $BUILD_CONTEXT
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Deploy to EC2 and Verify

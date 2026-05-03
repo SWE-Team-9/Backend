@@ -242,6 +242,8 @@ export class SubscriptionsService {
         trialStart: null,
         trialEnd: null,
         paymentMethodSummary: null,
+        providerSubscriptionId: null,
+        isRealStripeBilling: this.isRealStripeBilling(),
         latestInvoice: null,
       });
     }
@@ -275,6 +277,8 @@ export class SubscriptionsService {
       paymentMethodSummary: (sub as any).paymentMethodSummary ?? null,
       paymentMethod: paymentMethodData,
       pendingDowngrade,
+      providerSubscriptionId: sub.stripeSubscriptionId,
+      isRealStripeBilling: this.isRealStripeBilling(),
       latestInvoice,
     });
   }
@@ -584,12 +588,28 @@ export class SubscriptionsService {
       });
     }
 
-    if (sub.cancelAtPeriodEnd) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_ALREADY_CANCELED',
-        message: 'Your subscription is already scheduled to cancel.',
-        details: { expiresAt: sub.currentPeriodEnd.toISOString() },
-      });
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+    const pendingDowngrade =
+      (currentPaymentMethod.pendingDowngrade as
+        | {
+            planCode: string;
+            planId: string;
+            planName: string;
+            effectiveAt: string;
+          }
+        | null) ?? null;
+
+    if (sub.cancelAtPeriodEnd && !pendingDowngrade) {
+      return {
+        message:
+          'Subscription is already scheduled to cancel at end of billing period. You keep full access until then.',
+        cancelledAt: sub.canceledAt?.toISOString() ?? null,
+        expiresAt: sub.currentPeriodEnd.toISOString(),
+        cancelAtPeriodEnd: true,
+      };
     }
 
     const now = new Date();
@@ -598,11 +618,6 @@ export class SubscriptionsService {
       providerSubscriptionId: sub.stripeSubscriptionId ?? mockId('sub'),
       cancelAtPeriodEnd: true,
     });
-
-    const currentPaymentMethod =
-      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
-        ? ((sub as any).paymentMethod as Record<string, unknown>)
-        : {};
     const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
 
     await this.prisma.userSubscription.update({
@@ -630,47 +645,132 @@ export class SubscriptionsService {
     };
   }
 
-  // ── POST /subscriptions/resume ────────────────────────────────────────────
+  // ── POST /subscriptions/cancel-plan-change ───────────────────────────────
 
-  async resumeSubscription(userId: string) {
+  async cancelPendingPlanChange(userId: string) {
     const sub = await this.findActiveSubscription(userId);
-    if (!sub)
+    if (!sub) {
       throw new NotFoundException({
         code: 'SUBSCRIPTION_NOT_FOUND',
         message: 'No active subscription found.',
       });
-    if (!sub.cancelAtPeriodEnd) {
+    }
+
+    const currentPaymentMethod =
+      typeof (sub as any).paymentMethod === 'object' && (sub as any).paymentMethod !== null
+        ? ((sub as any).paymentMethod as Record<string, unknown>)
+        : {};
+
+    const pendingDowngrade =
+      (currentPaymentMethod.pendingDowngrade as {
+        planCode: string;
+        planId: string;
+        planName: string;
+        effectiveAt: string;
+      } | null) ?? null;
+
+    if (!pendingDowngrade) {
       throw new ConflictException({
-        code: 'SUBSCRIPTION_NOT_CANCELED',
-        message: 'Your subscription is not set to cancel.',
+        code: 'NO_PENDING_PLAN_CHANGE',
+        message: 'There is no pending plan change to cancel.',
+      });
+    }
+
+    const { pendingDowngrade: _removed, ...cleanPaymentMethod } = currentPaymentMethod;
+
+    await this.prisma.userSubscription.update({
+      where: { id: sub.id },
+      data: {
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        paymentMethod: cleanPaymentMethod as any,
+      },
+    });
+
+    await this.logPaymentEvent(sub.id, 'customer.subscription.plan_change_canceled', {
+      planCode: pendingDowngrade.planCode,
+      planId: pendingDowngrade.planId,
+      planName: pendingDowngrade.planName,
+      effectiveAt: pendingDowngrade.effectiveAt,
+    });
+
+    return this.getMySubscription(userId);
+  }
+
+  // ── POST /subscriptions/resume ────────────────────────────────────────────
+
+  async resumeSubscription(userId: string) {
+    const sub = await this.findActiveSubscription(userId);
+    if (!sub) {
+      const latestSub = await this.prisma.userSubscription.findFirst({
+        where: { userId },
+        include: { plan: { select: { tier: true, uploadLimit: true, name: true, priceCents: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (
+        latestSub?.status === SubscriptionStatus.INCOMPLETE &&
+        !this.hasFinalizedProviderSubscription(latestSub.stripeSubscriptionId)
+      ) {
+        throw new ConflictException({
+          code: 'CHECKOUT_SESSION_PENDING',
+          message:
+            'This subscription is still linked to a checkout session and cannot be resumed yet. Please retry shortly.',
+        });
+      }
+
+      if (
+        latestSub?.cancelAtPeriodEnd &&
+        latestSub.currentPeriodEnd.getTime() < Date.now()
+      ) {
+        throw new ConflictException({
+          code: 'SUBSCRIPTION_PERIOD_ENDED',
+          message:
+            'This subscription period has already ended. Please start a new checkout to reactivate.',
+        });
+      }
+
+      throw new NotFoundException({
+        code: 'SUBSCRIPTION_NOT_FOUND',
+        message: 'No active subscription found.',
+      });
+    }
+
+    const resumeState = this.getResumeState({
+      cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+      providerSubscriptionId: sub.stripeSubscriptionId,
+      isRealStripeBilling: this.isRealStripeBilling(),
+    });
+
+    if (!sub.cancelAtPeriodEnd) {
+      return this.getMySubscription(userId);
+    }
+
+    if (sub.currentPeriodEnd.getTime() < Date.now()) {
+      throw new ConflictException({
+        code: 'SUBSCRIPTION_PERIOD_ENDED',
+        message:
+          'This subscription period has already ended. Please start a new checkout to reactivate.',
+      });
+    }
+
+    if (!resumeState.canResume) {
+      if (resumeState.resumeBlockedReason === 'INVALID_PROVIDER_SUBSCRIPTION_ID') {
+        throw new BadRequestException({
+          code: resumeState.resumeBlockedReason,
+          message: resumeState.resumeBlockedMessage,
+          details: { expectedPrefix: 'sub_' },
+        });
+      }
+
+      throw new ConflictException({
+        code: resumeState.resumeBlockedReason ?? 'SUBSCRIPTION_RESUME_BLOCKED',
+        message:
+          resumeState.resumeBlockedMessage ?? 'Subscription cannot be resumed right now.',
       });
     }
 
     const providerSubscriptionId = (sub.stripeSubscriptionId ?? '').trim();
-    if (!providerSubscriptionId) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_PROVIDER_ID_MISSING',
-        message:
-          'This subscription cannot be resumed because the billing provider subscription ID is missing.',
-      });
-    }
-
-    if (providerSubscriptionId.startsWith('cs_')) {
-      throw new ConflictException({
-        code: 'SUBSCRIPTION_PROVIDER_NOT_READY',
-        message:
-          'This subscription is still linked to a checkout session and cannot be resumed yet. Please retry shortly.',
-      });
-    }
-
-    if (this.isRealStripeBilling() && !providerSubscriptionId.startsWith('sub_')) {
-      throw new BadRequestException({
-        code: 'INVALID_PROVIDER_SUBSCRIPTION_ID',
-        message: 'Invalid Stripe subscription ID format for resume operation.',
-        details: { expectedPrefix: 'sub_' },
-      });
-    }
-
     try {
       await this.billing.resumeSubscription({ providerSubscriptionId });
     } catch (err: unknown) {
@@ -705,6 +805,7 @@ export class SubscriptionsService {
       cancelAtPeriodEnd: false,
       resumed: true,
     });
+    this.sendSubscriptionResumedEmailAsync(userId, sub.plan.name, sub.currentPeriodEnd);
     return this.getMySubscription(userId);
   }
 
@@ -852,6 +953,11 @@ export class SubscriptionsService {
       const subscriptionId = obj['subscription'] as string | undefined;
       if (sessionId) lookupIds.push(sessionId);
       if (subscriptionId) lookupIds.push(subscriptionId);
+    } else if (event.type.startsWith('checkout.session.')) {
+      const sessionId = obj['id'] as string | undefined;
+      const subscriptionId = obj['subscription'] as string | undefined;
+      if (sessionId) lookupIds.push(sessionId);
+      if (subscriptionId) lookupIds.push(subscriptionId);
     } else if (event.type.startsWith('invoice.')) {
       const subscriptionId = obj['subscription'] as string | undefined;
       if (subscriptionId) lookupIds.push(subscriptionId);
@@ -928,6 +1034,7 @@ export class SubscriptionsService {
     switch (event.type) {
       case 'checkout.session.completed': {
         const realSubId = obj['subscription'] as string | undefined;
+        const realCustomerId = obj['customer'] as string | undefined;
         const metadata = (obj['metadata'] as Record<string, unknown> | undefined) ?? {};
         const trialEligible = metadata['trialEligible'] === 'true';
         const trialDays = Number(metadata['trialDays'] ?? 0);
@@ -946,6 +1053,9 @@ export class SubscriptionsService {
 
         if (realSubId && realSubId !== sub.stripeSubscriptionId) {
           updateData.stripeSubscriptionId = realSubId;
+        }
+        if (realCustomerId && realCustomerId !== sub.stripeCustomerId) {
+          updateData.stripeCustomerId = realCustomerId;
         }
 
         await this.prisma.userSubscription.update({
@@ -983,6 +1093,19 @@ export class SubscriptionsService {
             sub.plan.priceCents ?? 0,
             periodEnd,
           );
+        }
+        break;
+      }
+
+      case 'checkout.session.expired': {
+        if (sub.stripeSubscriptionId?.startsWith('cs_')) {
+          await this.prisma.userSubscription.update({
+            where: { id: sub.id },
+            data: {
+              status: SubscriptionStatus.INCOMPLETE_EXPIRED,
+              endedAt: now,
+            },
+          });
         }
         break;
       }
@@ -1065,13 +1188,39 @@ export class SubscriptionsService {
         break;
       }
 
+      case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const newStatus = obj['status'] as string | undefined;
         const cancelAtEnd = obj['cancel_at_period_end'] as boolean | undefined;
+        const currentPeriodStart = obj['current_period_start'] as number | undefined;
+        const currentPeriodEnd = obj['current_period_end'] as number | undefined;
+        const canceledAt = obj['canceled_at'] as number | null | undefined;
         const updateData: Record<string, unknown> = {};
+        const stripePriceId = (
+          (obj['items'] as { data?: Array<{ price?: { id?: string } }> } | undefined)
+            ?.data?.[0]?.price?.id
+        );
 
         if (newStatus) updateData.status = this.mapStripeStatus(newStatus);
         if (cancelAtEnd !== undefined) updateData.cancelAtPeriodEnd = cancelAtEnd;
+        if (currentPeriodStart) updateData.currentPeriodStart = new Date(currentPeriodStart * 1000);
+        if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd * 1000);
+        if (canceledAt !== undefined) {
+          updateData.canceledAt = canceledAt ? new Date(canceledAt * 1000) : null;
+        }
+        if (stripePriceId) {
+          const webhookPlan = await this.prisma.subscriptionPlan.findFirst({
+            where: { stripePriceId, isActive: true },
+            select: { id: true, tier: true },
+          });
+          if (webhookPlan) {
+            updateData.planId = webhookPlan.id;
+            if (webhookPlan.tier === SubscriptionTier.GO_PLUS) {
+              updateData.trialStart = null;
+              updateData.trialEnd = null;
+            }
+          }
+        }
 
         if (Object.keys(updateData).length) {
           await this.prisma.userSubscription.update({
@@ -1602,6 +1751,11 @@ export class SubscriptionsService {
     return provider === 'stripe';
   }
 
+  private hasFinalizedProviderSubscription(providerSubscriptionId?: string | null): boolean {
+    const id = (providerSubscriptionId ?? '').trim();
+    return Boolean(id && !id.startsWith('cs_'));
+  }
+
   private buildSubscriptionResponse(opts: {
     userId: string;
     tier: SubscriptionTier | 'FREE';
@@ -1621,6 +1775,8 @@ export class SubscriptionsService {
       planName: string;
       effectiveAt: string;
     } | null;
+    providerSubscriptionId?: string | null;
+    isRealStripeBilling?: boolean;
     latestInvoice: {
       id: string;
       amountPaidCents: number;
@@ -1631,10 +1787,21 @@ export class SubscriptionsService {
   }) {
     const planCode = planTierToCode(opts.tier);
     const cfg = PLAN_CONFIG[planCode];
+    const isActualTrial =
+      planCode === 'PRO' &&
+      opts.subscriptionStatus === SubscriptionStatus.TRIALING &&
+      opts.trialEnd !== null &&
+      opts.trialEnd.getTime() > Date.now();
     const isUnlimited = !isFinite(opts.uploadLimit);
     const remainingUploads = isUnlimited
       ? null
       : Math.max(0, opts.uploadLimit - opts.uploadedTracks);
+    const resumeState = this.getResumeState({
+      cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
+      providerSubscriptionId: opts.providerSubscriptionId,
+      isRealStripeBilling: opts.isRealStripeBilling ?? this.isRealStripeBilling(),
+    });
+
     return {
       userId: opts.userId,
       planCode,
@@ -1659,8 +1826,11 @@ export class SubscriptionsService {
           ? opts.currentPeriodEnd.toISOString()
           : null,
       cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
-      trialStart: opts.trialStart?.toISOString() ?? null,
-      trialEnd: opts.trialEnd?.toISOString() ?? null,
+      canResume: resumeState.canResume,
+      resumeBlockedReason: resumeState.resumeBlockedReason ?? null,
+      resumeBlockedMessage: resumeState.resumeBlockedMessage ?? null,
+      trialStart: isActualTrial ? (opts.trialStart?.toISOString() ?? null) : null,
+      trialEnd: isActualTrial ? opts.trialEnd!.toISOString() : null,
       paymentMethodSummary: opts.paymentMethod
         ? `${opts.paymentMethod.brand.charAt(0).toUpperCase() + opts.paymentMethod.brand.slice(1)} ending in ${opts.paymentMethod.last4}`
         : opts.paymentMethodSummary,
@@ -1676,6 +1846,43 @@ export class SubscriptionsService {
           }
         : null,
     };
+  }
+
+  private getResumeState(params: {
+    cancelAtPeriodEnd: boolean;
+    providerSubscriptionId?: string | null;
+    isRealStripeBilling: boolean;
+  }): {
+    canResume: boolean;
+    resumeBlockedReason?:
+      | 'CHECKOUT_SESSION_PENDING'
+      | 'SUBSCRIPTION_PROVIDER_ID_MISSING'
+      | 'INVALID_PROVIDER_SUBSCRIPTION_ID';
+    resumeBlockedMessage?: string;
+  } {
+    if (!params.cancelAtPeriodEnd) {
+      return { canResume: false };
+    }
+
+    const providerSubscriptionId = (params.providerSubscriptionId ?? '').trim();
+    if (!providerSubscriptionId) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'SUBSCRIPTION_PROVIDER_ID_MISSING',
+        resumeBlockedMessage:
+          'This subscription cannot be resumed because the billing provider subscription ID is missing.',
+      };
+    }
+
+    if (params.isRealStripeBilling && !providerSubscriptionId.startsWith('sub_')) {
+      return {
+        canResume: false,
+        resumeBlockedReason: 'INVALID_PROVIDER_SUBSCRIPTION_ID',
+        resumeBlockedMessage: 'Invalid Stripe subscription ID format for resume operation.',
+      };
+    }
+
+    return { canResume: true };
   }
 
   private buildCheckoutResponse(
@@ -1788,6 +1995,31 @@ export class SubscriptionsService {
               expiresAt,
             })
             .catch((err: unknown) => this.logger.error(`[CANCELLATION EMAIL] ${err}`));
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private sendSubscriptionResumedEmailAsync(
+    userId: string,
+    planName: string,
+    renewalDate: Date,
+  ): void {
+    this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, profile: { select: { displayName: true } } },
+      })
+      .then((user) => {
+        if (user && (this.mailService as any).sendSubscriptionResumedEmail) {
+          (this.mailService as any)
+            .sendSubscriptionResumedEmail({
+              to: user.email,
+              displayName: user.profile?.displayName ?? undefined,
+              planName,
+              renewalDate,
+            })
+            .catch((err: unknown) => this.logger.error(`[SUBSCRIPTION RESUMED EMAIL] ${err}`));
         }
       })
       .catch(() => undefined);

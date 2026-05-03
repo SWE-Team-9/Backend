@@ -754,6 +754,7 @@ export class AuthController {
         avatar_url: null,
         account_type: 'LISTENER',
         system_role: 'USER',
+        account_status: 'ACTIVE',
         is_verified: true,
         subscription_tier: 'FREE',
         created_at: '2026-01-01T00:00:00.000Z',

@@ -40,6 +40,7 @@ function buildTrackRecord(overrides: Partial<any> = {}) {
     allowComments: true,
     downloadable: false,
     coverArtUrl: null,
+    moderationState: "VISIBLE",
     secretToken: "abc123secrettoken1234567",
     publishedAt: new Date("2026-03-01"),
     createdAt: new Date("2026-03-01"),
@@ -514,6 +515,25 @@ describe("TracksService", () => {
       );
     });
 
+    it("should hide hidden moderation-state track from non-owners", async () => {
+      prisma.track.findFirst.mockResolvedValue(
+        buildTrackRecord({ moderationState: "HIDDEN", visibility: TrackVisibility.PUBLIC }),
+      );
+
+      await expect(service.getTrackById(TRACK_ID, OTHER_USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("should allow owner to access hidden moderation-state track", async () => {
+      prisma.track.findFirst.mockResolvedValue(
+        buildTrackRecord({ moderationState: "HIDDEN", visibility: TrackVisibility.PUBLIC }),
+      );
+
+      const result = await service.getTrackById(TRACK_ID, USER_ID);
+      expect(result.trackId).toBe(TRACK_ID);
+    });
+
     it("should throw 404 for non-existent track", async () => {
       prisma.track.findFirst.mockResolvedValue(null);
       await expect(service.getTrackById("nonexistent-id", USER_ID)).rejects.toThrow(
@@ -636,6 +656,7 @@ describe("TracksService", () => {
         status: TrackStatus.PROCESSING,
         uploaderId: USER_ID,
         visibility: TrackVisibility.PUBLIC,
+        moderationState: "VISIBLE",
       });
       const result = await service.getTrackStatus(TRACK_ID, OTHER_USER_ID);
 
@@ -651,7 +672,22 @@ describe("TracksService", () => {
         status: TrackStatus.PROCESSING,
         uploaderId: USER_ID,
         visibility: TrackVisibility.PRIVATE,
+        moderationState: "VISIBLE",
       });
+      await expect(service.getTrackStatus(TRACK_ID, OTHER_USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("should hide hidden moderation-state status from non-owners", async () => {
+      prisma.track.findFirst.mockResolvedValue({
+        id: TRACK_ID,
+        status: TrackStatus.PROCESSING,
+        uploaderId: USER_ID,
+        visibility: TrackVisibility.PUBLIC,
+        moderationState: "HIDDEN",
+      });
+
       await expect(service.getTrackStatus(TRACK_ID, OTHER_USER_ID)).rejects.toThrow(
         NotFoundException,
       );
@@ -663,6 +699,7 @@ describe("TracksService", () => {
         status: TrackStatus.PROCESSING,
         uploaderId: USER_ID,
         visibility: TrackVisibility.PRIVATE,
+        moderationState: "VISIBLE",
       });
       const result = await service.getTrackStatus(TRACK_ID, USER_ID);
       expect(result.status).toBe(TrackStatus.PROCESSING);
@@ -681,6 +718,7 @@ describe("TracksService", () => {
         status: TrackStatus.FINISHED,
         uploaderId: USER_ID,
         visibility: TrackVisibility.PUBLIC,
+        moderationState: "VISIBLE",
       });
       const result = await service.getTrackStatus(TRACK_ID, undefined);
       expect(result.status).toBe(TrackStatus.FINISHED);
@@ -692,6 +730,7 @@ describe("TracksService", () => {
         status: TrackStatus.PROCESSING,
         uploaderId: USER_ID,
         visibility: TrackVisibility.PRIVATE,
+        moderationState: "VISIBLE",
       });
       await expect(service.getTrackStatus(TRACK_ID, undefined)).rejects.toThrow(NotFoundException);
     });
@@ -707,6 +746,7 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: USER_ID,
         publishedAt: null,
+        moderationState: "VISIBLE",
       });
       prisma.track.findUnique.mockResolvedValue({
         status: TrackStatus.FINISHED,
@@ -754,6 +794,19 @@ describe("TracksService", () => {
         status: TrackStatus.PROCESSING,
       });
       await expect(service.updateTrack(TRACK_ID, USER_ID, { title: "Too Early" })).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it("should reject edits when track is hidden by moderation", async () => {
+      prisma.track.findFirst.mockResolvedValue({
+        id: TRACK_ID,
+        uploaderId: USER_ID,
+        publishedAt: null,
+        moderationState: "HIDDEN",
+      });
+
+      await expect(service.updateTrack(TRACK_ID, USER_ID, { title: "Nope" })).rejects.toThrow(
         ConflictException,
       );
     });
@@ -985,6 +1038,7 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: USER_ID,
         publishedAt: null,
+        moderationState: "VISIBLE",
       });
       prisma.track.update.mockResolvedValue(
         buildTrackRecord({
@@ -1003,6 +1057,7 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: USER_ID,
         publishedAt: new Date(),
+        moderationState: "VISIBLE",
       });
       prisma.track.update.mockResolvedValue(
         buildTrackRecord({ visibility: TrackVisibility.PRIVATE }),
@@ -1020,6 +1075,7 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: USER_ID,
         publishedAt: null, // never published before
+        moderationState: "VISIBLE",
       });
       prisma.track.update.mockResolvedValue(buildTrackRecord());
 
@@ -1034,11 +1090,25 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: OTHER_USER_ID,
         publishedAt: null,
+        moderationState: "VISIBLE",
       });
 
       await expect(
         service.changeVisibility(TRACK_ID, USER_ID, TrackVisibility.PUBLIC),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("should reject visibility change when track is hidden by moderation", async () => {
+      prisma.track.findFirst.mockResolvedValue({
+        id: TRACK_ID,
+        uploaderId: USER_ID,
+        publishedAt: null,
+        moderationState: "HIDDEN",
+      });
+
+      await expect(
+        service.changeVisibility(TRACK_ID, USER_ID, TrackVisibility.PUBLIC),
+      ).rejects.toThrow(ConflictException);
     });
 
     it("should throw 404 for non-existent track", async () => {
@@ -1055,6 +1125,7 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: USER_ID,
         publishedAt: existingDate, // already published
+        moderationState: "VISIBLE",
       });
       prisma.track.update.mockResolvedValue(buildTrackRecord());
 
@@ -1070,6 +1141,7 @@ describe("TracksService", () => {
         id: TRACK_ID,
         uploaderId: USER_ID,
         publishedAt: new Date(),
+        moderationState: "VISIBLE",
       });
       prisma.track.update.mockResolvedValue(buildTrackRecord());
 
@@ -1120,6 +1192,7 @@ describe("TracksService", () => {
       const whereArg = prisma.track.findMany.mock.calls[0][0].where;
       expect(whereArg.visibility).toBe(TrackVisibility.PUBLIC);
       expect(whereArg.status).toBe(TrackStatus.FINISHED);
+      expect(whereArg.moderationState).toBe("VISIBLE");
     });
 
     it("should filter to PUBLIC+FINISHED for unauthenticated users", async () => {
@@ -1446,6 +1519,14 @@ describe("TracksService", () => {
       );
     });
 
+    it("should throw 404 for hidden track even with valid token", async () => {
+      prisma.track.findFirst.mockResolvedValue(null);
+
+      await expect(service.getTrackBySecretToken("abc123secrettoken1234567")).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
     it("should include full detail fields plus message", async () => {
       prisma.track.findFirst.mockResolvedValue(
         buildTrackRecord({ visibility: TrackVisibility.PRIVATE }),
@@ -1463,18 +1544,38 @@ describe("TracksService", () => {
 
   describe("findTrackShareTarget", () => {
     it("should find a track by slug or id", async () => {
-      prisma.track.findFirst.mockResolvedValueOnce({ id: "track-uuid" });
+      prisma.track.findFirst.mockResolvedValueOnce({
+        id: "track-uuid",
+        uploader: {
+          profile: {
+            handle: "artist-handle",
+          },
+        },
+      });
 
       await expect(service.findTrackShareTarget("test-track")).resolves.toEqual({
         id: "track-uuid",
+        artistHandle: "artist-handle",
       });
 
       expect(prisma.track.findFirst).toHaveBeenCalledWith({
         where: {
           deletedAt: null,
+          moderationState: "VISIBLE",
           OR: [{ id: "test-track" }, { slug: "test-track" }],
         },
-        select: { id: true },
+        select: {
+          id: true,
+          uploader: {
+            select: {
+              profile: {
+                select: {
+                  handle: true,
+                },
+              },
+            },
+          },
+        },
       });
     });
 

@@ -72,6 +72,9 @@ export class SubscriptionsController {
         renewalDate: '2026-05-01T00:00:00.000Z',
         expiresAt: null,
         cancelAtPeriodEnd: false,
+        canResume: false,
+        resumeBlockedReason: null,
+        resumeBlockedMessage: null,
         trialStart: null,
         trialEnd: null,
         paymentMethodSummary: null,
@@ -468,6 +471,7 @@ export class SubscriptionsController {
     required: false,
     description:
       'Where to send the user after they close the portal (backward-compat query param).',
+    example: 'https://app.iqa3.tech/settings/billing',
   })
   @ApiResponse({
     status: 200,
@@ -542,6 +546,9 @@ export class SubscriptionsController {
         renewalDate: '2026-05-01T00:00:00.000Z',
         expiresAt: null,
         cancelAtPeriodEnd: false,
+        canResume: false,
+        resumeBlockedReason: null,
+        resumeBlockedMessage: null,
         trialStart: null,
         trialEnd: null,
         paymentMethodSummary: null,
@@ -557,6 +564,11 @@ export class SubscriptionsController {
     description: 'Subscription is not scheduled to cancel.',
   })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiBody({
+    required: false,
+    description: 'No request body required.',
+    schema: { type: 'object', example: {} },
+  })
   @Post('resume')
   @HttpCode(HttpStatus.OK)
   async resumeSubscription(@CurrentUser('userId') userId: string) {
@@ -612,6 +624,31 @@ export class SubscriptionsController {
     return this.subscriptionsService.changePlan(userId, dto);
   }
 
+  // ─── POST /subscriptions/cancel-plan-change ──────────────────────────────
+  @ApiOperation({
+    summary: 'Cancel a pending scheduled plan change',
+    description:
+      'Removes a pending plan switch (for example PRO -> GO+) and keeps the current subscription active.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Pending plan change canceled. Returns the full updated subscription object (same shape as GET /subscriptions/me).',
+  })
+  @ApiResponse({ status: 404, description: 'No active subscription found.' })
+  @ApiResponse({ status: 409, description: 'No pending plan change exists.' })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiBody({
+    required: false,
+    description: 'No request body required.',
+    schema: { type: 'object', example: {} },
+  })
+  @Post('cancel-plan-change')
+  @HttpCode(HttpStatus.OK)
+  async cancelPlanChange(@CurrentUser('userId') userId: string) {
+    return this.subscriptionsService.cancelPendingPlanChange(userId);
+  }
+
   // ─── POST /subscriptions/cancel ───────────────────────────────────────────
   @ApiOperation({ summary: 'Cancel subscription at period end' })
   @ApiResponse({
@@ -632,6 +669,12 @@ export class SubscriptionsController {
     description: 'No active subscription or already cancelled.',
   })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiBody({
+    type: CancelSubscriptionDto,
+    required: false,
+    description: 'No fields are required. Send `{}` or omit body.',
+    schema: { type: 'object', example: {} },
+  })
   @Post('cancel')
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))

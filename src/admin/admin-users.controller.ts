@@ -317,6 +317,32 @@ Results are cached for 5 minutes.`,
     return this.adminUsersService.getOverviewStats();
   }
 
+  @ApiOperation({
+    summary: 'Get total storage used',
+    description: 'Returns persisted storage usage summed from track file size metadata.',
+  })
+  @ApiOkResponse({
+    description: 'Total storage usage returned.',
+    schema: {
+      example: {
+        totalBytes: 536870912000,
+        totalMB: 512000,
+        totalGB: 500,
+        source: 'track_files.file_size_bytes',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - ADMIN or MODERATOR role required.',
+  })
+  @Roles('ADMIN', 'MODERATOR')
+  @Get('storage/total')
+  getTotalStorage() {
+    return this.adminUsersService.getTotalStorage();
+  }
+
   // GET /api/v1/admin/stats/daily
   @ApiOperation({
     summary: 'Get daily stats',

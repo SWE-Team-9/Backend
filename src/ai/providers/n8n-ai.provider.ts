@@ -40,6 +40,8 @@ export async function callN8nWebhook(
 }
 
 export function validateN8nResponse(raw: unknown, message: string, context: Record<string, unknown>): AiIntentResult {
+  if (context?.pendingIntent) return fallback(message, context);
+
   if (!raw || typeof raw !== 'object') return fallback(message, context);
   const obj = raw as Record<string, unknown>;
 

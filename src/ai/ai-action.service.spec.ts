@@ -34,6 +34,7 @@ function makePrismaMock() {
     },
     genre: {
       findFirst: jest.fn().mockResolvedValue({ id: 1 }),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     track: {
       findFirst: jest.fn(),
@@ -254,6 +255,23 @@ describe('AiActionService', () => {
   });
 
   it('creates playlist from genre and adds found tracks', async () => {
+    prisma.genre.findMany.mockResolvedValue([{ id: 1, slug: 'sha3by', name: 'Sha3by' }]);
+    prisma.track.findMany.mockResolvedValue([
+      {
+        id: TRACK_ID,
+        title: 'Sha3by Track',
+        slug: 'sha3by-track',
+        coverArtUrl: null,
+        durationMs: 180000,
+        primaryGenre: { slug: 'sha3by', name: 'Sha3by' },
+        uploader: {
+          id: RECEIVER_ID,
+          profile: { displayName: 'Artist', handle: 'artist', avatarUrl: null },
+        },
+        _count: { likes: 10, reposts: 2, playEvents: 30 },
+      },
+    ]);
+
     const result = await service.execute(
       USER_ID,
       {
@@ -265,10 +283,181 @@ describe('AiActionService', () => {
       'mock',
     );
 
-    expect(discovery.getTrendingTracksByGenre).toHaveBeenCalledWith('sha3by', 5);
+    expect(discovery.getTrendingTracksByGenre).not.toHaveBeenCalled();
+    expect(prisma.track.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              deletedAt: null,
+              visibility: 'PUBLIC',
+              status: 'FINISHED',
+              moderationState: 'VISIBLE',
+              hiddenByPlanLimit: false,
+            }),
+          ]),
+        }),
+      }),
+    );
     expect(prisma.playlist.create).toHaveBeenCalled();
     expect(prisma.playlistTrack.createMany).toHaveBeenCalled();
     expect(result.actionsTaken).toContain('created playlist');
+  });
+
+  it('looks up real DB genres beyond hardcoded aliases', async () => {
+    prisma.genre.findMany.mockResolvedValue([{ id: 9, slug: 'metal', name: 'Metal' }]);
+    prisma.track.findMany.mockResolvedValue([
+      {
+        id: TRACK_ID,
+        title: 'Metal Track',
+        slug: 'metal-track',
+        coverArtUrl: null,
+        durationMs: 200000,
+        primaryGenre: { slug: 'metal', name: 'Metal' },
+        uploader: {
+          id: RECEIVER_ID,
+          profile: { displayName: 'Maryam', handle: 'maryam', avatarUrl: null },
+        },
+        _count: { likes: 4, reposts: 1, playEvents: 12 },
+      },
+    ]);
+
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'recommend_by_genre',
+        parameters: { genre: 'metal', limit: 5 },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    expect(prisma.genre.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ OR: expect.any(Array) }),
+      }),
+    );
+    expect(result.reply).toContain('metal');
+    expect((result.data as any).tracks).toHaveLength(1);
+  });
+
+  it('broadens sha3by search to shaabi and mahraganat tags', async () => {
+    prisma.genre.findMany.mockResolvedValue([]);
+    prisma.track.findMany.mockResolvedValue([
+      {
+        id: TRACK_ID,
+        title: 'Tagged Mahragan Track',
+        slug: 'tagged-mahragan-track',
+        coverArtUrl: null,
+        durationMs: 180000,
+        primaryGenre: { slug: 'electronic', name: 'Electronic' },
+        uploader: {
+          id: RECEIVER_ID,
+          profile: { displayName: 'Artist', handle: 'artist', avatarUrl: null },
+        },
+        _count: { likes: 5, reposts: 1, playEvents: 20 },
+      },
+    ]);
+
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { genre: 'sha3by', limit: 5, playlistName: 'testt' },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    const terms = prisma.genre.findMany.mock.calls[0][0].where.OR.map(
+      (filter: any) => filter.slug?.contains ?? filter.name?.contains,
+    );
+    expect(terms).toEqual(expect.arrayContaining(['sha3by', 'shaabi', 'mahraganat']));
+    expect(prisma.playlist.create).toHaveBeenCalled();
+    expect(result.actionsTaken).toContain('created playlist');
+  });
+
+  it('does not merge distinct genre aliases in DB lookup terms', async () => {
+    prisma.genre.findMany.mockResolvedValue([]);
+    prisma.track.findMany.mockResolvedValue([]);
+
+    await service.execute(
+      USER_ID,
+      {
+        intent: 'recommend_by_genre',
+        parameters: { genre: 'hip hop', limit: 5 },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    const hipHopTerms = prisma.genre.findMany.mock.calls[0][0].where.OR.map(
+      (filter: any) => filter.slug?.contains ?? filter.name?.contains,
+    );
+    expect(hipHopTerms).toEqual(expect.arrayContaining(['hip hop', 'hip-hop', 'hiphop']));
+    expect(hipHopTerms).not.toContain('rap');
+
+    prisma.genre.findMany.mockClear();
+    await service.execute(
+      USER_ID,
+      {
+        intent: 'recommend_by_genre',
+        parameters: { genre: 'mahraganat', limit: 5 },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    const mahraganTerms = prisma.genre.findMany.mock.calls[0][0].where.OR.map(
+      (filter: any) => filter.slug?.contains ?? filter.name?.contains,
+    );
+    expect(mahraganTerms).toEqual(expect.arrayContaining(['mahraganat', 'mahragan']));
+    expect(mahraganTerms).not.toContain('sha3by');
+  });
+
+  it('adds variants for seeded compound genres when querying Genre table', async () => {
+    prisma.genre.findMany.mockResolvedValue([{ id: 11, slug: 'drum-bass', name: 'Drum & Bass' }]);
+    prisma.track.findMany.mockResolvedValue([]);
+
+    await service.execute(
+      USER_ID,
+      {
+        intent: 'recommend_by_genre',
+        parameters: { genre: 'drum and bass', limit: 5 },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    const terms = prisma.genre.findMany.mock.calls[0][0].where.OR.map(
+      (filter: any) => filter.slug?.contains ?? filter.name?.contains,
+    );
+    expect(terms).toEqual(expect.arrayContaining(['drum and bass', 'drum & bass', 'drum-and-bass']));
+  });
+
+  it('refuses to create an empty playlist when genre has no public finished tracks', async () => {
+    prisma.genre.findMany.mockResolvedValue([{ id: 1, slug: 'quran', name: 'Quran' }]);
+    prisma.track.findMany.mockResolvedValue([]);
+
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { genre: 'quran', limit: 7, playlistName: 'Quran Mix' },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
+    expect(prisma.playlistTrack.createMany).not.toHaveBeenCalled();
+    expect(result.reply).toContain('did not create the playlist');
   });
 
   it('sends track message when recipient and track exist', async () => {
@@ -395,5 +584,44 @@ describe('AiActionService', () => {
 
     expect(result.needsConfirmation).toBe(true);
     expect(result.actionsTaken).toEqual([]);
+  });
+
+  it('returns pending context when a genre playlist needs a name', async () => {
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { genre: 'sha3by', limit: 10 },
+        confidence: 0.9,
+        needsConfirmation: true,
+        clarifyingQuestion: 'What would you like to name the playlist?',
+      },
+      'mock',
+    );
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingContext).toEqual({
+      pendingIntent: 'create_playlist_from_genre',
+      pendingGenre: 'sha3by',
+      pendingLimit: 10,
+    });
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending action without changing data', async () => {
+    const result = await service.execute(
+      USER_ID,
+      {
+        intent: 'cancel_pending_action',
+        parameters: {},
+        confidence: 1,
+        needsConfirmation: false,
+      },
+      'mock',
+    );
+
+    expect(result.pendingContext).toBeNull();
+    expect(result.actionsTaken).toEqual([]);
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
   });
 });

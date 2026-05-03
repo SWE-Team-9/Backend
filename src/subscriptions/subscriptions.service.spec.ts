@@ -262,6 +262,7 @@ function makeMailMock() {
     sendSubscriptionConfirmationEmail: jest.fn().mockResolvedValue(undefined),
     sendTrialEndingEmail: jest.fn().mockResolvedValue(undefined),
     sendCancellationConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+    sendSubscriptionResumedEmail: jest.fn().mockResolvedValue(undefined),
     sendInvoiceReceiptEmail: jest.fn().mockResolvedValue(undefined),
     sendPlanChangedEmail: jest.fn().mockResolvedValue(undefined),
   };
@@ -363,6 +364,7 @@ describe('SubscriptionsService', () => {
         adsEnabled: true,
         canDownload: false,
         isPremium: false,
+        canResume: false,
       });
     });
 
@@ -381,6 +383,7 @@ describe('SubscriptionsService', () => {
         adsEnabled: false,
         canDownload: true,
         isPremium: true,
+        canResume: false,
       });
       expect(result.renewalDate).not.toBeNull();
       expect(result.expiresAt).toBeNull();
@@ -396,6 +399,26 @@ describe('SubscriptionsService', () => {
 
       expect(result.expiresAt).not.toBeNull();
       expect(result.renewalDate).toBeNull();
+      expect(result.canResume).toBe(true);
+      expect(result.resumeBlockedReason).toBeNull();
+      expect(result.resumeBlockedMessage).toBeNull();
+    });
+
+    it('allows resume state for active canceling subscriptions with historical checkout session id', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          stripeSubscriptionId: 'cs_test_pending',
+        }),
+      );
+      prisma.track.count.mockResolvedValue(0);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.canResume).toBe(true);
+      expect(result.resumeBlockedReason).toBeNull();
+      expect(result.resumeBlockedMessage).toBeNull();
     });
 
     it('returns remainingUploads=null when DB plan limit is unlimited', async () => {
@@ -408,6 +431,25 @@ describe('SubscriptionsService', () => {
 
       expect(result.uploadLimit).toBe(-1);
       expect(result.remainingUploads).toBeNull();
+    });
+
+    it('does not expose stale trial fields for active GO_PLUS subscriptions', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.GO_PLUS, 1000, {
+          status: SubscriptionStatus.ACTIVE,
+          trialStart: new Date('2026-04-28T00:05:31.680Z'),
+          trialEnd: new Date('2026-05-28T12:46:38.461Z'),
+        }),
+      );
+      prisma.track.count.mockResolvedValue(1);
+
+      const result = await service.getMySubscription(USER_ID);
+
+      expect(result.planCode).toBe('GO_PLUS');
+      expect(result.trialStart).toBeNull();
+      expect(result.trialEnd).toBeNull();
+      expect(result.renewalDate).toBe(FUTURE.toISOString());
+      expect(result.canResume).toBe(false);
     });
 
     it('does not leak provider IDs in response', async () => {
@@ -626,14 +668,132 @@ describe('SubscriptionsService', () => {
       expect(result.message).toContain('full access');
     });
 
-    it('throws SUBSCRIPTION_ALREADY_CANCELED if already canceling', async () => {
+    it('sends cancellation email with period-end access date', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100);
+      prisma.userSubscription.findFirst.mockResolvedValue(sub);
+
+      await service.cancelSubscription(USER_ID, dto);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mail.sendCancellationConfirmedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'test@example.com',
+          planName: sub.plan.name,
+          expiresAt: sub.currentPeriodEnd,
+        }),
+      );
+    });
+
+    it('is idempotent if cancellation is already scheduled', async () => {
       prisma.userSubscription.findFirst.mockResolvedValue(
         makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: true }),
       );
 
-      await expect(service.cancelSubscription(USER_ID, dto)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'SUBSCRIPTION_ALREADY_CANCELED' }),
+      const result = await service.cancelSubscription(USER_ID, dto);
+
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.expiresAt).toBe(FUTURE.toISOString());
+      expect(billing.cancelSubscription).not.toHaveBeenCalled();
+      expect(mail.sendCancellationConfirmedEmail).not.toHaveBeenCalled();
+    });
+
+    it('converts a scheduled plan change into full cancellation', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        paymentMethod: {
+          brand: 'visa',
+          last4: '4242',
+          pendingDowngrade: {
+            planCode: 'GO_PLUS',
+            planId: 'plan-go-plus',
+            planName: 'Go+',
+            effectiveAt: FUTURE.toISOString(),
+          },
+        },
       });
+      prisma.userSubscription.findFirst.mockResolvedValue(sub);
+
+      const result = await service.cancelSubscription(USER_ID, dto);
+
+      expect(billing.cancelSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerSubscriptionId: sub.stripeSubscriptionId,
+          cancelAtPeriodEnd: true,
+        }),
+      );
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: sub.id },
+          data: expect.objectContaining({
+            cancelAtPeriodEnd: true,
+            paymentMethod: expect.not.objectContaining({
+              pendingDowngrade: expect.anything(),
+            }),
+          }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(true);
+      expect(result.message).toContain('full access');
+    });
+  });
+
+  describe('cancelPendingPlanChange()', () => {
+    it('throws NotFoundException when there is no active subscription', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(null);
+
+      await expect(service.cancelPendingPlanChange(USER_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws NO_PENDING_PLAN_CHANGE when no scheduled plan switch exists', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(makeActiveSub(SubscriptionTier.PRO, 100));
+
+      await expect(service.cancelPendingPlanChange(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'NO_PENDING_PLAN_CHANGE' }),
+      });
+    });
+
+    it('clears pending plan change and keeps full subscription active', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        paymentMethod: {
+          brand: 'visa',
+          last4: '4242',
+          pendingDowngrade: {
+            planCode: 'GO_PLUS',
+            planId: 'plan-go-plus',
+            planName: 'Go+',
+            effectiveAt: FUTURE.toISOString(),
+          },
+        },
+      });
+
+      prisma.userSubscription.findFirst
+        .mockResolvedValueOnce(sub)
+        .mockResolvedValueOnce(makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: false,
+          paymentMethod: { brand: 'visa', last4: '4242' },
+        }));
+      prisma.track.count.mockResolvedValue(0);
+
+      const result = await service.cancelPendingPlanChange(USER_ID);
+
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: sub.id },
+          data: expect.objectContaining({
+            cancelAtPeriodEnd: false,
+            canceledAt: null,
+            paymentMethod: expect.not.objectContaining({
+              pendingDowngrade: expect.anything(),
+            }),
+          }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(false);
+      expect(result.pendingDowngrade).toBeNull();
     });
   });
 
@@ -644,14 +804,16 @@ describe('SubscriptionsService', () => {
       await expect(service.resumeSubscription(USER_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it('throws SUBSCRIPTION_NOT_CANCELED when subscription is not scheduled to cancel', async () => {
-      prisma.userSubscription.findFirst.mockResolvedValue(
-        makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: false }),
-      );
+    it('returns current subscription when already not scheduled to cancel', async () => {
+      const sub = makeActiveSub(SubscriptionTier.PRO, 100, { cancelAtPeriodEnd: false });
+      prisma.userSubscription.findFirst.mockResolvedValue(sub);
+      prisma.track.count.mockResolvedValue(0);
 
-      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'SUBSCRIPTION_NOT_CANCELED' }),
-      });
+      const result = await service.resumeSubscription(USER_ID);
+
+      expect(result.cancelAtPeriodEnd).toBe(false);
+      expect(result.planCode).toBe('PRO');
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
     });
 
     it('calls billing.resumeSubscription and clears cancellation fields', async () => {
@@ -681,6 +843,76 @@ describe('SubscriptionsService', () => {
         }),
       );
       expect(result.planCode).toBe('PRO');
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mail.sendSubscriptionResumedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'test@example.com',
+          planName: canceledSub.plan.name,
+          renewalDate: canceledSub.currentPeriodEnd,
+        }),
+      );
+    });
+
+    it('resumes active subscription with cancelAtPeriodEnd=true and historical checkoutSessionId', async () => {
+      const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
+        cancelAtPeriodEnd: true,
+        stripeSubscriptionId: 'cs_test_123',
+      });
+
+      prisma.userSubscription.findFirst
+        .mockResolvedValueOnce(canceledSub)
+        .mockResolvedValueOnce(
+          makeActiveSub(SubscriptionTier.PRO, 100, {
+            cancelAtPeriodEnd: false,
+            stripeSubscriptionId: 'cs_test_123',
+          }),
+        );
+      prisma.track.count.mockResolvedValue(0);
+
+      const result = await service.resumeSubscription(USER_ID);
+
+      expect(billing.resumeSubscription).toHaveBeenCalledWith({
+        providerSubscriptionId: 'cs_test_123',
+      });
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: canceledSub.id },
+          data: expect.objectContaining({ cancelAtPeriodEnd: false, canceledAt: null }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(false);
+    });
+
+    it('throws CHECKOUT_SESSION_PENDING for incomplete checkout without finalized provider subscription', async () => {
+      prisma.userSubscription.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          ...makeActiveSub(SubscriptionTier.PRO, 100, {
+            status: SubscriptionStatus.INCOMPLETE,
+            cancelAtPeriodEnd: false,
+            stripeSubscriptionId: 'cs_test_123',
+          }),
+        });
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'CHECKOUT_SESSION_PENDING' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
+    });
+
+    it('throws SUBSCRIPTION_PERIOD_ENDED when canceling subscription period is past', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValue(
+        makeActiveSub(SubscriptionTier.PRO, 100, {
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: PAST,
+        }),
+      );
+
+      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'SUBSCRIPTION_PERIOD_ENDED' }),
+      });
+      expect(billing.resumeSubscription).not.toHaveBeenCalled();
     });
 
     it('throws SUBSCRIPTION_PROVIDER_ID_MISSING when provider subscription id is absent', async () => {
@@ -693,20 +925,6 @@ describe('SubscriptionsService', () => {
 
       await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'SUBSCRIPTION_PROVIDER_ID_MISSING' }),
-      });
-      expect(billing.resumeSubscription).not.toHaveBeenCalled();
-    });
-
-    it('throws SUBSCRIPTION_PROVIDER_NOT_READY when provider id is a checkout session id', async () => {
-      prisma.userSubscription.findFirst.mockResolvedValue(
-        makeActiveSub(SubscriptionTier.PRO, 100, {
-          cancelAtPeriodEnd: true,
-          stripeSubscriptionId: 'cs_test_123',
-        }),
-      );
-
-      await expect(service.resumeSubscription(USER_ID)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'SUBSCRIPTION_PROVIDER_NOT_READY' }),
       });
       expect(billing.resumeSubscription).not.toHaveBeenCalled();
     });
@@ -739,7 +957,6 @@ describe('SubscriptionsService', () => {
       });
       expect(billing.resumeSubscription).not.toHaveBeenCalled();
     });
-
     it('maps provider missing-subscription error to ConflictException instead of 500', async () => {
       const canceledSub = makeActiveSub(SubscriptionTier.PRO, 100, {
         cancelAtPeriodEnd: true,
@@ -914,6 +1131,101 @@ describe('SubscriptionsService', () => {
       expect(prisma.userSubscription.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: SubscriptionStatus.ACTIVE }),
+        }),
+      );
+    });
+
+    it('checkout.session.completed links providerSubscriptionId and clears pending checkout', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValueOnce({
+        ...makeActiveSub(SubscriptionTier.PRO, 100, {
+          status: SubscriptionStatus.INCOMPLETE,
+          stripeSubscriptionId: 'cs_test_pending',
+        }),
+        stripeCustomerId: 'cus_mock_test',
+      });
+
+      await service.handleStripeWebhook(
+        makeWebhookBuffer('checkout.session.completed', {
+          id: 'cs_test_pending',
+          customer: 'cus_test_finalized',
+          subscription: 'sub_test_finalized',
+          metadata: { trialEligible: 'false', trialDays: '0' },
+        }),
+        '',
+      );
+
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stripeSubscriptionId: 'sub_test_finalized',
+            stripeCustomerId: 'cus_test_finalized',
+            status: SubscriptionStatus.ACTIVE,
+            cancelAtPeriodEnd: false,
+            paymentFailureAt: null,
+            paymentFailureGraceEndsAt: null,
+          }),
+        }),
+      );
+    });
+
+    it('customer.subscription.updated syncs cancellation, plan, and period fields', async () => {
+      prisma.subscriptionPlan.findFirst.mockResolvedValueOnce({
+        ...makePlan(SubscriptionTier.GO_PLUS, 1000, 'plan-go-plus'),
+        stripePriceId: 'price_go_plus',
+      });
+
+      await service.handleStripeWebhook(
+        makeWebhookBuffer('customer.subscription.updated', {
+          id: 'sub_mock_test',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_period_start: 1770000000,
+          current_period_end: 1772600000,
+          canceled_at: 1769999000,
+          items: { data: [{ price: { id: 'price_go_plus' } }] },
+        }),
+        '',
+      );
+
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: SubscriptionStatus.ACTIVE,
+            cancelAtPeriodEnd: true,
+            currentPeriodStart: new Date(1770000000 * 1000),
+            currentPeriodEnd: new Date(1772600000 * 1000),
+            canceledAt: new Date(1769999000 * 1000),
+            planId: 'plan-go-plus',
+            trialStart: null,
+            trialEnd: null,
+          }),
+        }),
+      );
+    });
+
+    it('checkout.session.expired marks only pending checkout sessions expired', async () => {
+      prisma.userSubscription.findFirst.mockResolvedValueOnce({
+        ...makeActiveSub(SubscriptionTier.PRO, 100, {
+          status: SubscriptionStatus.INCOMPLETE,
+          stripeSubscriptionId: 'cs_test_expired',
+        }),
+        stripeCustomerId: 'cus_mock_test',
+      });
+
+      await service.handleStripeWebhook(
+        makeWebhookBuffer('checkout.session.expired', {
+          id: 'cs_test_expired',
+          subscription: undefined,
+        }),
+        '',
+      );
+
+      expect(prisma.userSubscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: SubscriptionStatus.INCOMPLETE_EXPIRED,
+            endedAt: expect.any(Date),
+          }),
         }),
       );
     });

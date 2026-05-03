@@ -1,29 +1,24 @@
-import { Controller, Get, Header, HttpCode, HttpStatus, Param } from '@nestjs/common';
+import { Controller, Get, Header, Headers, HttpCode, HttpStatus, Param } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { Public } from '../common/decorators/public.decorator';
+import { DiscoveryService } from '../discovery/discovery.service';
 import { TracksService } from './tracks.service';
 
 @ApiTags('Share')
 @Controller('share')
 export class ShareController {
-  constructor(private readonly tracksService: TracksService) {}
+  constructor(
+    private readonly tracksService: TracksService,
+    private readonly discoveryService: DiscoveryService,
+  ) {}
 
-  private buildDeepLinkHtml(targetUrl: string, title: string): string {
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${title}</title>
-  <meta http-equiv="refresh" content="0; url=${targetUrl}">
-  <script>
-    window.location.href = "${targetUrl}";
-  </script>
-</head>
-<body>
-  <p>Opening in app...</p>
-</body>
-</html>`;
+  private isMobileUserAgent(userAgent: string | undefined): boolean {
+    if (!userAgent) {
+      return false;
+    }
+
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
   }
 
   @Get('track/:slugOrId')
@@ -33,13 +28,17 @@ export class ShareController {
   @ApiOperation({ summary: 'Open a track in the mobile app' })
   @ApiParam({ name: 'slugOrId', description: 'Track slug or UUID' })
   @ApiOkResponse({ description: 'HTML redirect response.' })
-  async shareTrack(@Param('slugOrId') slugOrId: string) {
+  async shareTrack(@Param('slugOrId') slugOrId: string, @Headers('user-agent') userAgent?: string) {
     const track = await this.tracksService.findTrackShareTarget(slugOrId);
-    const targetUrl = track ? `iqa3://track/${track.id}` : 'https://iqa3.tech';
 
-    return this.buildDeepLinkHtml(
-      targetUrl,
-      track ? 'Opening track...' : 'Track not found',
+    if (!track) {
+      return this.discoveryService.buildRedirectHtml('https://iqa3.tech', 'Track not found');
+    }
+
+    return this.discoveryService.buildTrackShareRedirectHtml(
+      track.id,
+      track.artistHandle,
+      this.isMobileUserAgent(userAgent),
     );
   }
 }
