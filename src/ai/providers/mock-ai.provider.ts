@@ -47,6 +47,40 @@ const UNSAFE_PATTERNS =
   /delete\s+(my\s+)?(account|track|playlist|all)|admin|inject|drop\s+table|exec\s*\(|password|credit\s*card|payment|billing|ban|suspend|make\s+me\s+admin/i;
 
 const GENRE_WORDS = [
+  'folk singer songwriter',
+  'folk-singer-songwriter',
+  'spoken word',
+  'spoken-word',
+  'deep house',
+  'deep-house',
+  'drum bass',
+  'drum-bass',
+  'r-b-soul',
+  'lo-fi',
+  'hip hop',
+  'hip-hop',
+  'hiphop',
+  'electronic',
+  'alternative',
+  'ambient',
+  'classical',
+  'metal',
+  'country',
+  'reggaeton',
+  'dancehall',
+  'house',
+  'techno',
+  'trance',
+  'indie',
+  'punk',
+  'blues',
+  'latin',
+  'afrobeat',
+  'trap',
+  'experimental',
+  'world',
+  'gospel',
+  'islamic',
   'sha3by',
   'shaabi',
   'shaaby',
@@ -76,6 +110,7 @@ const GENRE_WORDS = [
   'classical',
   'arabic',
   'country',
+  'folk singer songwriter',
   'folk',
 ];
 
@@ -114,6 +149,18 @@ export function detectMockIntent(
       confidence: 0.9,
       needsConfirmation: false,
     };
+  }
+
+  if (/(find|show|get|recommend|suggest).*(best|top|\d+).*(tracks?|songs?|music)/i.test(msg)) {
+    const genre = extractGenre(msg);
+    if (genre !== 'mixed') {
+      return {
+        intent: 'recommend_by_genre',
+        parameters: { genre, limit: extractLimit(msg, 5) },
+        confidence: 0.88,
+        needsConfirmation: false,
+      };
+    }
   }
 
   if (/(best|top).*(track|song).*(by|from)\s+(user|artist)\s+/i.test(msg)) {
@@ -171,7 +218,7 @@ export function detectMockIntent(
 
   if (
     /(create|make).*(playlist).*(all|top|\d+|with|from|of)/i.test(msg) &&
-    /tracks?|songs?|genre|sha3by|shaabi|shaaby|sh3by|شعبي|mahraganat|مهرجانات|quran|قرآن|قران|rap|راب|pop|jazz|rock|rnb|hip.?hop|electronic|arabic/i.test(msg)
+    /tracks?|songs?|music|genre|sha3by|shaabi|shaaby|sh3by|شعبي|mahraganat|مهرجانات|quran|قرآن|قران|rap|راب|pop|jazz|rock|rnb|hip.?hop|electronic|arabic/i.test(msg)
   ) {
     const genre = extractGenre(msg);
     const allRequested = /\ball\b/i.test(msg);
@@ -272,6 +319,15 @@ export function detectMockIntent(
     const query =
       msg.match(/(?:search\s+for|find|show)\s+(.+?)\s+(?:tracks?|songs?|music)/i)?.[1]?.trim() ||
       original;
+    const genre = extractGenre(query);
+    if (genre !== 'mixed') {
+      return {
+        intent: 'recommend_by_genre',
+        parameters: { genre, limit: extractLimit(msg, 5) },
+        confidence: 0.88,
+        needsConfirmation: false,
+      };
+    }
     return {
       intent: 'search_tracks',
       parameters: { query },
@@ -325,14 +381,30 @@ export function detectMockIntent(
 
 function extractGenre(msg: string): string {
   const normalized = msg.toLowerCase();
-  const found = GENRE_WORDS.find((genre) => normalized.includes(genre));
-  if (!found) return 'mixed';
-  if (['shaabi', 'shaaby', 'sh3by', 'شعبي', 'mahraganat', 'mahragan', 'مهرجانات'].includes(found)) return 'sha3by';
+  const found = GENRE_WORDS.find((genre) => containsGenreTerm(normalized, genre));
+  if (!found) return extractGenrePhrase(normalized) ?? 'mixed';
+  if (['shaabi', 'shaaby', 'sh3by', 'شعبي'].includes(found)) return 'sha3by';
+  if (['mahraganat', 'mahragan', 'مهرجانات'].includes(found)) return 'mahraganat';
   if (found === 'hip hop' || found === 'hiphop') return 'hip-hop';
-  if (found === 'r&b') return 'rnb';
+  if (found === 'r&b' || found === 'rnb') return 'r-b-soul';
   if (['koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'].includes(found)) return 'quran';
   if (found === 'راب') return 'rap';
   return found;
+}
+
+function containsGenreTerm(message: string, genre: string): boolean {
+  const escaped = genre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, 'i').test(message);
+}
+
+function extractGenrePhrase(msg: string): string | undefined {
+  const cleaned = msg
+    .replace(/\b(create|make|new|playlist|with|from|of|all|top|best|find|show|get|recommend|suggest|me|the|a|an|tracks?|songs?|music|genre|genres?|by|user|artist|in|for)\b/gi, ' ')
+    .replace(/\b\d{1,2}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned.length >= 2 ? cleaned : undefined;
 }
 
 function extractLimit(msg: string, fallback: number): number {

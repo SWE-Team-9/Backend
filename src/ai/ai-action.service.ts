@@ -468,20 +468,7 @@ export class AiActionService {
     const playlistName =
       this.cleanString(params.playlistName) || `${this.titleCase(genre)} Mix`;
 
-    const genreResult = await this.discovery.getTrendingTracksByGenre(genre, limit);
-    const rawTracks: any[] = (genreResult as any)?.tracks ?? [];
-    const tracks: TrackCard[] = rawTracks.map((t: any) => ({
-      trackId: t.trackId ?? t.id,
-      title: t.title,
-      slug: t.slug ?? null,
-      coverArtUrl: t.coverArtUrl ?? null,
-      likesCount: t.likesCount ?? 0,
-      artist: {
-        id: t.artist?.id ?? t.uploaderId,
-        displayName: t.artist?.displayName ?? null,
-        handle: t.artist?.handle ?? null,
-      },
-    }));
+    const tracks = await this.findPublicTracksByGenre({ genre, limit });
 
     if (tracks.length === 0) {
       return {
@@ -501,7 +488,10 @@ export class AiActionService {
     });
 
     return {
-      reply: `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}${allRequested ? `, capped at ${tracks.length}.` : '.'}`,
+      reply:
+        tracks.length < limit
+          ? `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}. I found fewer public finished tracks than the ${limit} requested.`
+          : `Created "${playlist.title}" with ${tracks.length} ${genre} track${tracks.length === 1 ? '' : 's'}${allRequested ? `, capped at ${tracks.length}.` : '.'}`,
       provider,
       intent: 'create_playlist_from_genre',
       actionsTaken: [
@@ -755,7 +745,7 @@ export class AiActionService {
     ];
 
     const searchTerms = options.genre
-      ? this.genreSearchTerms(options.genre)
+      ? await this.genreSearchTerms(options.genre)
       : options.query
         ? [this.normalizeSearchTerm(options.query)]
         : [];
@@ -1118,7 +1108,7 @@ export class AiActionService {
   }
 
   private async resolveGenreId(slug: string): Promise<number | null> {
-    const terms = this.genreSearchTerms(slug);
+    const terms = await this.genreSearchTerms(slug);
 
     const genre = await this.prisma.genre.findFirst({
       where: {
@@ -1233,7 +1223,7 @@ export class AiActionService {
       .trim();
   }
 
-  private genreSearchTerms(value: string): string[] {
+  private async genreSearchTerms(value: string): Promise<string[]> {
     const normalized = this.normalizeSearchTerm(value);
 
     const aliases: Record<string, string[]> = {
@@ -1246,9 +1236,12 @@ export class AiActionService {
       مهرجانات: ['mahraganat', 'mahragan', 'مهرجانات'],
       mahragan: ['mahraganat', 'mahragan', 'مهرجانات'],
       rap: ['rap', 'rab ', 'راب'],
-      'hip-hop': ['rap', 'hip-hop', 'hip hop', 'hiphop'],
-      'hip hop': ['rap', 'hip-hop', 'hip hop', 'hiphop'],
-      hiphop: ['rap', 'hip-hop', 'hip hop', 'hiphop'],
+      'hip-hop': ['hip-hop', 'hip hop', 'hiphop'],
+      'hip hop': ['hip-hop', 'hip hop', 'hiphop'],
+      hiphop: ['hip-hop', 'hip hop', 'hiphop'],
+      rnb: ['r-b-soul', 'r&b', 'rnb', 'soul'],
+      'r&b': ['r-b-soul', 'r&b', 'rnb', 'soul'],
+      'r b': ['r-b-soul', 'r&b', 'rnb', 'soul'],
 
       quran: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
       koran: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
@@ -1257,7 +1250,53 @@ export class AiActionService {
       قران: ['quran', 'koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'],
     };
 
-    return Array.from(new Set([normalized, ...(aliases[normalized] ?? [])])).filter(Boolean);
+    const aliasTerms = [
+      ...(aliases[normalized] ?? []),
+      ...(normalized === 'شعبي' ? ['sha3by', 'shaabi', 'shaaby', 'sh3by'] : []),
+      ...(normalized === 'مهرجانات' ? ['mahraganat', 'mahragan'] : []),
+      ...(normalized === 'راب' ? ['rap'] : []),
+      ...(normalized === 'قرآن' || normalized === 'قران'
+        ? ['quran', 'koran', 'quranic', 'tilawa', 'recitation']
+        : []),
+      ...(normalized === 'tilawa' || normalized === 'recitation'
+        ? ['quran', 'koran', 'quranic', 'قرآن', 'قران']
+        : []),
+    ];
+
+    const localTerms = Array.from(
+      new Set([normalized, ...this.genreTermVariants(normalized), ...aliasTerms]),
+    ).filter(Boolean);
+    const dbGenres = await this.prisma.genre.findMany({
+      where: {
+        OR: localTerms.flatMap((term) => [
+          { slug: { contains: term, mode: 'insensitive' as const } },
+          { name: { contains: term, mode: 'insensitive' as const } },
+        ]),
+      },
+      select: { slug: true, name: true },
+      take: 10,
+    });
+
+    return Array.from(
+      new Set([...localTerms, ...dbGenres.flatMap((genre) => [genre.slug, genre.name])]),
+    ).filter(Boolean);
+  }
+
+  private genreTermVariants(term: string): string[] {
+    const normalized = term.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!normalized) return [];
+
+    const variants = [
+      normalized,
+      normalized.replace(/\s+and\s+/g, ' & '),
+      normalized.replace(/\s*&\s*/g, ' and '),
+      normalized.replace(/\s+/g, '-'),
+      normalized.replace(/\s*\/\s*/g, '-'),
+      normalized.replace(/[&/]/g, ' '),
+      normalized.replace(/[&/]/g, '-').replace(/\s+/g, '-'),
+    ];
+
+    return Array.from(new Set(variants.map((value) => value.replace(/\s+/g, ' ').trim())));
   }
 
   private titleCase(value: string): string {

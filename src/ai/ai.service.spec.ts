@@ -56,7 +56,7 @@ describe('AiService', () => {
 
     expect(mockActionService.execute).toHaveBeenCalledWith(
       'user-1',
-      expect.objectContaining({ intent: 'search_tracks' }),
+      expect.objectContaining({ intent: 'recommend_by_genre' }),
       'mock',
     );
   });
@@ -68,7 +68,7 @@ describe('AiService', () => {
 
     expect(mockActionService.execute).toHaveBeenCalledWith(
       'user-1',
-      expect.objectContaining({ intent: 'search_tracks' }),
+      expect.objectContaining({ intent: 'recommend_by_genre' }),
       'mock',
     );
   });
@@ -82,8 +82,8 @@ describe('detectMockIntent', () => {
 
   it('detects track search', () => {
     const result = detectMockIntent('find sha3by tracks');
-    expect(result.intent).toBe('search_tracks');
-    expect(result.parameters.query).toBeTruthy();
+    expect(result.intent).toBe('recommend_by_genre');
+    expect(result.parameters.genre).toBe('sha3by');
   });
 
   it('detects trending tracks', () => {
@@ -92,6 +92,13 @@ describe('detectMockIntent', () => {
 
   it('detects genre recommendations with limit', () => {
     const result = detectMockIntent('recommend 5 rap songs');
+    expect(result.intent).toBe('recommend_by_genre');
+    expect(result.parameters.genre).toBe('rap');
+    expect(result.parameters.limit).toBe(5);
+  });
+
+  it('detects best rap songs as genre recommendation with limit', () => {
+    const result = detectMockIntent('find me the best 5 rap songs');
     expect(result.intent).toBe('recommend_by_genre');
     expect(result.parameters.genre).toBe('rap');
     expect(result.parameters.limit).toBe(5);
@@ -114,6 +121,142 @@ describe('detectMockIntent', () => {
     expect(result.intent).toBe('create_playlist_from_genre');
     expect(result.parameters.genre).toBe('sha3by');
     expect(result.parameters.limit).toBe(10);
+  });
+
+  it('detects create playlist from hip hop phrase with limit', () => {
+    const result = detectMockIntent('create me a playlist with the best 7 hip hop songs');
+    expect(result.intent).toBe('create_playlist_from_genre');
+    expect(result.parameters.genre).toBe('hip-hop');
+    expect(result.parameters.limit).toBe(7);
+  });
+
+  it('detects arbitrary genre phrase without hardcoded alias', () => {
+    const result = detectMockIntent('create a playlist with top 6 metal tracks');
+    expect(result.intent).toBe('create_playlist_from_genre');
+    expect(result.parameters.genre).toBe('metal');
+    expect(result.parameters.limit).toBe(6);
+  });
+
+  it('keeps sha3by and mahraganat as separate genre intents', () => {
+    expect(detectMockIntent('create playlist with top 5 sha3by tracks').parameters.genre).toBe(
+      'sha3by',
+    );
+    expect(detectMockIntent('create playlist with top 5 mahragan tracks').parameters.genre).toBe(
+      'mahraganat',
+    );
+  });
+
+  it('keeps rap and hip hop as separate genre intents', () => {
+    expect(detectMockIntent('find me the best 5 rap songs').parameters.genre).toBe('rap');
+    expect(detectMockIntent('find me the best 5 hip hop songs').parameters.genre).toBe(
+      'hip-hop',
+    );
+  });
+
+  it('normalizes seeded compound genres', () => {
+    expect(detectMockIntent('create playlist with top 4 r&b songs').parameters.genre).toBe(
+      'r-b-soul',
+    );
+    expect(detectMockIntent('create playlist with top 4 drum and bass songs').parameters.genre).toBe(
+      'drum and bass',
+    );
+    expect(
+      detectMockIntent('create playlist with top 4 folk singer songwriter songs').parameters.genre,
+    ).toBe('folk singer songwriter');
+  });
+
+  it('parses every genre shape currently present in the Genre table', () => {
+    const liveGenreExamples = [
+      ['afrobeat', 'afrobeat'],
+      ['alternative', 'alternative'],
+      ['ambient', 'ambient'],
+      ['blues', 'blues'],
+      ['classical', 'classical'],
+      ['country', 'country'],
+      ['dancehall', 'dancehall'],
+      ['deep house', 'deep house'],
+      ['drum and bass', 'drum and bass'],
+      ['electronic', 'electronic'],
+      ['experimental', 'experimental'],
+      ['folk singer songwriter', 'folk singer songwriter'],
+      ['gospel', 'gospel'],
+      ['hip hop', 'hip-hop'],
+      ['house', 'house'],
+      ['indie', 'indie'],
+      ['islamic', 'islamic'],
+      ['jazz', 'jazz'],
+      ['latin', 'latin'],
+      ['lo fi', 'lo fi'],
+      ['metal', 'metal'],
+      ['pop', 'pop'],
+      ['punk', 'punk'],
+      ['r&b soul', 'r-b-soul'],
+      ['reggaeton', 'reggaeton'],
+      ['rock', 'rock'],
+      ['spoken word', 'spoken word'],
+      ['techno', 'techno'],
+      ['trance', 'trance'],
+      ['trap', 'trap'],
+      ['world', 'world'],
+    ] as const;
+
+    for (const [phrase, expectedGenre] of liveGenreExamples) {
+      const result = detectMockIntent(`find me the best 5 ${phrase} songs`);
+      expect(result.intent).toBe('recommend_by_genre');
+      expect(result.parameters.genre).toBe(expectedGenre);
+      expect(result.parameters.limit).toBe(5);
+    }
+  });
+
+  it('parses every canonical app genre slug except the None selector', () => {
+    const canonicalGenres = [
+      'electronic',
+      'hip-hop',
+      'pop',
+      'rock',
+      'alternative',
+      'ambient',
+      'classical',
+      'jazz',
+      'r-b-soul',
+      'metal',
+      'folk-singer-songwriter',
+      'country',
+      'reggaeton',
+      'dancehall',
+      'drum-bass',
+      'house',
+      'techno',
+      'deep-house',
+      'trance',
+      'lo-fi',
+      'indie',
+      'punk',
+      'blues',
+      'latin',
+      'afrobeat',
+      'trap',
+      'experimental',
+      'world',
+      'gospel',
+      'spoken-word',
+      'quran',
+      'sha3by',
+      'islamic',
+    ] as const;
+
+    for (const genre of canonicalGenres) {
+      const result = detectMockIntent(`find me the best 5 ${genre} songs`);
+      expect(result.intent).toBe('recommend_by_genre');
+      expect(result.parameters.genre).toBe(genre);
+      expect(result.parameters.limit).toBe(5);
+    }
+  });
+
+  it('detects quran search as genre recommendation', () => {
+    const result = detectMockIntent('search for quran tracks');
+    expect(result.intent).toBe('recommend_by_genre');
+    expect(result.parameters.genre).toBe('quran');
   });
 
   it('caps all-genre playlist requests at 25', () => {
@@ -238,7 +381,26 @@ describe('n8n provider helpers', () => {
       schemaVersion: 1,
     });
 
-    expect(result.intent).toBe('search_tracks');
+    expect(result.intent).toBe('recommend_by_genre');
+  });
+
+  it('preserves valid n8n create playlist from genre intent', async () => {
+    const { validateN8nResponse } = await import('./providers/n8n-ai.provider');
+
+    const result = validateN8nResponse(
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { genre: 'hip hop', limit: 7 },
+        confidence: 0.91,
+        needsConfirmation: false,
+      },
+      'create me a playlist with the best 7 hip hop songs',
+      {},
+    );
+
+    expect(result.intent).toBe('create_playlist_from_genre');
+    expect(result.parameters).toEqual(expect.objectContaining({ genre: 'hip hop', limit: 7 }));
+    expect(result.needsConfirmation).toBe(false);
   });
 
   it('low confidence n8n response becomes clarification_needed', async () => {
