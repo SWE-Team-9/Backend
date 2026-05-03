@@ -254,6 +254,46 @@ describe('AiActionService', () => {
     expect(prisma.playlist.create).not.toHaveBeenCalled();
   });
 
+  it('clarifies missing required n8n parameters before executing', async () => {
+    const missingGenre = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_genre',
+        parameters: { playlistName: 'No Genre' },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'n8n',
+    );
+
+    const missingProfile = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_profile',
+        parameters: { playlistName: 'No Profile' },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'n8n',
+    );
+
+    const missingArtist = await service.execute(
+      USER_ID,
+      {
+        intent: 'create_playlist_from_artist_genre',
+        parameters: { genre: 'sha3by' },
+        confidence: 0.9,
+        needsConfirmation: false,
+      },
+      'n8n',
+    );
+
+    expect(missingGenre.needsConfirmation).toBe(true);
+    expect(missingProfile.needsConfirmation).toBe(true);
+    expect(missingArtist.needsConfirmation).toBe(true);
+    expect(prisma.playlist.create).not.toHaveBeenCalled();
+  });
+
   it('creates an empty playlist for create_playlist', async () => {
     const result = await service.execute(
       USER_ID,

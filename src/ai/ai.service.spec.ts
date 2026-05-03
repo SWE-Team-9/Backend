@@ -416,7 +416,7 @@ describe('n8n provider helpers', () => {
     );
   });
 
-  it('falls back safely when n8n returns unknown intent', async () => {
+  it('returns safe refusal when n8n returns unknown intent', async () => {
     const { callN8nWebhook } = await import('./providers/n8n-ai.provider');
 
     const mockFetch = jest.fn().mockResolvedValue({
@@ -439,7 +439,18 @@ describe('n8n provider helpers', () => {
       schemaVersion: 1,
     });
 
-    expect(result.intent).toBe('recommend_by_genre');
+    expect(result.intent).toBe('unknown');
+    expect(result.responseType).toBe('refusal');
+  });
+
+  it('returns safe clarification for malformed n8n JSON object', async () => {
+    const { validateN8nResponse } = await import('./providers/n8n-ai.provider');
+
+    const result = validateN8nResponse(null, 'create playlist', {});
+
+    expect(result.intent).toBe('clarification_needed');
+    expect(result.responseType).toBe('clarification');
+    expect(result.needsConfirmation).toBe(true);
   });
 
   it('preserves valid n8n create playlist from genre intent', async () => {

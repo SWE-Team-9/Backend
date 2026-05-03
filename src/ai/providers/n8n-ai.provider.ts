@@ -46,7 +46,7 @@ export function validateN8nResponse(raw: unknown, message: string, context: Reco
 export function validateStructuredAiResponse(raw: unknown, message: string, context: Record<string, unknown>): AiIntentResult {
   if (context?.pendingIntent) return fallback(message, context);
 
-  if (!raw || typeof raw !== 'object') return fallback(message, context);
+  if (!raw || typeof raw !== 'object') return safeClarification();
   const obj = raw as Record<string, unknown>;
 
   const responseType = obj['responseType'] as string | undefined;
@@ -58,7 +58,14 @@ export function validateStructuredAiResponse(raw: unknown, message: string, cont
   // Reject unknown or non-whitelisted intents
   if (!intent || !(ALLOWED_INTENTS as readonly string[]).includes(intent)) {
     logger.warn(`[N8N] Unknown intent "${intent}" — falling back to mock`);
-    return fallback(message, context);
+    return {
+      intent: 'unknown',
+      responseType: 'refusal',
+      parameters: {},
+      replyDraft: 'I could not safely understand that request.',
+      confidence: 1,
+      needsConfirmation: false,
+    };
   }
 
   // Low confidence → ask clarification
@@ -90,4 +97,16 @@ export function validateStructuredAiResponse(raw: unknown, message: string, cont
 
 function fallback(message: string, context: Record<string, unknown>): AiIntentResult {
   return detectMockIntent(message, context);
+}
+
+function safeClarification(): AiIntentResult {
+  return {
+    intent: 'clarification_needed',
+    responseType: 'clarification',
+    parameters: {},
+    replyDraft: 'Could you clarify what you would like me to do?',
+    confidence: 0.4,
+    needsConfirmation: true,
+    clarifyingQuestion: 'Could you clarify what you would like me to do?',
+  };
 }

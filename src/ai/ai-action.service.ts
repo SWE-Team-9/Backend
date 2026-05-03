@@ -386,8 +386,19 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = this.cleanString(params.genre) || 'mixed';
+    const genre = this.cleanString(params.genre);
     const limit = this.safeLimit(params.limit, 5);
+
+    if (!genre) {
+      return {
+        reply: 'Which genre should I search for?',
+        provider,
+        intent: 'recommend_by_genre',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
+
     const tracks = await this.findPublicTracksByGenre({ genre, limit });
 
     if (tracks.length === 0) {
@@ -526,11 +537,21 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = this.cleanString(params.genre) || 'mixed';
+    const genre = this.cleanString(params.genre);
     const limit = this.safeLimit(params.limit, 10);
     const allRequested = Boolean(params.allRequested);
     const playlistName =
-      this.cleanString(params.playlistName) || `${this.titleCase(genre)} Mix`;
+      this.cleanString(params.playlistName) || `${this.titleCase(genre ?? 'Genre')} Mix`;
+
+    if (!genre) {
+      return {
+        reply: 'Which genre should I use for the playlist?',
+        provider,
+        intent: 'create_playlist_from_genre',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
 
     const tracks = await this.findPublicTracksByGenre({ genre, limit });
 
@@ -577,12 +598,25 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const genre = this.cleanString(params.genre) || 'mixed';
-    const artist = this.cleanString(params.artist);
+    const genre = this.cleanString(params.genre);
+    const artist =
+      this.cleanString(params.artist) ||
+      this.cleanString(params.profileName) ||
+      this.cleanString(params.uploaderName);
     const limit = this.safeLimit(params.limit, 10);
     const playlistName =
       this.cleanString(params.playlistName) ||
-      `${this.titleCase(genre)} by ${artist ?? 'Artist'}`;
+      `${this.titleCase(genre ?? 'Genre')} by ${artist ?? 'Artist'}`;
+
+    if (!genre) {
+      return {
+        reply: 'Which genre should I use?',
+        provider,
+        intent: 'create_playlist_from_artist_genre',
+        actionsTaken: [],
+        needsConfirmation: true,
+      };
+    }
 
     if (!artist) {
       return {
@@ -1385,7 +1419,10 @@ export class AiActionService {
     params: Record<string, unknown>,
     provider: AiProvider,
   ): Promise<AiResponse> {
-    const profileName = this.cleanString(params.profileName);
+    const profileName =
+      this.cleanString(params.profileName) ||
+      this.cleanString(params.artist) ||
+      this.cleanString(params.uploaderName);
     const limit = this.safeLimit(params.limit, 10);
     const playlistName =
       this.cleanString(params.playlistName) || `${this.titleCase(profileName ?? 'Profile')} Mix`;
