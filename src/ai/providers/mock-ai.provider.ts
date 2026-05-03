@@ -121,6 +121,32 @@ export function detectMockIntent(
   const msg = message.toLowerCase().trim();
   const original = message.trim();
 
+  if (isCancelPendingMessage(msg)) {
+    return {
+      intent: 'cancel_pending_action',
+      parameters: {},
+      confidence: 1,
+      needsConfirmation: false,
+    };
+  }
+
+  if (context?.pendingIntent === 'create_playlist_from_genre') {
+    const pendingGenre = typeof context.pendingGenre === 'string' ? context.pendingGenre : 'mixed';
+    const pendingLimit =
+      typeof context.pendingLimit === 'number' ? context.pendingLimit : extractLimit(msg, 10);
+
+    return {
+      intent: 'create_playlist_from_genre',
+      parameters: {
+        genre: pendingGenre,
+        limit: pendingLimit,
+        playlistName: cleanPlaylistName(original),
+      },
+      confidence: 0.95,
+      needsConfirmation: false,
+    };
+  }
+
   if (UNSAFE_PATTERNS.test(msg)) {
     return {
       intent: 'unknown',
@@ -214,6 +240,28 @@ export function detectMockIntent(
       needsConfirmation: !artist,
       clarifyingQuestion: artist ? undefined : 'Which artist should I use?',
     };
+  }
+
+  if (/(create|make).*(playlist)/i.test(msg) && !extractPlaylistName(original)) {
+    const genre = extractGenre(msg);
+    if (genre !== 'mixed') {
+      const limit = extractLimit(msg, 10);
+      const allRequested = /\ball\b/i.test(msg);
+      const hasRequestedTracks = /\b(all|top|best|\d+|with|tracks?|songs?|music)\b/i.test(msg);
+
+      return {
+        intent: 'create_playlist_from_genre',
+        parameters: {
+          genre,
+          limit: allRequested ? 25 : limit,
+          allRequested,
+          playlistName: hasRequestedTracks ? `${capitalize(genre)} Mix` : undefined,
+        },
+        confidence: 0.9,
+        needsConfirmation: !hasRequestedTracks,
+        clarifyingQuestion: hasRequestedTracks ? undefined : 'What would you like to name the playlist?',
+      };
+    }
   }
 
   if (
@@ -390,6 +438,18 @@ function extractGenre(msg: string): string {
   if (['koran', 'quranic', 'قرآن', 'قران', 'tilawa', 'recitation'].includes(found)) return 'quran';
   if (found === 'راب') return 'rap';
   return found;
+}
+
+function isCancelPendingMessage(message: string): boolean {
+  return /^(cancel|never mind|nevermind|stop|forget it|no thanks|abort)$/i.test(message.trim());
+}
+
+function cleanPlaylistName(value: string): string {
+  return value
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
 }
 
 function containsGenreTerm(message: string, genre: string): boolean {

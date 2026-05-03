@@ -11,6 +11,7 @@ export const ALLOWED_INTENTS = [
   'share_track_message',
   'queue_track_or_play_next',
   'profile_or_subscription_help',
+  'cancel_pending_action',
   'unknown',
   'clarification_needed',
 ] as const;
@@ -34,6 +35,7 @@ export interface AiResponse {
   data?: unknown;
   suggestions?: string[];
   needsConfirmation?: boolean;
+  pendingContext?: Record<string, unknown> | null;
 }
 
 export interface N8nWebhookPayload {

@@ -23,6 +23,22 @@ export class AiChatContextDto {
   @IsString()
   @MaxLength(100)
   currentPage?: string;
+
+  @ApiPropertyOptional({ description: 'Pending AI intent awaiting a short follow-up answer' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  pendingIntent?: string;
+
+  @ApiPropertyOptional({ description: 'Pending genre for a playlist/search clarification' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  pendingGenre?: string;
+
+  @ApiPropertyOptional({ description: 'Pending track limit for a playlist/search clarification' })
+  @IsOptional()
+  pendingLimit?: number;
 }
 
 export class AiChatDto {
