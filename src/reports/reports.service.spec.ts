@@ -135,8 +135,12 @@ describe("ReportsService", () => {
       expect(result.targetType).toBe(ReportTargetType.COMMENT);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         "report.created",
-        expect.objectContaining({ targetType: ReportTargetType.COMMENT }),
+        expect.objectContaining({
+          targetType: ReportTargetType.COMMENT,
+          targetId: "comment-1",
+        }),
       );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
     });
 
     it("throws BadRequestException for truly invalid target type", async () => {
@@ -187,7 +191,39 @@ describe("ReportsService", () => {
       expect(result).toEqual(mockReport);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         "report.created",
-        expect.objectContaining({ reportId: "report-1" }),
+        expect.objectContaining({ reportId: "report-1", targetId: "track-1" }),
+      );
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
+    });
+
+    it("creates a USER report without notifying the reported user or emitting LIKE", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "reported-user" });
+      mockPrisma.report.findFirst.mockResolvedValueOnce(null);
+      mockPrisma.report.create.mockResolvedValueOnce({
+        id: "report-user-1",
+        reporterId: REPORTER_ID,
+        targetType: ReportTargetType.USER,
+        targetId: "reported-user",
+        reason: "HARASSMENT",
+        status: ReportStatus.PENDING,
+        createdAt: new Date(),
+      });
+
+      await service.createReport(REPORTER_ID, {
+        targetType: ReportTargetType.USER,
+        targetId: "reported-user",
+        reason: "HARASSMENT",
+        description: "abusive profile",
+      });
+
+      expect(mockNotificationsService.createNotification).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        "report.created",
+        expect.objectContaining({
+          reportId: "report-user-1",
+          targetType: ReportTargetType.USER,
+          targetId: "reported-user",
+        }),
       );
     });
 

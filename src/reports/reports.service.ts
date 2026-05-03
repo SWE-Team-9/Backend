@@ -92,6 +92,7 @@ export class ReportsService {
       reporterId,
       category: dto.reason,
       targetType: dto.targetType,
+      targetId: dto.targetId,
     });
 
     return report;

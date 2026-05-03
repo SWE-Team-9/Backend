@@ -173,6 +173,7 @@ export class ContentModerationService {
           where: {
             trackId,
             status: { in: ["PENDING", "UNDER_REVIEW"] },
+            ...(moderationReportId ? { id: { not: moderationReportId } } : {}),
           },
           data: {
             status: "RESOLVED",

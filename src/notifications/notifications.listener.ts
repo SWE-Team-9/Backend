@@ -33,6 +33,7 @@ export interface ReportCreatedEvent {
   reporterId: string;
   category: string;
   targetType: string;
+  targetId?: string;
   targetTitle?: string;
 }
 
@@ -137,11 +138,14 @@ export class NotificationsListener {
     const key = `report:${event.targetType}:${event.reportId}`;
 
     this.debounceNotification(key, this.REPORT_DEBOUNCE_MS, async (count: number) => {
+      const reportedUserId = await this.findReportedUserId(event);
+
       // Notify all ADMIN + MODERATOR users
       const admins = await this.prisma.user.findMany({
         where: {
           systemRole: { in: ['ADMIN', 'MODERATOR'] },
           deletedAt: null,
+          ...(reportedUserId ? { id: { not: reportedUserId } } : {}),
         },
         select: { id: true },
       });
@@ -167,6 +171,40 @@ export class NotificationsListener {
         ),
       );
     });
+  }
+
+  private async findReportedUserId(event: ReportCreatedEvent): Promise<string | undefined> {
+    if (!event.targetId) return undefined;
+
+    if (event.targetType === 'USER') {
+      return event.targetId;
+    }
+
+    if (event.targetType === 'TRACK') {
+      const track = await this.prisma.track.findUnique({
+        where: { id: event.targetId },
+        select: { uploaderId: true },
+      });
+      return track?.uploaderId;
+    }
+
+    if (event.targetType === 'COMMENT') {
+      const comment = await this.prisma.comment.findUnique({
+        where: { id: event.targetId },
+        select: { userId: true },
+      });
+      return comment?.userId;
+    }
+
+    if (event.targetType === 'PLAYLIST') {
+      const playlist = await this.prisma.playlist.findUnique({
+        where: { id: event.targetId },
+        select: { ownerId: true },
+      });
+      return playlist?.ownerId;
+    }
+
+    return undefined;
   }
 
   // ─── Debounce helper ─────────────────────────────────────────────────────────
