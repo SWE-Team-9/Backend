@@ -11,7 +11,12 @@ const REQUIRED_ENV_KEYS = [
 // Optional keys that, when present, must pass a format check.
 const BOOLEAN_KEYS = ["AUTH_COOKIE_SECURE"] as const;
 const NUMBER_KEYS = ["PORT", "MAIL_PORT"] as const;
-const URL_KEYS = ["CLIENT_URL", "API_URL", "GOOGLE_CALLBACK_URL", "CDN_URL"] as const;
+const URL_KEYS = [
+  "CLIENT_URL",
+  "API_URL",
+  "GOOGLE_CALLBACK_URL",
+  "CDN_URL",
+] as const;
 
 function isValidUrl(value: string): boolean {
   try {

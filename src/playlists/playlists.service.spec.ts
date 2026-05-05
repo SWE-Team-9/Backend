@@ -72,8 +72,14 @@ describe("PlaylistsService", () => {
   const storageMock = {
     upload: jest.fn(),
   };
+  const originalEnv = process.env;
 
   beforeEach(async () => {
+    process.env = {
+      ...originalEnv,
+      FRONTEND_URL: "https://dev.iqa3.tech",
+    };
+
     prisma = buildPrismaMock();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -87,7 +93,10 @@ describe("PlaylistsService", () => {
     service = module.get(PlaylistsService);
   });
 
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => {
+    process.env = originalEnv;
+    jest.clearAllMocks();
+  });
 
   describe("create", () => {
     it("creates a PUBLIC playlist with initial tracks list", async () => {
@@ -1451,14 +1460,31 @@ describe("PlaylistsService", () => {
       prisma.playlist.findFirst.mockResolvedValue({
         id: "pl_101",
         ownerId: "usr_1",
+        visibility: PlaylistVisibility.PUBLIC,
+        secretToken: null,
       });
 
       const result = await service.getEmbedCode("usr_1", "pl_101");
 
       expect(result).toEqual({
         playlistId: "pl_101",
-        embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+        embedCode: '<iframe src="https://dev.iqa3.tech/embed/playlists/pl_101"></iframe>',
       });
+    });
+
+    it("includes the secret token for secret playlists", async () => {
+      prisma.playlist.findFirst.mockResolvedValue({
+        id: "pl_101",
+        ownerId: "usr_1",
+        visibility: PlaylistVisibility.SECRET,
+        secretToken: "secret-token-123",
+      });
+
+      const result = await service.getEmbedCode("usr_1", "pl_101");
+
+      expect(result.embedCode).toBe(
+        '<iframe src="https://dev.iqa3.tech/embed/playlists/pl_101?token=secret-token-123"></iframe>',
+      );
     });
 
     it("throws when requester is not owner", async () => {

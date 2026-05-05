@@ -466,7 +466,7 @@ export class PlaylistsController {
     schema: {
       example: {
         playlistId: 'pl_101',
-        embedCode: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>',
+        embedCode: '<iframe src="https://dev.iqa3.tech/embed/playlists/pl_101"></iframe>',
       },
     },
   })
