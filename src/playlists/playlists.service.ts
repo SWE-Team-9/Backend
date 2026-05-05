@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PlaylistType, PlaylistVisibility, Prisma } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
@@ -1730,8 +1731,7 @@ export class PlaylistsService {
       );
     }
 
-    const embedBaseUrl = this.resolveEmbedBaseUrl();
-    const embedUrl = new URL(`${embedBaseUrl.replace(/\/+$/, '')}/${playlist.id}`);
+    const embedUrl = this.buildPlaylistEmbedUrl(playlist.id);
 
     if (playlist.visibility === PlaylistVisibility.SECRET && playlist.secretToken) {
       embedUrl.searchParams.set('token', playlist.secretToken);
@@ -1758,13 +1758,35 @@ export class PlaylistsService {
     };
   }
 
-  private resolveEmbedBaseUrl(): string {
-    const explicitBaseUrl = process.env.PLAYLIST_EMBED_BASE_URL?.trim();
-    if (explicitBaseUrl) {
-      return explicitBaseUrl;
+  private buildPlaylistEmbedUrl(playlistId: string): URL {
+    const baseUrl = this.resolveFrontendBaseUrl();
+    return new URL(`/embed/playlists/${playlistId}`, baseUrl);
+  }
+
+  private resolveFrontendBaseUrl(): string {
+    const configuredBaseUrl =
+      process.env.FRONTEND_URL?.trim() ?? process.env.CLIENT_URL?.trim();
+
+    if (!configuredBaseUrl) {
+      const message =
+        'Playlist embed base URL is not configured. Set FRONTEND_URL or CLIENT_URL to a valid http/https URL.';
+      this.logger.error(message);
+      throw new InternalServerErrorException(message);
     }
 
-    return 'https://example.com/embed/playlists';
+    try {
+      const url = new URL(configuredBaseUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error('URL must use http or https.');
+      }
+
+      return url.toString().replace(/\/+$/, '');
+    } catch {
+      const message =
+        `Playlist embed base URL is invalid: ${configuredBaseUrl}. Set FRONTEND_URL or CLIENT_URL to a valid http/https URL.`;
+      this.logger.error(message);
+      throw new InternalServerErrorException(message);
+    }
   }
 
   private validateTrackIdArray(

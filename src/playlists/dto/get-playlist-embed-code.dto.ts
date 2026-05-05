@@ -63,6 +63,6 @@ export class GetPlaylistEmbedCodeResponseDto {
   @ApiProperty({ example: 'pl_101' })
   playlistId!: string;
 
-  @ApiProperty({ example: '<iframe src="https://example.com/embed/playlists/pl_101"></iframe>' })
+  @ApiProperty({ example: '<iframe src="https://dev.iqa3.tech/embed/playlists/pl_101"></iframe>' })
   embedCode!: string;
 }

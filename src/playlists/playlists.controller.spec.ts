@@ -89,7 +89,7 @@ function buildServiceMock() {
     }),
     getEmbedCode: jest.fn().mockResolvedValue({
       playlistId,
-      embedCode: `<iframe src="https://example.com/embed/playlists/${playlistId}"></iframe>`,
+      embedCode: `<iframe src="https://dev.iqa3.tech/embed/playlists/${playlistId}"></iframe>`,
     }),
     addTrack: jest.fn().mockResolvedValue({
       message: "Track added to playlist successfully",
